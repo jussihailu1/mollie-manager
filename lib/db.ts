@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import type { QueryResultRow } from "pg";
+import type { PoolClient, QueryResultRow } from "pg";
 import { Pool } from "pg";
 
 import { getDatabaseConfig } from "@/lib/env";
@@ -42,6 +42,25 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
   params: readonly unknown[] = [],
 ) {
   return getDbPool().query<T>(text, params as unknown[]);
+}
+
+export async function transaction<T>(
+  callback: (client: PoolClient) => Promise<T>,
+) {
+  const client = await getDbPool().connect();
+
+  try {
+    await client.query("BEGIN");
+    const result = await callback(client);
+    await client.query("COMMIT");
+
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export const checkDatabaseConnection = cache(async () => {

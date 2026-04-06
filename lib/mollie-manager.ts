@@ -95,29 +95,29 @@ export const foundationPhases = [
     title: "Phase 1",
     description:
       "App shell, navigation, domain framing, and environment contract.",
-    state: "Current",
+    state: "Complete",
     tone: "accent",
   },
   {
     title: "Phase 2",
     description:
       "Database, auth boundary, validated configuration, and Mollie server client.",
-    state: "Next",
-    tone: "warning",
+    state: "Complete",
+    tone: "accent",
   },
   {
     title: "Phase 3",
     description:
       "Customer onboarding flow through first payment and subscription creation.",
-    state: "Planned",
-    tone: "muted",
+    state: "Complete",
+    tone: "accent",
   },
   {
     title: "Phase 4",
     description:
       "Management screens for subscriptions, payments, and guarded actions.",
-    state: "Planned",
-    tone: "muted",
+    state: "Current",
+    tone: "warning",
   },
   {
     title: "Phase 5",

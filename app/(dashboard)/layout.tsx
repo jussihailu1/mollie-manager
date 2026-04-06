@@ -32,7 +32,7 @@ export default async function DashboardLayout({
                 <h1 className="text-lg font-semibold tracking-[-0.03em]">
                   {appName}
                 </h1>
-                <p className="text-sm text-ink/55">Phase 2 platform scaffold</p>
+                <p className="text-sm text-ink/55">Phase 4 operations layer</p>
               </div>
             </div>
           </div>
@@ -72,8 +72,9 @@ export default async function DashboardLayout({
                 Subscription operations
               </p>
               <p className="mt-1 text-sm text-ink/65">
-                Auth, database, and Mollie boundaries are now scaffolded before
-                the first live billing flow is wired.
+                Subscription operations now include guarded management,
+                payment history, and derived attention views on top of the
+                onboarding flow.
               </p>
             </div>
 
