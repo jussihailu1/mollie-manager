@@ -39,5 +39,8 @@ export function getMollieClient(mode: MollieMode = getDefaultMollieMode()) {
 
 export function getMollieWebhookUrl(path = "/api/webhooks/mollie") {
   const config = getMollieWebhookConfig();
-  return new URL(path, config.MOLLIE_WEBHOOK_PUBLIC_BASE_URL).toString();
+  const url = new URL(path, config.MOLLIE_WEBHOOK_PUBLIC_BASE_URL);
+  url.searchParams.set("secret", config.MOLLIE_WEBHOOK_SHARED_SECRET);
+
+  return url.toString();
 }

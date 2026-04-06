@@ -32,7 +32,7 @@ export default async function DashboardLayout({
                 <h1 className="text-lg font-semibold tracking-[-0.03em]">
                   {appName}
                 </h1>
-                <p className="text-sm text-ink/55">Phase 4 operations layer</p>
+                <p className="text-sm text-ink/55">Phase 5 reliability layer</p>
               </div>
             </div>
           </div>
@@ -72,9 +72,8 @@ export default async function DashboardLayout({
                 Subscription operations
               </p>
               <p className="mt-1 text-sm text-ink/65">
-                Subscription operations now include guarded management,
-                payment history, and derived attention views on top of the
-                onboarding flow.
+                Webhooks, durable alerts, reconciliation, and guarded
+                subscription operations now sit on top of the onboarding flow.
               </p>
             </div>
 

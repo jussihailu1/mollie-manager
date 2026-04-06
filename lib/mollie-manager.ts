@@ -116,15 +116,15 @@ export const foundationPhases = [
     title: "Phase 4",
     description:
       "Management screens for subscriptions, payments, and guarded actions.",
-    state: "Current",
-    tone: "warning",
+    state: "Complete",
+    tone: "accent",
   },
   {
     title: "Phase 5",
     description:
       "Webhooks, reconciliation, email alerts, and operational hardening.",
-    state: "Planned",
-    tone: "muted",
+    state: "Current",
+    tone: "warning",
   },
 ] as const;
 

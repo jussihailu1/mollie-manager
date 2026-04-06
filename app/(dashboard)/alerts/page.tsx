@@ -3,10 +3,10 @@ import Link from "next/link";
 import { Panel } from "@/components/panel";
 import { StatusPill } from "@/components/status-pill";
 import { formatDateTime } from "@/lib/format";
-import { listOperationalAlerts } from "@/lib/onboarding/data";
+import { listAlertInbox } from "@/lib/reliability/data";
 
 export default async function AlertsPage() {
-  const alerts = await listOperationalAlerts();
+  const alerts = await listAlertInbox();
 
   return (
     <div className="space-y-6">
@@ -22,7 +22,7 @@ export default async function AlertsPage() {
                 Open operational items
               </p>
               <p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-ink">
-                {alerts.length}
+                {alerts.filter((alert) => alert.status === "open").length}
               </p>
             </article>
             <article className="rounded-[22px] border border-ink/8 bg-white/76 p-4">
@@ -30,7 +30,7 @@ export default async function AlertsPage() {
                 Email delivery
               </p>
               <p className="mt-3 text-base font-semibold text-ink">
-                Planned for phase 5
+                Active
               </p>
             </article>
           </div>
@@ -39,13 +39,13 @@ export default async function AlertsPage() {
         <Panel
           eyebrow="Scope"
           title="What appears here now"
-          description="This page currently derives attention from local state only. It does not yet represent the durable alert history or mail delivery log."
+          description="This page now reads from durable alert records. Each alert can survive webhook retries, reconciliation passes, and future email delivery retries."
         >
           <div className="flex flex-wrap gap-2">
             <StatusPill tone="warning">failed payments</StatusPill>
             <StatusPill tone="warning">expired payments</StatusPill>
             <StatusPill tone="warning">payment action required</StatusPill>
-            <StatusPill tone="warning">out of sync</StatusPill>
+            <StatusPill tone="warning">webhook durable</StatusPill>
           </div>
         </Panel>
       </section>
@@ -64,7 +64,7 @@ export default async function AlertsPage() {
           <div className="grid gap-3">
             {alerts.map((alert) => (
               <article
-                key={`${alert.type}-${alert.id}`}
+                key={alert.id}
                 className="rounded-[24px] border border-ink/8 bg-white/78 p-4"
               >
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -78,10 +78,14 @@ export default async function AlertsPage() {
                       >
                         {alert.severity}
                       </StatusPill>
-                      <StatusPill tone="muted">{alert.type}</StatusPill>
+                      <StatusPill
+                        tone={alert.status === "open" ? "warning" : "muted"}
+                      >
+                        {alert.status}
+                      </StatusPill>
                     </div>
                     <p className="mt-2 text-sm leading-6 text-ink/62">
-                      {alert.summary}
+                      {alert.message}
                     </p>
                     <p className="mt-3 text-sm text-ink/62">
                       {alert.customerName ?? "Unknown customer"}
@@ -90,14 +94,38 @@ export default async function AlertsPage() {
                     <p className="mt-1 text-sm text-ink/55">
                       Detected {formatDateTime(alert.createdAt)}
                     </p>
+                    <p className="mt-1 text-sm text-ink/55">
+                      Email sent{" "}
+                      {alert.emailSentAt ? formatDateTime(alert.emailSentAt) : "not yet"}
+                    </p>
                   </div>
 
-                  <Link
-                    href={alert.href}
-                    className="inline-flex min-h-11 items-center justify-center rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-ink/88"
-                  >
-                    Open workspace
-                  </Link>
+                  <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+                    {alert.subscriptionId ? (
+                      <Link
+                        href={`/subscriptions?focus=${alert.subscriptionId}`}
+                        className="inline-flex min-h-11 items-center justify-center rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-ink/88"
+                      >
+                        Open subscription
+                      </Link>
+                    ) : null}
+                    {alert.paymentId ? (
+                      <Link
+                        href={`/payments?focus=${alert.paymentId}`}
+                        className="inline-flex min-h-11 items-center justify-center rounded-full border border-ink/10 px-4 py-2 text-sm font-semibold text-ink/78 transition-colors hover:bg-sand/55"
+                      >
+                        Open payment
+                      </Link>
+                    ) : null}
+                    {alert.customerId ? (
+                      <Link
+                        href={`/customers/${alert.customerId}`}
+                        className="inline-flex min-h-11 items-center justify-center rounded-full border border-ink/10 px-4 py-2 text-sm font-semibold text-ink/78 transition-colors hover:bg-sand/55"
+                      >
+                        Open customer
+                      </Link>
+                    ) : null}
+                  </div>
                 </div>
               </article>
             ))}

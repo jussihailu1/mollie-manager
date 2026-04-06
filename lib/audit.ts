@@ -16,15 +16,34 @@ type AuditInput = {
   summary: string;
 };
 
+type AuditActor =
+  | {
+      email?: string | null;
+      kind: "system";
+    }
+  | {
+      email?: string | null;
+      kind: "user";
+    };
+
 export async function writeAuditLog(
   input: AuditInput,
   client?: PoolClient,
+  actor?: AuditActor,
 ) {
-  const session = await requireViewerSession();
+  let actorEmail = actor?.email ?? null;
+  let actorKind: AuditActor["kind"] = actor?.kind ?? "user";
+
+  if (!actor) {
+    const session = await requireViewerSession();
+    actorEmail = session.user.email ?? null;
+    actorKind = "user";
+  }
+
   const params = [
     crypto.randomUUID(),
-    "user",
-    session.user.email ?? null,
+    actorKind,
+    actorEmail,
     input.action,
     input.entityType,
     input.entityId,
