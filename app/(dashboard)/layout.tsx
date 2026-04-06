@@ -1,13 +1,21 @@
 import type { ReactNode } from "react";
 
 import { AppShellNav } from "@/components/app-shell-nav";
+import { StatusPill } from "@/components/status-pill";
+import { signOutUser } from "@/lib/auth/actions";
+import { requireViewerSession } from "@/lib/auth/session";
+import { env, getSetupStatus } from "@/lib/env";
 import { appName } from "@/lib/mollie-manager";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: Readonly<{
   children: ReactNode;
 }>) {
+  const session = await requireViewerSession();
+  const setupStatus = getSetupStatus();
+  const platformIsReady = Object.values(setupStatus).every((section) => section.ready);
+
   return (
     <div className="min-h-screen bg-canvas text-ink">
       <div className="mx-auto flex min-h-screen w-full max-w-[1680px] flex-col px-4 py-4 lg:flex-row lg:px-6">
@@ -24,7 +32,7 @@ export default function DashboardLayout({
                 <h1 className="text-lg font-semibold tracking-[-0.03em]">
                   {appName}
                 </h1>
-                <p className="text-sm text-ink/55">Phase 1 foundation</p>
+                <p className="text-sm text-ink/55">Phase 2 platform scaffold</p>
               </div>
             </div>
           </div>
@@ -35,13 +43,25 @@ export default function DashboardLayout({
 
           <div className="mt-auto rounded-[22px] border border-ink/8 bg-white/72 p-4">
             <p className="text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-ink/45">
-              Safety rails
+              Session
             </p>
-            <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/70">
-              <li>Server-only Mollie writes</li>
-              <li>Audit trail for money-impacting actions</li>
-              <li>Webhook replay and reconciliation in later phases</li>
-            </ul>
+            <p className="mt-3 text-sm font-semibold text-ink">{session.user.email}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <StatusPill tone={env.MOLLIE_DEFAULT_MODE === "live" ? "warning" : "accent"}>
+                {env.MOLLIE_DEFAULT_MODE} mode
+              </StatusPill>
+              <StatusPill tone={platformIsReady ? "accent" : "warning"}>
+                {platformIsReady ? "configured" : "setup pending"}
+              </StatusPill>
+            </div>
+            <form action={signOutUser} className="mt-4">
+              <button
+                type="submit"
+                className="inline-flex rounded-full border border-ink/10 px-4 py-2 text-sm font-medium text-ink/72 transition-colors hover:bg-ink hover:text-white"
+              >
+                Sign out
+              </button>
+            </form>
           </div>
         </aside>
 
@@ -52,13 +72,18 @@ export default function DashboardLayout({
                 Subscription operations
               </p>
               <p className="mt-1 text-sm text-ink/65">
-                Building the foundation for customer onboarding, recurring
-                collection, and exception handling.
+                Auth, database, and Mollie boundaries are now scaffolded before
+                the first live billing flow is wired.
               </p>
             </div>
 
-            <div className="rounded-full border border-accent/20 bg-accent-soft px-4 py-2 text-sm font-medium text-accent-strong">
-              Guided rollout
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <StatusPill tone={setupStatus.auth.ready ? "accent" : "warning"}>
+                auth {setupStatus.auth.ready ? "ready" : "pending"}
+              </StatusPill>
+              <StatusPill tone={setupStatus.database.ready ? "accent" : "warning"}>
+                db {setupStatus.database.ready ? "ready" : "pending"}
+              </StatusPill>
             </div>
           </header>
 

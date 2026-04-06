@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { cn } from "@/lib/utils";
 
 const toneClasses = {
@@ -10,7 +12,7 @@ export function StatusPill({
   children,
   tone = "accent",
 }: Readonly<{
-  children: string;
+  children: ReactNode;
   tone?: keyof typeof toneClasses;
 }>) {
   return (
