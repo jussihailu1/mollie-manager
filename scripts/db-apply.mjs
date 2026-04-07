@@ -1,8 +1,10 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { loadEnvConfig } from "@next/env";
+import nextEnv from "@next/env";
 import pg from "pg";
+
+const { loadEnvConfig } = nextEnv;
 
 loadEnvConfig(process.cwd());
 
@@ -20,7 +22,7 @@ const migrationFiles = (await readdir(migrationsDirectory))
   .sort((left, right) => left.localeCompare(right));
 const pool = new Pool({
   connectionString,
-  ssl: useSsl ? { rejectUnauthorized: false } : undefined,
+  ssl: useSsl ? true : undefined,
 });
 
 try {

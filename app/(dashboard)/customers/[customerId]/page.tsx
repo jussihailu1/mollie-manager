@@ -35,16 +35,16 @@ function resolveSubscriptionReadiness(
       payment.mollieStatus === "paid" &&
       payment.paidAt,
   );
-  const validMandate =
+  const readyMandate =
     detail.mandates.find(
       (mandate) =>
-        mandate.isValid &&
-        (mandate.method === "directdebit" || mandate.method === "directDebit"),
-    ) ?? detail.mandates.find((mandate) => mandate.isValid);
+        (mandate.method === "directdebit" || mandate.method === "directDebit") &&
+        (mandate.mollieStatus === "valid" || mandate.mollieStatus === "pending"),
+    );
 
   return {
     latestPaidFirstPayment,
-    validMandate,
+    readyMandate,
   };
 }
 
@@ -67,12 +67,12 @@ export default async function CustomerDetailPage({
   const latestFirstPayment = detail.payments.find(
     (payment) => payment.paymentType === "first",
   );
-  const { latestPaidFirstPayment, validMandate } =
+  const { latestPaidFirstPayment, readyMandate } =
     resolveSubscriptionReadiness(detail);
   const activeSubscription = detail.subscriptions.find(
     (subscription) => subscription.localStatus === "active",
   );
-  const canCreateSubscription = Boolean(latestPaidFirstPayment && validMandate);
+  const canCreateSubscription = Boolean(latestPaidFirstPayment && readyMandate);
 
   return (
     <div className="space-y-6">
@@ -102,8 +102,8 @@ export default async function CustomerDetailPage({
           <StatusPill tone={latestPaidFirstPayment ? "accent" : "warning"}>
             {latestPaidFirstPayment ? "first payment paid" : "first payment pending"}
           </StatusPill>
-          <StatusPill tone={validMandate ? "accent" : "warning"}>
-            {validMandate ? "mandate valid" : "mandate pending"}
+          <StatusPill tone={readyMandate ? "accent" : "warning"}>
+            {readyMandate ? "mandate ready" : "mandate pending"}
           </StatusPill>
           <StatusPill tone={activeSubscription ? "accent" : "muted"}>
             {activeSubscription ? "subscription active" : "subscription not created"}
@@ -145,13 +145,13 @@ export default async function CustomerDetailPage({
                 2. Mandate
               </p>
               <p className="mt-3 text-sm font-semibold text-ink">
-                {validMandate
-                  ? `${formatLabel(validMandate.mollieStatus)} (${validMandate.mollieMandateId})`
+                {readyMandate
+                  ? `${formatLabel(readyMandate.mollieStatus)} (${readyMandate.mollieMandateId})`
                   : "Pending sync"}
               </p>
               <p className="mt-2 text-sm leading-6 text-ink/62">
-                {validMandate
-                  ? "A valid direct debit mandate is available for future recurring collections."
+                {readyMandate
+                  ? "A pending or valid direct debit mandate is available for recurring collections."
                   : "After the customer pays, run a sync so the mandate state is refreshed from Mollie."}
               </p>
             </article>
@@ -290,7 +290,7 @@ export default async function CustomerDetailPage({
               </div>
               <div>
                 <dt className="font-semibold text-ink/82">Valid mandate</dt>
-                <dd className="mt-1">{validMandate ? "Yes" : "No"}</dd>
+                <dd className="mt-1">{readyMandate ? "Yes" : "No"}</dd>
               </div>
             </dl>
           </div>
@@ -316,8 +316,8 @@ export default async function CustomerDetailPage({
               <StatusPill tone={latestPaidFirstPayment ? "accent" : "warning"}>
                 {latestPaidFirstPayment ? "paid first payment" : "first payment missing"}
               </StatusPill>
-              <StatusPill tone={validMandate ? "accent" : "warning"}>
-                {validMandate ? "valid mandate" : "mandate missing"}
+              <StatusPill tone={readyMandate ? "accent" : "warning"}>
+                {readyMandate ? "mandate ready" : "mandate missing"}
               </StatusPill>
               <StatusPill tone={activeSubscription ? "accent" : "muted"}>
                 {activeSubscription ? "subscription already exists" : "no active subscription"}

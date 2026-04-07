@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 import { writeAuditLog } from "@/lib/audit";
@@ -83,6 +83,7 @@ export async function syncSubscriptionAction(formData: FormData) {
       notice: "Subscription and payment history refreshed from Mollie.",
     });
   } catch (error) {
+    unstable_rethrow(error);
     redirectWithMessage(parsed.data.returnTo, {
       error: serializeError(error),
     });
@@ -193,6 +194,7 @@ export async function cancelSubscriptionAction(formData: FormData) {
       notice: "Future charges stopped. The subscription state was refreshed from Mollie.",
     });
   } catch (error) {
+    unstable_rethrow(error);
     redirectWithMessage(parsed.data.returnTo, {
       error: serializeError(error),
     });

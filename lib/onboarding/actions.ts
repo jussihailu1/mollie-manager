@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import type { PoolClient } from "pg";
 import {
   Locale,
@@ -234,13 +234,12 @@ function toNextMonthlyStartDate(source: string) {
 }
 
 function findPreferredMandate(mandates: MandateRecord[]) {
-  return (
-    mandates.find(
-      (mandate) =>
-        mandate.isValid &&
-        (mandate.method === PaymentMethod.directdebit ||
-          mandate.method === "directdebit"),
-    ) ?? mandates.find((mandate) => mandate.isValid)
+  return mandates.find(
+    (mandate) =>
+      (mandate.method === PaymentMethod.directdebit ||
+        mandate.method === "directdebit") &&
+      (mandate.mollieStatus === MandateStatus.valid ||
+        mandate.mollieStatus === MandateStatus.pending),
   );
 }
 
@@ -337,6 +336,7 @@ export async function createCustomerAction(formData: FormData) {
       notice: "Customer created. You can now generate the first payment link.",
     });
   } catch (error) {
+    unstable_rethrow(error);
     redirectWithMessage("/customers", {
       error: serializeError(error),
     });
@@ -495,6 +495,7 @@ export async function createFirstPaymentAction(formData: FormData) {
       notice: "First payment created. Share the Mollie checkout URL with the customer.",
     });
   } catch (error) {
+    unstable_rethrow(error);
     redirectWithMessage(`/customers/${customer.id}`, {
       error: serializeError(error),
     });
@@ -634,6 +635,7 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
       notice: "Customer state refreshed from Mollie.",
     });
   } catch (error) {
+    unstable_rethrow(error);
     redirectWithMessage(`/customers/${customer.id}`, {
       error: serializeError(error),
     });
@@ -683,7 +685,8 @@ export async function createSubscriptionAction(formData: FormData) {
 
   if (!preferredMandate) {
     redirectWithMessage(`/customers/${detail.customer.id}`, {
-      error: "No valid direct debit mandate is available yet. Sync the customer first.",
+      error:
+        "No pending or valid direct debit mandate is available yet. Sync the customer first.",
     });
   }
 
@@ -713,7 +716,6 @@ export async function createSubscriptionAction(formData: FormData) {
         customerId: detail.customer.id,
         localSubscriptionId,
       },
-      method: PaymentMethod.directdebit,
       startDate,
       webhookUrl: getMollieWebhookUrl(),
     });
@@ -809,6 +811,7 @@ export async function createSubscriptionAction(formData: FormData) {
       notice: "Subscription created. Future charges are now scheduled in Mollie.",
     });
   } catch (error) {
+    unstable_rethrow(error);
     redirectWithMessage(`/customers/${detail.customer.id}`, {
       error: serializeError(error),
     });

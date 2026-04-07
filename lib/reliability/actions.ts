@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 import { query } from "@/lib/db";
@@ -100,6 +100,7 @@ export async function runReconciliationAction(formData: FormData) {
       notice: `Reconciliation complete. Checked ${result.subscriptionsChecked} subscriptions and ${result.firstPaymentsChecked} first payments.`,
     });
   } catch (error) {
+    unstable_rethrow(error);
     redirectWithMessage(parsed.data.returnTo, {
       error: serializeError(error),
     });
@@ -165,6 +166,7 @@ export async function replayWebhookEventAction(formData: FormData) {
       notice: "Webhook event replayed successfully.",
     });
   } catch (error) {
+    unstable_rethrow(error);
     await query(
       `
         update webhook_events

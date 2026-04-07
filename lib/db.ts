@@ -15,7 +15,7 @@ function createPool() {
 
   return new Pool({
     connectionString: config.DATABASE_URL,
-    ssl: config.DATABASE_SSL ? { rejectUnauthorized: false } : undefined,
+    ssl: config.DATABASE_SSL ? true : undefined,
     max: 10,
   });
 }
