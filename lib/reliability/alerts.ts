@@ -123,7 +123,10 @@ export async function deliverAlertEmail(input: {
   title: string;
 }) {
   if (!notificationsAreConfigured()) {
-    return false;
+    return {
+      delivered: false,
+      error: "Notifications are not configured.",
+    };
   }
 
   try {
@@ -142,9 +145,18 @@ export async function deliverAlertEmail(input: {
       `,
       [input.alertId],
     );
-  } catch {
-    return false;
+  } catch (error) {
+    return {
+      delivered: false,
+      error:
+        error instanceof Error
+          ? error.message.slice(0, 180)
+          : "Email delivery failed.",
+    };
   }
 
-  return true;
+  return {
+    delivered: true,
+    error: null,
+  };
 }

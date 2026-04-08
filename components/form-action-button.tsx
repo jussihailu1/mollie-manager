@@ -3,13 +3,19 @@
 import type { ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const variantClasses = {
-  primary:
-    "bg-ink text-white hover:bg-ink/88 disabled:bg-ink/35 disabled:text-white/80",
-  secondary:
-    "border border-ink/10 bg-white text-ink/80 hover:bg-sand/55 disabled:text-ink/45",
+  danger: "border-red-200 bg-critical-soft text-red-800 hover:bg-red-100",
+  primary: "",
+  secondary: "",
+} as const;
+
+const buttonVariants = {
+  danger: "destructive",
+  primary: "default",
+  secondary: "outline",
 } as const;
 
 export function FormActionButton({
@@ -33,7 +39,7 @@ export function FormActionButton({
   const buttonIsDisabled = pending || disabled;
 
   return (
-    <button
+    <Button
       type={type}
       disabled={buttonIsDisabled}
       onClick={(event) => {
@@ -45,13 +51,14 @@ export function FormActionButton({
           event.preventDefault();
         }
       }}
+      variant={buttonVariants[variant]}
       className={cn(
-        "inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition-colors",
+        "h-10 rounded-lg px-3.5 text-sm font-medium",
         variantClasses[variant],
         className,
       )}
     >
       {pending ? pendingLabel ?? "Working..." : children}
-    </button>
+    </Button>
   );
 }

@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 const toneClasses = {
-  accent: "border-accent/20 bg-accent-soft text-accent-strong",
-  muted: "border-ink/10 bg-white/78 text-ink/62",
-  warning: "border-amber-500/25 bg-amber-100 text-amber-800",
+  accent: "border-accent/15 bg-accent-soft text-accent-strong hover:bg-accent-soft",
+  critical: "border-red-200 bg-critical-soft text-red-800 hover:bg-critical-soft",
+  muted: "border-border bg-surface-muted text-ink-soft hover:bg-surface-muted",
+  warning: "border-amber-200 bg-warning-soft text-amber-900 hover:bg-warning-soft",
 } as const;
 
 export function StatusPill({
@@ -16,13 +18,14 @@ export function StatusPill({
   tone?: keyof typeof toneClasses;
 }>) {
   return (
-    <span
+    <Badge
+      variant="outline"
       className={cn(
-        "inline-flex rounded-full border px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.2em]",
+        "rounded-full px-2.5 py-1 text-xs font-medium",
         toneClasses[tone],
       )}
     >
       {children}
-    </span>
+    </Badge>
   );
 }

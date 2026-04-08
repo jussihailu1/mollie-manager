@@ -1,11 +1,19 @@
+import { DataTable } from "@/components/data-table";
+import { DashboardModeToggle } from "@/components/dashboard-mode-controls";
+import { DetailSection } from "@/components/detail-section";
+import { EmptyState } from "@/components/empty-state";
 import { FlashMessage } from "@/components/flash-message";
 import { FormActionButton } from "@/components/form-action-button";
-import { Panel } from "@/components/panel";
+import { KpiStrip } from "@/components/kpi-strip";
+import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
-import { requireViewerSession } from "@/lib/auth/session";
+import {
+  getSelectedMollieMode,
+  resolveDashboardModeFilter,
+} from "@/lib/dashboard-mode";
 import { checkDatabaseConnection } from "@/lib/db";
 import { env, getSetupStatus } from "@/lib/env";
-import { getSingleSearchParam, formatDateTime } from "@/lib/format";
+import { formatDateTime, getSingleSearchParam } from "@/lib/format";
 import { isMollieConfigured } from "@/lib/mollie/client";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import {
@@ -17,39 +25,113 @@ import {
   listRecentWebhookEvents,
 } from "@/lib/reliability/data";
 
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
 const sectionLabels = {
-  auth: "Google auth",
+  auth: "Authentication",
   database: "Database",
   mollie: "Mollie keys",
   notifications: "Notifications",
-  webhook: "Webhook base",
+  webhook: "Webhook base URL",
 } as const;
 
-type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+function getModeTone(mode: "all" | "live" | "test") {
+  if (mode === "all") {
+    return "muted";
+  }
+
+  return mode === "live" ? "warning" : "accent";
+}
+
+function buildSettingsReturnTo(modeFilter: string) {
+  return modeFilter ? `/settings?mode=${modeFilter}` : "/settings";
+}
 
 export default async function SettingsPage({
   searchParams,
 }: Readonly<{
   searchParams: SearchParams;
 }>) {
-  const session = await requireViewerSession();
+  const resolvedSearchParams = await searchParams;
+  const selectedMode = await getSelectedMollieMode();
+  const rawModeFilter = getSingleSearchParam(resolvedSearchParams.mode);
+  const effectiveModeFilter = await resolveDashboardModeFilter(rawModeFilter);
+  const modeFilter =
+    rawModeFilter === "all" || rawModeFilter === "test" || rawModeFilter === "live"
+      ? rawModeFilter
+      : "";
+  const settingsReturnTo = buildSettingsReturnTo(modeFilter);
   const setupStatus = getSetupStatus();
-  const [databaseHealth, reliability, webhookEvents, resolvedSearchParams] =
-    await Promise.all([
-      checkDatabaseConnection(),
-      getReliabilitySnapshot(),
-      listRecentWebhookEvents(),
-      searchParams,
-    ]);
+  const [databaseHealth, reliability, webhookEvents] = await Promise.all([
+    checkDatabaseConnection(),
+    getReliabilitySnapshot({ mode: effectiveModeFilter }),
+    listRecentWebhookEvents({ mode: effectiveModeFilter }),
+  ]);
   const notice = getSingleSearchParam(resolvedSearchParams.notice);
   const error = getSingleSearchParam(resolvedSearchParams.error);
 
   const sections = Object.entries(setupStatus) as Array<
     [keyof typeof setupStatus, (typeof setupStatus)[keyof typeof setupStatus]]
   >;
+  const readySectionCount = sections.filter(([, status]) => status.ready).length;
+  const platformHealthItems = [
+    {
+      description: env.AUTH_ALLOWED_EMAIL
+        ? `Owner access is limited to ${env.AUTH_ALLOWED_EMAIL}.`
+        : "Google allowlist is not configured yet.",
+      label: sectionLabels.auth,
+      ready: setupStatus.auth.ready,
+    },
+    {
+      description: databaseHealth.reason,
+      label: sectionLabels.database,
+      ready: databaseHealth.ok,
+    },
+    {
+      description: env.MOLLIE_WEBHOOK_PUBLIC_BASE_URL ?? "Not configured",
+      label: sectionLabels.webhook,
+      ready: setupStatus.webhook.ready,
+    },
+  ];
+  const integrationItems = [
+    {
+      description: isMollieConfigured("test")
+        ? "Test credentials are available."
+        : "Test API key is missing.",
+      label: "Mollie test",
+      ready: isMollieConfigured("test"),
+    },
+    {
+      description: isMollieConfigured("live")
+        ? "Live credentials are available."
+        : "Live API key is missing.",
+      label: "Mollie live",
+      ready: isMollieConfigured("live"),
+    },
+    {
+      description: notificationsAreConfigured()
+        ? `Email route from ${env.SMTP_FROM} to ${env.ALERT_EMAIL_TO}.`
+        : "SMTP configuration is incomplete.",
+      label: "Notifications",
+      ready: notificationsAreConfigured(),
+    },
+  ];
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Settings"
+        title="Mode, integrations, and reliability controls"
+        description="Keep the operator context calm: pick the default working mode, confirm the platform is wired correctly, and run reliability tools when the queue needs it."
+        actions={
+          <StatusPill tone={getModeTone(effectiveModeFilter)}>
+            {effectiveModeFilter === "all"
+              ? "Viewing all modes"
+              : `Viewing ${effectiveModeFilter} mode`}
+          </StatusPill>
+        }
+      />
+
       {notice ? (
         <FlashMessage message={notice} title="Update" variant="notice" />
       ) : null}
@@ -57,249 +139,219 @@ export default async function SettingsPage({
         <FlashMessage message={error} title="Action blocked" variant="error" />
       ) : null}
 
-      <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <Panel
-          eyebrow="Platform"
-          title="Configuration and integration readiness"
-          description="The environment contract stays explicit so test/live mistakes, missing mail credentials, and incomplete webhook setup are visible before you rely on them."
-        >
-          <div className="grid gap-3 md:grid-cols-2">
-            {sections.map(([key, status]) => (
-              <article
-                key={key}
-                className="rounded-[22px] border border-ink/8 bg-white/76 p-4"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-ink">
-                    {sectionLabels[key]}
-                  </h3>
-                  <StatusPill tone={status.ready ? "accent" : "warning"}>
-                    {status.ready ? "Ready" : "Needs setup"}
-                  </StatusPill>
-                </div>
-                {status.issues.length > 0 ? (
-                  <ul className="mt-4 space-y-2 text-sm leading-6 text-ink/64">
-                    {status.issues.map((issue) => (
-                      <li key={issue}>{issue}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-4 text-sm leading-6 text-ink/64">
-                    This section has the required environment inputs.
-                  </p>
-                )}
-              </article>
-            ))}
-          </div>
-        </Panel>
-
-        <Panel
-          eyebrow="Owner session"
-          title="Current operator context"
-          description="The app remains scoped to a single Google account and one explicit default Mollie mode."
-        >
-          <div className="rounded-[22px] border border-ink/8 bg-sand/55 p-4">
-            <p className="text-sm font-semibold text-ink">Signed in as</p>
-            <p className="mt-2 text-sm leading-6 text-ink/64">{session.user.email}</p>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <StatusPill tone={env.MOLLIE_DEFAULT_MODE === "live" ? "warning" : "accent"}>
-              default mode: {env.MOLLIE_DEFAULT_MODE}
-            </StatusPill>
-            <StatusPill tone={isMollieConfigured("test") ? "accent" : "warning"}>
-              test key {isMollieConfigured("test") ? "ready" : "missing"}
-            </StatusPill>
-            <StatusPill tone={isMollieConfigured("live") ? "accent" : "warning"}>
-              live key {isMollieConfigured("live") ? "ready" : "missing"}
-            </StatusPill>
-            <StatusPill tone={notificationsAreConfigured() ? "accent" : "warning"}>
-              smtp {notificationsAreConfigured() ? "ready" : "pending"}
-            </StatusPill>
-          </div>
-        </Panel>
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-        <Panel
-          eyebrow="Database"
-          title="Operational storage bootstrap"
-          description="The dashboard keeps its own operational state, audit trail, alerts, and webhook inbox even though Mollie remains the financial source of truth."
-        >
-          <div className="rounded-[22px] border border-ink/8 bg-white/76 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-ink">Connection check</p>
-              <StatusPill tone={databaseHealth.ok ? "accent" : "warning"}>
-                {databaseHealth.ok ? "Connected" : "Not connected"}
-              </StatusPill>
-            </div>
-            <p className="mt-3 text-sm leading-6 text-ink/64">{databaseHealth.reason}</p>
-          </div>
-          <div className="mt-4 rounded-[22px] border border-ink/8 bg-sand/55 p-4 font-mono text-sm text-ink/78">
-            npm.cmd run db:apply
-          </div>
-          <p className="mt-4 text-sm leading-6 text-ink/64">
-            Run the migration command again after pulling changes so newer
-            schema files such as the subscription stop-default fix are applied
-            in order.
-          </p>
-        </Panel>
-
-        <Panel
-          eyebrow="Webhook"
-          title="Mollie callback endpoint"
-          description="Mollie does not sign webhooks. This app protects the endpoint by embedding a secret token into the configured webhook URL."
-        >
-          <div className="rounded-[22px] border border-ink/8 bg-white/76 p-4">
-            <p className="text-sm font-semibold text-ink">Public base URL</p>
-            <p className="mt-2 break-all font-mono text-[0.8rem] leading-6 text-ink/64">
-              {env.MOLLIE_WEBHOOK_PUBLIC_BASE_URL ?? "Not configured"}
-            </p>
-            <p className="mt-3 text-sm leading-6 text-ink/64">
-              New first payments and subscriptions now use a webhook URL with
-              the shared secret query parameter appended automatically.
-            </p>
-          </div>
-        </Panel>
-      </section>
+      <KpiStrip
+        items={[
+          {
+            label: "Platform ready",
+            value: `${readySectionCount}/${sections.length}`,
+            helper: readySectionCount === sections.length ? "healthy" : "review",
+            tone: readySectionCount === sections.length ? "accent" : "warning",
+          },
+          {
+            label: "Open alerts",
+            value: reliability.openAlertCount,
+            helper: reliability.openAlertCount > 0 ? "queue active" : "clear",
+            tone: reliability.openAlertCount > 0 ? "warning" : "accent",
+          },
+          {
+            label: "Failed webhooks",
+            value: reliability.failedWebhookCount,
+            helper: reliability.failedWebhookCount > 0 ? "replay needed" : "healthy",
+            tone: reliability.failedWebhookCount > 0 ? "warning" : "neutral",
+          },
+          {
+            label: "Unresolved alerts",
+            value: reliability.unresolvedAlertCount,
+            helper:
+              effectiveModeFilter === "all" ? "all modes" : `${effectiveModeFilter} scope`,
+            tone: effectiveModeFilter === "all" ? "neutral" : "accent",
+          },
+        ]}
+      />
 
       <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <Panel
-          eyebrow="Reliability"
-          title="Reconciliation and webhook inbox"
-          description="This is the phase 5 control surface: durable webhook events, manual replay, and a reconciliation pass that re-syncs all known subscriptions and first payments."
+        <DetailSection
+          title="Default operating mode"
+          description="This controls the mode for new customer creation and the default dashboard scope. Existing records keep their own stored mode."
+          actions={<DashboardModeToggle selectedMode={selectedMode} />}
         >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <article className="rounded-[22px] border border-ink/8 bg-white/76 p-4">
-              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.2em] text-ink/45">
-                Open alerts
-              </p>
-              <p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-ink">
-                {reliability.openAlertCount}
-              </p>
-            </article>
-            <article className="rounded-[22px] border border-ink/8 bg-white/76 p-4">
-              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.2em] text-ink/45">
-                Failed webhook events
-              </p>
-              <p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-ink">
-                {reliability.failedWebhookCount}
-              </p>
-            </article>
+          <div className="flex flex-col gap-3 text-sm text-ink-soft">
+            <p>
+              New customers are created in <span className="font-medium text-ink">{selectedMode}</span> mode.
+            </p>
+            <p>
+              Most dashboard pages default to that mode unless you explicitly override them with a
+              mode filter.
+            </p>
+            {effectiveModeFilter !== selectedMode ? (
+              <div className="flex flex-wrap gap-2">
+                <StatusPill tone={getModeTone(selectedMode)}>
+                  Default {selectedMode}
+                </StatusPill>
+                <StatusPill tone={getModeTone(effectiveModeFilter)}>
+                  Viewing {effectiveModeFilter}
+                </StatusPill>
+              </div>
+            ) : null}
           </div>
+        </DetailSection>
 
-          <dl className="mt-4 grid gap-4 text-sm text-ink/64 sm:grid-cols-2">
-            <div>
-              <dt className="font-semibold text-ink/82">Last received webhook</dt>
-              <dd className="mt-1">
-                {formatDateTime(reliability.lastReceivedWebhookAt)}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-ink/82">Last processed webhook</dt>
-              <dd className="mt-1">
-                {formatDateTime(reliability.lastProcessedWebhookAt)}
-              </dd>
-            </div>
-          </dl>
-
-          <form action={runReconciliationAction} className="mt-5">
-            <input type="hidden" name="returnTo" value="/settings" />
-            <FormActionButton
-              confirmMessage="Run a full reconciliation pass against Mollie now?"
-              pendingLabel="Reconciling..."
-            >
-              Run reconciliation
-            </FormActionButton>
-          </form>
-        </Panel>
-
-        <Panel
-          eyebrow="Mail"
-          title="Notification delivery"
-          description="Alert emails stay deliberately plain. If SMTP is configured, new durable alerts will trigger a direct email to your inbox."
+        <DetailSection
+          title="Platform health"
+          description="These checks stay visible here instead of living in the shell."
         >
-          <ul className="space-y-3 text-sm leading-6 text-ink/64">
-            <li>
-              <span className="font-semibold text-ink">Google auth:</span> AUTH_GOOGLE_ID,
-              AUTH_GOOGLE_SECRET, AUTH_ALLOWED_EMAIL, AUTH_SECRET.
-            </li>
-            <li>
-              <span className="font-semibold text-ink">Database:</span> DATABASE_URL and
-              optional DATABASE_SSL.
-            </li>
-            <li>
-              <span className="font-semibold text-ink">Mollie:</span> separate test/live API
-              keys plus a single explicit default mode.
-            </li>
-            <li>
-              <span className="font-semibold text-ink">Notifications:</span> SMTP_* and
-              ALERT_EMAIL_TO.
-            </li>
-          </ul>
-        </Panel>
-      </section>
-
-      <Panel
-        eyebrow="Inbox"
-        title="Recent webhook events"
-        description="Failed events can be replayed manually after you fix the underlying issue or after a transient outage."
-      >
-        {webhookEvents.length === 0 ? (
-          <div className="rounded-[24px] border border-dashed border-ink/12 bg-white/70 px-5 py-8 text-sm leading-6 text-ink/62">
-            No webhook events have been recorded yet.
-          </div>
-        ) : (
-          <div className="grid gap-3">
-            {webhookEvents.map((event) => (
-              <article
-                key={event.id}
-                className="rounded-[24px] border border-ink/8 bg-white/78 p-4"
+          <div className="flex flex-col divide-y divide-border/80">
+            {platformHealthItems.map((item) => (
+              <div
+                key={item.label}
+                className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 lg:flex-row lg:items-start lg:justify-between"
               >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-ink">
-                        {event.resourceId ?? "Unknown resource"}
-                      </p>
-                      <StatusPill
-                        tone={
-                          event.processingStatus === "processed"
-                            ? "accent"
-                            : event.processingStatus === "failed"
-                              ? "warning"
-                              : "muted"
-                        }
-                      >
-                        {event.processingStatus}
-                      </StatusPill>
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-ink/62">
-                      Received {formatDateTime(event.receivedAt)} · Processed{" "}
-                      {formatDateTime(event.processedAt)}
-                    </p>
-                    {event.errorMessage ? (
-                      <p className="mt-2 text-sm leading-6 text-ink/62">
-                        {event.errorMessage}
-                      </p>
-                    ) : null}
-                  </div>
-
-                  <form action={replayWebhookEventAction}>
-                    <input type="hidden" name="webhookEventId" value={event.id} />
-                    <input type="hidden" name="returnTo" value="/settings" />
-                    <FormActionButton
-                      variant="secondary"
-                      pendingLabel="Replaying..."
-                    >
-                      Replay event
-                    </FormActionButton>
-                  </form>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-ink">{item.label}</p>
+                  <p className="text-sm leading-6 text-ink-soft">{item.description}</p>
                 </div>
-              </article>
+                <StatusPill tone={item.ready ? "accent" : "warning"}>
+                  {item.ready ? "Ready" : "Needs setup"}
+                </StatusPill>
+              </div>
             ))}
           </div>
+        </DetailSection>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[0.96fr_1.04fr]">
+        <DetailSection
+          title="Integrations"
+          description="Compact service status for the boundaries this app depends on."
+        >
+          <div className="flex flex-col divide-y divide-border/80">
+            {integrationItems.map((item) => (
+              <div
+                key={item.label}
+                className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 lg:flex-row lg:items-start lg:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-ink">{item.label}</p>
+                  <p className="text-sm leading-6 text-ink-soft">{item.description}</p>
+                </div>
+                <StatusPill tone={item.ready ? "accent" : "warning"}>
+                  {item.ready ? "Ready" : "Missing"}
+                </StatusPill>
+              </div>
+            ))}
+          </div>
+        </DetailSection>
+
+        <DetailSection
+          title="Reliability tools"
+          description="Run deliberate maintenance actions without turning settings into a setup console."
+        >
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-surface-subtle p-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink">Run reconciliation</p>
+                <p className="text-sm leading-6 text-ink-soft">
+                  Re-fetch known subscriptions and first payments from Mollie when data needs a hard refresh.
+                </p>
+              </div>
+              <form action={runReconciliationAction}>
+                <input type="hidden" name="returnTo" value={settingsReturnTo} />
+                <FormActionButton
+                  confirmMessage="Run a full reconciliation pass against Mollie now?"
+                  pendingLabel="Reconciling..."
+                >
+                  Run reconciliation
+                </FormActionButton>
+              </form>
+            </div>
+
+            <div className="flex flex-col gap-2 rounded-xl border border-border/80 bg-surface-subtle p-4 text-sm text-ink-soft">
+              <p className="font-medium text-ink">Replay failed webhooks from the event table below.</p>
+              <p>
+                Each replay re-fetches current Mollie state rather than trusting the stored webhook payload.
+              </p>
+            </div>
+          </div>
+        </DetailSection>
+      </section>
+
+      <DetailSection
+        title="Recent webhook events"
+        description="Use replay after a transient outage or after you have fixed the underlying issue."
+      >
+        {webhookEvents.length === 0 ? (
+          <EmptyState
+            title="No webhook events recorded"
+            description="Incoming Mollie callbacks will appear here after the first payment or subscription flow runs."
+          />
+        ) : (
+          <DataTable
+            columns={[
+              { label: "Resource" },
+              { label: "Status" },
+              { label: "Mode" },
+              { label: "Received" },
+              { label: "Processed" },
+              { label: "Retries" },
+              { label: "Actions", align: "right", className: "w-[130px]" },
+            ]}
+          >
+            {webhookEvents.map((event) => (
+              <tr key={event.id}>
+                <td>
+                  <div className="flex min-w-[260px] flex-col gap-1">
+                    <p className="text-sm font-medium text-ink">
+                      {event.resourceId ?? "Unknown resource"}
+                    </p>
+                    <p className="text-sm text-ink-soft">
+                      {event.resourceType ?? "Unknown type"}
+                    </p>
+                    {event.errorMessage ? (
+                      <p className="text-sm leading-6 text-ink-soft">{event.errorMessage}</p>
+                    ) : null}
+                  </div>
+                </td>
+                <td>
+                  <StatusPill
+                    tone={
+                      event.processingStatus === "processed"
+                        ? "accent"
+                        : event.processingStatus === "failed"
+                          ? "warning"
+                          : "muted"
+                    }
+                  >
+                    {event.processingStatus}
+                  </StatusPill>
+                </td>
+                <td>
+                  <StatusPill tone={event.mode === "live" ? "warning" : "accent"}>
+                    {event.mode}
+                  </StatusPill>
+                </td>
+                <td className="font-mono text-xs text-ink-soft">
+                  {formatDateTime(event.receivedAt)}
+                </td>
+                <td className="font-mono text-xs text-ink-soft">
+                  {formatDateTime(event.processedAt)}
+                </td>
+                <td className="text-sm text-ink">{event.retryCount}</td>
+                <td>
+                  <div className="flex justify-end">
+                    <form action={replayWebhookEventAction}>
+                      <input type="hidden" name="webhookEventId" value={event.id} />
+                      <input type="hidden" name="returnTo" value={settingsReturnTo} />
+                      <FormActionButton variant="secondary" pendingLabel="Replaying...">
+                        Replay
+                      </FormActionButton>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </DataTable>
         )}
-      </Panel>
+      </DetailSection>
     </div>
   );
 }

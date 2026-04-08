@@ -13,6 +13,7 @@ import { z } from "zod";
 
 import { writeAuditLog } from "@/lib/audit";
 import { requireViewerSession } from "@/lib/auth/session";
+import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { transaction } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getMollieClient, getMollieWebhookUrl } from "@/lib/mollie/client";
@@ -260,7 +261,8 @@ export async function createCustomerAction(formData: FormData) {
 
   try {
     const localCustomerId = crypto.randomUUID();
-    const mollie = getMollieClient();
+    const selectedMode = await getSelectedMollieMode();
+    const mollie = getMollieClient(selectedMode);
     const createdCustomer = await mollie.customers.create({
       email: parsed.data.email,
       idempotencyKey: crypto.randomUUID(),

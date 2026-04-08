@@ -1,24 +1,74 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 :root {
-  --canvas: #f5efe4;
-  --sand: #e8dcc9;
-  --panel: #fffaf2;
-  --ink: #1d2a33;
-  --accent: #0f766e;
-  --accent-strong: #115e59;
-  --accent-soft: rgba(15, 118, 110, 0.12);
-  --shadow-panel: 0 20px 50px rgba(29, 42, 51, 0.08);
+  --canvas: #f6f8fc;
+  --surface: #ffffff;
+  --surface-subtle: #f8fafc;
+  --surface-muted: #f1f5f9;
+  --border: rgba(15, 23, 42, 0.08);
+  --border-strong: rgba(15, 23, 42, 0.14);
+  --ink: #0f172a;
+  --ink-soft: #475569;
+  --accent: #2563eb;
+  --accent-strong: #1d4ed8;
+  --accent-soft: rgba(37, 99, 235, 0.1);
+  --success-soft: rgba(22, 163, 74, 0.1);
+  --warning-soft: rgba(245, 158, 11, 0.12);
+  --critical-soft: rgba(239, 68, 68, 0.1);
+  --shadow-panel: 0 12px 30px rgba(15, 23, 42, 0.06);
+  --background: var(--surface);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface-muted);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-muted);
+  --muted-foreground: var(--ink-soft);
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --input: var(--border-strong);
+  --ring: rgba(37, 99, 235, 0.28);
 }
 
 @theme inline {
   --color-canvas: var(--canvas);
-  --color-sand: var(--sand);
-  --color-panel: var(--panel);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sand: var(--surface-muted);
+  --color-panel: var(--surface);
+  --color-surface: var(--surface);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
   --color-accent: var(--accent);
+  --color-accent-foreground: var(--primary-foreground);
   --color-accent-strong: var(--accent-strong);
   --color-accent-soft: var(--accent-soft);
+  --color-success-soft: var(--success-soft);
+  --color-warning-soft: var(--warning-soft);
+  --color-critical-soft: var(--critical-soft);
   --font-sans: var(--font-manrope);
   --font-mono: var(--font-plex-mono);
   --shadow-panel: var(--shadow-panel);
@@ -30,14 +80,15 @@
 
 html {
   background: var(--canvas);
+  color: var(--ink);
+  scroll-behavior: smooth;
 }
 
 body {
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 30%),
-    radial-gradient(circle at top right, rgba(217, 119, 6, 0.16), transparent 25%),
-    linear-gradient(180deg, #f4eee3 0%, #f7f4ee 52%, #fbfaf8 100%);
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.06), transparent 28%),
+    linear-gradient(180deg, #f8fafc 0%, #f6f8fc 42%, #f4f7fb 100%);
   color: var(--ink);
   font-family: var(--font-manrope), sans-serif;
 }
@@ -47,6 +98,51 @@ a {
   text-decoration: none;
 }
 
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(71, 85, 105, 0.8);
+}
+
 ::selection {
-  background: rgba(15, 118, 110, 0.18);
+  background: rgba(37, 99, 235, 0.18);
+}
+
+.surface-hairline {
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.app-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+}
+
+.app-scrollbar::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.45);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.app-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
 }

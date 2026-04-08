@@ -1,137 +1,274 @@
 import Link from "next/link";
 
-import { Panel } from "@/components/panel";
+import { DataTable } from "@/components/data-table";
+import { EmptyState } from "@/components/empty-state";
+import { FilterBar } from "@/components/filter-bar";
+import { FlashMessage } from "@/components/flash-message";
+import { FormActionButton } from "@/components/form-action-button";
+import { KpiStrip } from "@/components/kpi-strip";
+import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
-import { formatDateTime } from "@/lib/format";
+import {
+  getSelectedMollieMode,
+  resolveDashboardModeFilter,
+} from "@/lib/dashboard-mode";
+import { formatDateTime, getSingleSearchParam } from "@/lib/format";
+import { sendTestAlertAction } from "@/lib/reliability/actions";
 import { listAlertInbox } from "@/lib/reliability/data";
 
-export default async function AlertsPage() {
-  const alerts = await listAlertInbox();
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+function getAlertHref(alert: Awaited<ReturnType<typeof listAlertInbox>>[number]) {
+  if (alert.subscriptionId) {
+    return `/subscriptions?focus=${alert.subscriptionId}`;
+  }
+
+  if (alert.paymentId) {
+    return `/payments?focus=${alert.paymentId}`;
+  }
+
+  if (alert.customerId) {
+    return `/customers/${alert.customerId}`;
+  }
+
+  return "/alerts";
+}
+
+function getModeTone(mode: "live" | "test" | null) {
+  if (mode === "live") {
+    return "warning";
+  }
+
+  if (mode === "test") {
+    return "accent";
+  }
+
+  return "muted";
+}
+
+export default async function AlertsPage({
+  searchParams,
+}: Readonly<{
+  searchParams: SearchParams;
+}>) {
+  const resolvedSearchParams = await searchParams;
+  const selectedMode = await getSelectedMollieMode();
+  const rawModeFilter = getSingleSearchParam(resolvedSearchParams.mode);
+  const effectiveModeFilter = await resolveDashboardModeFilter(rawModeFilter);
+  const modeFilter =
+    rawModeFilter === "all" || rawModeFilter === "test" || rawModeFilter === "live"
+      ? rawModeFilter
+      : "";
+  const alerts = await listAlertInbox({ mode: effectiveModeFilter });
+
+  const notice = getSingleSearchParam(resolvedSearchParams.notice);
+  const error = getSingleSearchParam(resolvedSearchParams.error);
+  const query = (getSingleSearchParam(resolvedSearchParams.q) ?? "").trim();
+  const statusFilter = getSingleSearchParam(resolvedSearchParams.status) ?? "";
+  const severityFilter = getSingleSearchParam(resolvedSearchParams.severity) ?? "";
+
+  const filteredAlerts = alerts.filter((alert) => {
+    const searchHaystack = [
+      alert.title,
+      alert.message,
+      alert.customerName,
+      alert.customerEmail,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    const matchesQuery =
+      query.length === 0 || searchHaystack.includes(query.toLowerCase());
+    const matchesStatus = statusFilter.length === 0 || alert.status === statusFilter;
+    const matchesSeverity =
+      severityFilter.length === 0 || alert.severity === severityFilter;
+
+    return matchesQuery && matchesStatus && matchesSeverity;
+  });
+
+  const openCount = alerts.filter((alert) => alert.status === "open").length;
+  const criticalCount = alerts.filter(
+    (alert) => alert.status === "open" && alert.severity === "critical",
+  ).length;
+  const unsentCount = alerts.filter((alert) => !alert.emailSentAt).length;
 
   return (
-    <div className="space-y-6">
-      <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <Panel
-          eyebrow="Alerts"
-          title="Operational attention queue"
-          description="Phase 4 surfaces a derived queue from failed payments and problematic subscription states. Phase 5 will add durable alert records and email delivery."
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Alerts"
+        title="Triage failures, disputes, and state drift"
+        description="Keep the queue dense and readable. Open the linked workspace directly from the affected record once you know what needs action."
+        actions={
+          <>
+            <StatusPill tone={getModeTone(effectiveModeFilter === "all" ? null : effectiveModeFilter)}>
+              {effectiveModeFilter === "all"
+                ? "Viewing all modes"
+                : `Viewing ${effectiveModeFilter} mode`}
+            </StatusPill>
+            <form action={sendTestAlertAction}>
+              <input type="hidden" name="returnTo" value="/alerts" />
+              <FormActionButton variant="secondary" pendingLabel="Sending test alert...">
+                Send test alert
+              </FormActionButton>
+            </form>
+          </>
+        }
+      />
+
+      <KpiStrip
+        items={[
+          {
+            label: "Open alerts",
+            value: openCount,
+            helper: openCount > 0 ? "needs review" : "clear",
+            tone: openCount > 0 ? "warning" : "accent",
+          },
+          {
+            label: "Critical",
+            value: criticalCount,
+            helper: criticalCount > 0 ? "priority" : "none",
+            tone: criticalCount > 0 ? "warning" : "neutral",
+          },
+          {
+            label: "Email pending",
+            value: unsentCount,
+            helper: unsentCount > 0 ? "check delivery" : "up to date",
+            tone: unsentCount > 0 ? "warning" : "neutral",
+          },
+          {
+            label: "Records",
+            value: alerts.length,
+            helper: selectedMode === effectiveModeFilter ? "default scope" : "override",
+            tone: selectedMode === effectiveModeFilter ? "neutral" : "accent",
+          },
+        ]}
+      />
+
+      {notice ? (
+        <FlashMessage message={notice} title="Update" variant="notice" />
+      ) : null}
+      {error ? (
+        <FlashMessage message={error} title="Action blocked" variant="error" />
+      ) : null}
+
+      <FilterBar
+        resetHref="/alerts"
+        searchPlaceholder="Search alerts by title, message, or customer"
+        searchValue={query}
+        filters={[
+          {
+            label: "Status",
+            name: "status",
+            value: statusFilter,
+            options: [
+              { label: "All statuses", value: "" },
+              { label: "Open", value: "open" },
+              { label: "Acknowledged", value: "acknowledged" },
+              { label: "Resolved", value: "resolved" },
+            ],
+          },
+          {
+            label: "Severity",
+            name: "severity",
+            value: severityFilter,
+            options: [
+              { label: "All severity", value: "" },
+              { label: "Critical", value: "critical" },
+              { label: "Warning", value: "warning" },
+              { label: "Info", value: "info" },
+            ],
+          },
+          {
+            label: "Mode",
+            name: "mode",
+            value: modeFilter,
+            options: [
+              { label: `Default mode (${selectedMode})`, value: "" },
+              { label: "All modes", value: "all" },
+              { label: "Test", value: "test" },
+              { label: "Live", value: "live" },
+            ],
+          },
+        ]}
+      />
+
+      {filteredAlerts.length === 0 ? (
+        <EmptyState
+          title="No matching alerts"
+          description="Adjust the filters or wait for the next operational event to land in the queue."
+        />
+      ) : (
+        <DataTable
+          columns={[
+            { label: "Alert" },
+            { label: "Customer" },
+            { label: "Severity" },
+            { label: "Status" },
+            { label: "Delivery" },
+            { label: "Mode" },
+            { label: "Detected" },
+            { label: "Actions", align: "right", className: "w-[130px]" },
+          ]}
         >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <article className="rounded-[22px] border border-ink/8 bg-white/76 p-4">
-              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.2em] text-ink/45">
-                Open operational items
-              </p>
-              <p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-ink">
-                {alerts.filter((alert) => alert.status === "open").length}
-              </p>
-            </article>
-            <article className="rounded-[22px] border border-ink/8 bg-white/76 p-4">
-              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.2em] text-ink/45">
-                Email delivery
-              </p>
-              <p className="mt-3 text-base font-semibold text-ink">
-                Active
-              </p>
-            </article>
-          </div>
-        </Panel>
-
-        <Panel
-          eyebrow="Scope"
-          title="What appears here now"
-          description="This page now reads from durable alert records. Each alert can survive webhook retries, reconciliation passes, and future email delivery retries."
-        >
-          <div className="flex flex-wrap gap-2">
-            <StatusPill tone="warning">failed payments</StatusPill>
-            <StatusPill tone="warning">expired payments</StatusPill>
-            <StatusPill tone="warning">payment action required</StatusPill>
-            <StatusPill tone="warning">webhook durable</StatusPill>
-          </div>
-        </Panel>
-      </section>
-
-      <Panel
-        eyebrow="Queue"
-        title="Current attention items"
-        description="Use the linked payment or subscription workspace to investigate and sync the underlying state."
-      >
-        {alerts.length === 0 ? (
-          <div className="rounded-[24px] border border-dashed border-ink/12 bg-white/70 px-5 py-8 text-sm leading-6 text-ink/62">
-            No current operational attention items are derived from the local
-            store.
-          </div>
-        ) : (
-          <div className="grid gap-3">
-            {alerts.map((alert) => (
-              <article
-                key={alert.id}
-                className="rounded-[24px] border border-ink/8 bg-white/78 p-4"
-              >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-lg font-semibold tracking-[-0.03em] text-ink">
-                        {alert.title}
-                      </h3>
-                      <StatusPill
-                        tone={alert.severity === "critical" ? "warning" : "muted"}
-                      >
-                        {alert.severity}
-                      </StatusPill>
-                      <StatusPill
-                        tone={alert.status === "open" ? "warning" : "muted"}
-                      >
-                        {alert.status}
-                      </StatusPill>
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-ink/62">
-                      {alert.message}
-                    </p>
-                    <p className="mt-3 text-sm text-ink/62">
-                      {alert.customerName ?? "Unknown customer"}
-                      {alert.customerEmail ? ` · ${alert.customerEmail}` : ""}
-                    </p>
-                    <p className="mt-1 text-sm text-ink/55">
-                      Detected {formatDateTime(alert.createdAt)}
-                    </p>
-                    <p className="mt-1 text-sm text-ink/55">
-                      Email sent{" "}
-                      {alert.emailSentAt ? formatDateTime(alert.emailSentAt) : "not yet"}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
-                    {alert.subscriptionId ? (
-                      <Link
-                        href={`/subscriptions?focus=${alert.subscriptionId}`}
-                        className="inline-flex min-h-11 items-center justify-center rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-ink/88"
-                      >
-                        Open subscription
-                      </Link>
-                    ) : null}
-                    {alert.paymentId ? (
-                      <Link
-                        href={`/payments?focus=${alert.paymentId}`}
-                        className="inline-flex min-h-11 items-center justify-center rounded-full border border-ink/10 px-4 py-2 text-sm font-semibold text-ink/78 transition-colors hover:bg-sand/55"
-                      >
-                        Open payment
-                      </Link>
-                    ) : null}
-                    {alert.customerId ? (
-                      <Link
-                        href={`/customers/${alert.customerId}`}
-                        className="inline-flex min-h-11 items-center justify-center rounded-full border border-ink/10 px-4 py-2 text-sm font-semibold text-ink/78 transition-colors hover:bg-sand/55"
-                      >
-                        Open customer
-                      </Link>
-                    ) : null}
-                  </div>
+          {filteredAlerts.map((alert) => (
+            <tr
+              key={alert.id}
+              className={alert.severity === "critical" && alert.status === "open" ? "bg-critical-soft/40" : ""}
+            >
+              <td className="min-w-[320px]">
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm font-semibold text-ink">{alert.title}</p>
+                  <p className="text-sm leading-6 text-ink-soft">{alert.message}</p>
                 </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </Panel>
+              </td>
+              <td>
+                <div className="flex min-w-[220px] flex-col gap-1">
+                  <p className="text-sm font-medium text-ink">
+                    {alert.customerName ?? "Unknown customer"}
+                  </p>
+                  <p className="text-sm text-ink-soft">
+                    {alert.customerEmail ?? "No email stored"}
+                  </p>
+                </div>
+              </td>
+              <td>
+                <StatusPill tone={alert.severity === "critical" ? "critical" : "warning"}>
+                  {alert.severity}
+                </StatusPill>
+              </td>
+              <td>
+                <StatusPill tone={alert.status === "open" ? "warning" : "muted"}>
+                  {alert.status}
+                </StatusPill>
+              </td>
+              <td>
+                <StatusPill tone={alert.emailSentAt ? "accent" : "muted"}>
+                  {alert.emailSentAt ? "sent" : "pending"}
+                </StatusPill>
+              </td>
+              <td>
+                <StatusPill tone={getModeTone(alert.mode)}>
+                  {alert.mode ?? "unknown"}
+                </StatusPill>
+              </td>
+              <td className="font-mono text-xs text-ink-soft">
+                {formatDateTime(alert.createdAt)}
+              </td>
+              <td>
+                <div className="flex justify-end">
+                  <Link
+                    href={getAlertHref(alert)}
+                    className="inline-flex min-h-9 items-center justify-center rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-ink/88"
+                  >
+                    Open
+                  </Link>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </DataTable>
+      )}
     </div>
   );
 }

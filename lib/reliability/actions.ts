@@ -4,9 +4,18 @@ import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
-import { query } from "@/lib/db";
-import { reconcileOperationalData, syncPaymentByMollieId, syncSubscriptionByMollieId } from "@/lib/reliability/sync";
+import { writeAuditLog } from "@/lib/audit";
 import { requireViewerSession } from "@/lib/auth/session";
+import { getSelectedMollieMode } from "@/lib/dashboard-mode";
+import { query, transaction } from "@/lib/db";
+import { env } from "@/lib/env";
+import { notificationsAreConfigured } from "@/lib/notifications/email";
+import { deliverAlertEmail } from "@/lib/reliability/alerts";
+import {
+  reconcileOperationalData,
+  syncPaymentByMollieId,
+  syncSubscriptionByMollieId,
+} from "@/lib/reliability/sync";
 
 const redirectSchema = z.object({
   returnTo: z.string().trim().startsWith("/").default("/settings"),
@@ -184,4 +193,108 @@ export async function replayWebhookEventAction(formData: FormData) {
       error: serializeError(error),
     });
   }
+}
+
+export async function sendTestAlertAction(formData: FormData) {
+  const parsed = redirectSchema.safeParse({
+    returnTo: formData.get("returnTo"),
+  });
+
+  if (!parsed.success) {
+    redirectWithMessage("/settings", {
+      error: "Notification target is missing.",
+    });
+  }
+
+  const session = await requireViewerSession();
+  const selectedMode = await getSelectedMollieMode();
+
+  if (!notificationsAreConfigured()) {
+    redirectWithMessage(parsed.data.returnTo, {
+      error:
+        "SMTP is not fully configured yet. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, and ALERT_EMAIL_TO first.",
+    });
+  }
+
+  const requestedAt = new Date().toISOString();
+  const alertId = crypto.randomUUID();
+  const title = `Manual test alert - ${requestedAt}`;
+  const message = [
+    "This is a manual test alert from Mollie Manager.",
+    "",
+    `Triggered at: ${requestedAt}`,
+    `Requested by: ${session.user.email ?? "Unknown operator"}`,
+    `App environment: ${env.APP_ENV}`,
+    `Selected Mollie mode: ${selectedMode}`,
+  ].join("\n");
+
+  await transaction(async (client) => {
+    await client.query(
+      `
+        insert into alerts (
+          id,
+          severity,
+          title,
+          message,
+          payload
+        ) values ($1, 'info', $2, $3, $4::jsonb)
+      `,
+      [
+        alertId,
+        title,
+        message,
+        JSON.stringify({
+          kind: "manual_test",
+          mode: selectedMode,
+          requestedAt,
+          requestedBy: session.user.email ?? null,
+        }),
+      ],
+    );
+  });
+
+  const delivery = await deliverAlertEmail({
+    alertId,
+    message,
+    title,
+  });
+  const delivered = delivery.delivered;
+
+  await writeAuditLog(
+    {
+      action: "alert.test.send",
+      details: {
+        delivered,
+        error: delivery.error,
+        mode: selectedMode,
+        requestedAt,
+      },
+      entityId: alertId,
+      entityType: "alert",
+      outcome: delivered ? "success" : "failure",
+      summary: delivered
+        ? "Sent a manual SMTP test alert."
+        : "Created a manual test alert, but SMTP delivery failed.",
+    },
+    undefined,
+    {
+      email: session.user.email ?? null,
+      kind: "user",
+    },
+  );
+
+  revalidatePath("/settings");
+  revalidatePath("/alerts");
+
+  if (!delivered) {
+    redirectWithMessage(parsed.data.returnTo, {
+      error: delivery.error
+        ? `The test alert was stored locally, but SMTP delivery failed: ${delivery.error}`
+        : "The test alert was stored locally, but the email could not be delivered. Review the SMTP settings and try again.",
+    });
+  }
+
+  redirectWithMessage(parsed.data.returnTo, {
+    notice: "Test alert sent. Check your inbox and the Alerts page.",
+  });
 }

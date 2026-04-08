@@ -1,9 +1,21 @@
 import Link from "next/link";
 
+import { DataTable } from "@/components/data-table";
+import { DrawerForm } from "@/components/drawer-form";
+import { EmptyState } from "@/components/empty-state";
+import { FilterBar } from "@/components/filter-bar";
 import { FlashMessage } from "@/components/flash-message";
 import { FormActionButton } from "@/components/form-action-button";
-import { Panel } from "@/components/panel";
+import { KpiStrip } from "@/components/kpi-strip";
+import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  getSelectedMollieMode,
+  resolveDashboardModeFilter,
+} from "@/lib/dashboard-mode";
 import {
   formatDateTime,
   formatLabel,
@@ -14,20 +26,60 @@ import { listCustomers } from "@/lib/onboarding/data";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
+function getCustomerStage(customer: Awaited<ReturnType<typeof listCustomers>>[number]) {
+  if (customer.latestSubscriptionStatus === "active") {
+    return "active";
+  }
+
+  if (customer.latestFirstPaymentStatus === "paid" && customer.hasValidMandate) {
+    return "ready";
+  }
+
+  return "setup";
+}
+
 export default async function CustomersPage({
   searchParams,
 }: Readonly<{
   searchParams: SearchParams;
 }>) {
-  const [customers, resolvedSearchParams] = await Promise.all([
-    listCustomers(),
-    searchParams,
-  ]);
+  const resolvedSearchParams = await searchParams;
+  const selectedMode = await getSelectedMollieMode();
+  const rawModeFilter = getSingleSearchParam(resolvedSearchParams.mode);
+  const effectiveModeFilter = await resolveDashboardModeFilter(rawModeFilter);
+  const modeFilter =
+    rawModeFilter === "all" || rawModeFilter === "test" || rawModeFilter === "live"
+      ? rawModeFilter
+      : "";
+  const customers = await listCustomers({ mode: effectiveModeFilter });
   const notice = getSingleSearchParam(resolvedSearchParams.notice);
   const error = getSingleSearchParam(resolvedSearchParams.error);
+  const query = (getSingleSearchParam(resolvedSearchParams.q) ?? "").trim();
+  const stateFilter = getSingleSearchParam(resolvedSearchParams.state) ?? "";
+
+  const filteredCustomers = customers.filter((customer) => {
+    const stage = getCustomerStage(customer);
+    const searchHaystack = [
+      customer.fullName,
+      customer.email,
+      customer.mollieCustomerId,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    const matchesQuery =
+      query.length === 0 || searchHaystack.includes(query.toLowerCase());
+    const matchesState = stateFilter.length === 0 || stage === stateFilter;
+
+    return matchesQuery && matchesState;
+  });
+
+  const setupCustomers = customers.filter(
+    (customer) => getCustomerStage(customer) === "setup",
+  ).length;
   const readyCustomers = customers.filter(
-    (customer) =>
-      customer.latestFirstPaymentStatus === "paid" && customer.hasValidMandate,
+    (customer) => getCustomerStage(customer) === "ready",
   ).length;
   const activeSubscriptions = customers.filter(
     (customer) => customer.latestSubscriptionStatus === "active",
@@ -35,100 +87,65 @@ export default async function CustomersPage({
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 xl:grid-cols-[1.35fr_0.95fr]">
-        <Panel
-          eyebrow="Customers"
-          title="Prepare the recurring billing flow one customer at a time"
-          description="Each record anchors the safe path: create a Mollie customer, issue the first iDEAL payment, wait for the direct debit mandate, then create the monthly subscription."
-        >
-          <div className="grid gap-3 sm:grid-cols-3">
-            <article className="rounded-[22px] border border-ink/8 bg-white/76 p-4">
-              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.2em] text-ink/45">
-                Total customers
-              </p>
-              <p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-ink">
-                {customers.length}
-              </p>
-            </article>
-            <article className="rounded-[22px] border border-ink/8 bg-white/76 p-4">
-              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.2em] text-ink/45">
-                Ready for subscription
-              </p>
-              <p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-ink">
-                {readyCustomers}
-              </p>
-            </article>
-            <article className="rounded-[22px] border border-ink/8 bg-white/76 p-4">
-              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.2em] text-ink/45">
-                Active subscriptions
-              </p>
-              <p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-ink">
-                {activeSubscriptions}
-              </p>
-            </article>
-          </div>
-        </Panel>
-
-        <Panel
-          eyebrow="New customer"
-          title="Create the Mollie customer record first"
-          description="This stores the local record and the Mollie customer ID in one step so later payment and subscription actions stay attached to the same customer."
-        >
-          <form action={createCustomerAction} className="space-y-4">
-            <div className="space-y-2">
-              <label
-                htmlFor="fullName"
-                className="text-sm font-semibold text-ink/82"
-              >
-                Full name
-              </label>
-              <input
-                id="fullName"
-                name="fullName"
-                required
-                autoComplete="name"
-                className="min-h-11 w-full rounded-2xl border border-ink/10 bg-white px-4 text-sm text-ink outline-none transition-colors focus:border-accent"
-                placeholder="Customer name"
-              />
-            </div>
-            <div className="space-y-2">
-              <label
-                htmlFor="email"
-                className="text-sm font-semibold text-ink/82"
-              >
-                Email
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                autoComplete="email"
-                className="min-h-11 w-full rounded-2xl border border-ink/10 bg-white px-4 text-sm text-ink outline-none transition-colors focus:border-accent"
-                placeholder="customer@example.com"
-              />
-            </div>
-            <div className="space-y-2">
-              <label
-                htmlFor="notes"
-                className="text-sm font-semibold text-ink/82"
-              >
-                Notes
-              </label>
-              <textarea
-                id="notes"
-                name="notes"
-                rows={4}
-                className="w-full rounded-[22px] border border-ink/10 bg-white px-4 py-3 text-sm text-ink outline-none transition-colors focus:border-accent"
-                placeholder="Optional internal notes"
-              />
-            </div>
-            <FormActionButton pendingLabel="Creating customer...">
-              Create customer
-            </FormActionButton>
-          </form>
-        </Panel>
-      </section>
+      <PageHeader
+        eyebrow="Customers"
+        title="Manage customers and get them subscription-ready"
+        description="Create the Mollie customer, track the first payment, verify mandate readiness, and open the focused workspace only when more context is needed."
+        actions={
+          <DrawerForm
+            triggerLabel="New customer"
+            title="Create customer"
+            description="This creates the local record and the linked Mollie customer so later payment and subscription actions stay attached to the same identity."
+          >
+            <form action={createCustomerAction} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="fullName">
+                  Full name
+                </Label>
+                <Input
+                  id="fullName"
+                  name="fullName"
+                  required
+                  autoComplete="name"
+                  className="bg-surface-subtle"
+                  placeholder="Customer name"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="email">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  className="bg-surface-subtle"
+                  placeholder="customer@example.com"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="notes">
+                  Notes
+                </Label>
+                <Textarea
+                  id="notes"
+                  name="notes"
+                  rows={5}
+                  className="bg-surface-subtle"
+                  placeholder="Optional internal notes"
+                />
+              </div>
+              <div className="flex justify-end">
+                <FormActionButton pendingLabel="Creating customer...">
+                  Create customer
+                </FormActionButton>
+              </div>
+            </form>
+          </DrawerForm>
+        }
+      />
 
       {notice ? (
         <FlashMessage message={notice} title="Update" variant="notice" />
@@ -137,136 +154,168 @@ export default async function CustomersPage({
         <FlashMessage message={error} title="Action blocked" variant="error" />
       ) : null}
 
-      <Panel
-        eyebrow="Workspace"
-        title="Customer records and onboarding state"
-        description="Each row shows whether the first payment exists, whether a valid mandate is present, and whether a subscription has already been created."
-      >
-        {customers.length === 0 ? (
-          <div className="rounded-[24px] border border-dashed border-ink/12 bg-white/70 px-5 py-8 text-sm leading-6 text-ink/62">
-            No customers yet. Create the first one to start the iDEAL and SEPA
-            onboarding flow.
-          </div>
-        ) : (
-          <div className="grid gap-3">
-            {customers.map((customer) => (
-              <article
-                key={customer.id}
-                className="rounded-[24px] border border-ink/8 bg-white/78 p-4"
-              >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-3">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-lg font-semibold tracking-[-0.03em] text-ink">
-                          {customer.fullName ?? "Unnamed customer"}
-                        </h3>
-                        <StatusPill
-                          tone={
-                            customer.mode === "live" ? "warning" : "accent"
-                          }
-                        >
-                          {customer.mode}
-                        </StatusPill>
-                        <StatusPill
-                          tone={
-                            customer.latestSubscriptionStatus === "active"
-                              ? "accent"
-                              : customer.hasValidMandate
-                                ? "muted"
-                                : "warning"
-                          }
-                        >
-                          {customer.latestSubscriptionStatus === "active"
-                            ? "subscription active"
-                            : customer.hasValidMandate
-                              ? "ready to subscribe"
-                              : "setup in progress"}
-                        </StatusPill>
-                      </div>
-                      <p className="mt-1 text-sm text-ink/58">{customer.email}</p>
-                    </div>
+      <KpiStrip
+        items={[
+          { label: "Customers", value: customers.length },
+          {
+            label: "In setup",
+            value: setupCustomers,
+            helper: "first payment pending",
+            tone: setupCustomers > 0 ? "warning" : "neutral",
+          },
+          {
+            label: "Ready to subscribe",
+            value: readyCustomers,
+            helper: readyCustomers > 0 ? "mandate ready" : "waiting",
+            tone: readyCustomers > 0 ? "accent" : "neutral",
+          },
+          {
+            label: "Active subscriptions",
+            value: activeSubscriptions,
+            helper: activeSubscriptions > 0 ? "live" : "none",
+            tone: activeSubscriptions > 0 ? "accent" : "neutral",
+          },
+        ]}
+      />
 
-                    <div className="flex flex-wrap gap-2">
-                      <StatusPill
-                        tone={
-                          customer.latestFirstPaymentStatus === "paid"
-                            ? "accent"
-                            : customer.latestFirstPaymentStatus
-                              ? "warning"
-                              : "muted"
-                        }
-                      >
-                        first payment{" "}
-                        {customer.latestFirstPaymentStatus
-                          ? formatLabel(customer.latestFirstPaymentStatus)
-                          : "Missing"}
-                      </StatusPill>
-                      <StatusPill
-                        tone={customer.hasValidMandate ? "accent" : "warning"}
-                      >
-                        mandate {customer.hasValidMandate ? "Valid" : "Pending"}
-                      </StatusPill>
-                      <StatusPill
-                        tone={
-                          customer.subscriptionCount > 0 ? "accent" : "muted"
-                        }
-                      >
-                        {customer.subscriptionCount} subscription
-                        {customer.subscriptionCount === 1 ? "" : "s"}
-                      </StatusPill>
-                    </div>
+      <FilterBar
+        resetHref="/customers"
+        searchPlaceholder="Search by name, email, or Mollie customer ID"
+        searchValue={query}
+        filters={[
+          {
+            label: "State",
+            name: "state",
+            value: stateFilter,
+            options: [
+              { label: "All states", value: "" },
+              { label: "Setup", value: "setup" },
+              { label: "Ready", value: "ready" },
+              { label: "Active", value: "active" },
+            ],
+          },
+          {
+            label: "Mode",
+            name: "mode",
+            value: modeFilter,
+            options: [
+              { label: `Default mode (${selectedMode})`, value: "" },
+              { label: "All modes", value: "all" },
+              { label: "Test", value: "test" },
+              { label: "Live", value: "live" },
+            ],
+          },
+        ]}
+      />
 
-                    <dl className="grid gap-3 text-sm text-ink/65 sm:grid-cols-3">
-                      <div>
-                        <dt className="font-semibold text-ink/78">Created</dt>
-                        <dd className="mt-1">
-                          {formatDateTime(customer.createdAt)}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="font-semibold text-ink/78">
-                          Latest paid first payment
-                        </dt>
-                        <dd className="mt-1">
-                          {formatDateTime(customer.latestFirstPaymentPaidAt)}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="font-semibold text-ink/78">
-                          Latest subscription state
-                        </dt>
-                        <dd className="mt-1">
-                          {formatLabel(customer.latestSubscriptionStatus)}
-                        </dd>
-                      </div>
-                    </dl>
+      {filteredCustomers.length === 0 ? (
+        <EmptyState
+          title="No matching customers"
+          description="Adjust the filters or create a new customer to start the first-payment and mandate flow."
+        />
+      ) : (
+        <DataTable
+          columns={[
+            { label: "Customer" },
+            { label: "State" },
+            { label: "First payment" },
+            { label: "Mandate" },
+            { label: "Subscription" },
+            { label: "Actions", align: "right", className: "w-[210px]" },
+          ]}
+        >
+          {filteredCustomers.map((customer) => {
+            const stage = getCustomerStage(customer);
+
+            return (
+              <tr key={customer.id} className="align-top">
+                <td className="px-4 py-4">
+                  <div className="min-w-[220px]">
+                    <p className="text-sm font-semibold text-ink">
+                      {customer.fullName ?? "Unnamed customer"}
+                    </p>
+                    <p className="mt-1 text-sm text-ink-soft">{customer.email}</p>
+                    <p className="mt-2 text-xs text-ink-soft">
+                      Created {formatDateTime(customer.createdAt)}
+                    </p>
                   </div>
-
-                  <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
-                    <Link
-                      href={`/customers/${customer.id}`}
-                      className="inline-flex min-h-11 items-center justify-center rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-ink/88"
+                </td>
+                <td className="px-4 py-4">
+                  <div className="flex flex-col gap-2">
+                    <StatusPill
+                      tone={
+                        stage === "active"
+                          ? "accent"
+                          : stage === "ready"
+                            ? "warning"
+                            : "muted"
+                      }
                     >
-                      Open workspace
-                    </Link>
+                      {stage}
+                    </StatusPill>
+                    <StatusPill
+                      tone={customer.mode === "live" ? "warning" : "muted"}
+                    >
+                      {customer.mode}
+                    </StatusPill>
+                  </div>
+                </td>
+                <td className="px-4 py-4">
+                  <p className="text-sm font-medium text-ink">
+                    {customer.latestFirstPaymentStatus
+                      ? formatLabel(customer.latestFirstPaymentStatus)
+                      : "Missing"}
+                  </p>
+                  <p className="mt-1 text-xs text-ink-soft">
+                    {formatDateTime(customer.latestFirstPaymentPaidAt)}
+                  </p>
+                </td>
+                <td className="px-4 py-4">
+                  <p className="text-sm font-medium text-ink">
+                    {customer.hasValidMandate ? "Ready" : "Pending"}
+                  </p>
+                  <p className="mt-1 text-xs text-ink-soft">
+                    {customer.latestMandateStatus
+                      ? formatLabel(customer.latestMandateStatus)
+                      : "Not synced"}
+                  </p>
+                </td>
+                <td className="px-4 py-4">
+                  <p className="text-sm font-medium text-ink">
+                    {customer.latestSubscriptionStatus
+                      ? formatLabel(customer.latestSubscriptionStatus)
+                      : "None"}
+                  </p>
+                  <p className="mt-1 text-xs text-ink-soft">
+                    {customer.subscriptionCount} stored subscription
+                    {customer.subscriptionCount === 1 ? "" : "s"}
+                  </p>
+                </td>
+                <td className="px-4 py-4">
+                  <div className="flex flex-wrap justify-end gap-2">
                     {customer.latestFirstPaymentCheckoutUrl ? (
                       <a
                         href={customer.latestFirstPaymentCheckoutUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex min-h-11 items-center justify-center rounded-full border border-ink/10 px-4 py-2 text-sm font-semibold text-ink/76 transition-colors hover:bg-sand/55"
+                        className="inline-flex min-h-9 items-center justify-center rounded-lg border border-border-strong px-3 py-1.5 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-muted hover:text-ink"
                       >
-                        Open checkout
+                        Checkout
                       </a>
                     ) : null}
+                    <Link
+                      href={`/customers/${customer.id}`}
+                      className="inline-flex min-h-9 items-center justify-center rounded-lg bg-ink px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-ink/88"
+                    >
+                      Open
+                    </Link>
                   </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </Panel>
+                </td>
+              </tr>
+            );
+          })}
+        </DataTable>
+      )}
     </div>
   );
 }

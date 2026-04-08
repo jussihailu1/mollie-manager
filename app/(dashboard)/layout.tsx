@@ -1,10 +1,21 @@
 import type { ReactNode } from "react";
+import { ExternalLink, LogOut } from "lucide-react";
 
 import { AppShellNav } from "@/components/app-shell-nav";
-import { StatusPill } from "@/components/status-pill";
+import { DashboardModeToggle, TestModeBanner } from "@/components/dashboard-mode-controls";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { signOutUser } from "@/lib/auth/actions";
 import { requireViewerSession } from "@/lib/auth/session";
-import { env, getSetupStatus } from "@/lib/env";
+import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { appName } from "@/lib/mollie-manager";
 
 export default async function DashboardLayout({
@@ -13,81 +24,136 @@ export default async function DashboardLayout({
   children: ReactNode;
 }>) {
   const session = await requireViewerSession();
-  const setupStatus = getSetupStatus();
-  const platformIsReady = Object.values(setupStatus).every((section) => section.ready);
+  const selectedMode = await getSelectedMollieMode();
 
   return (
     <div className="min-h-screen bg-canvas text-ink">
-      <div className="mx-auto flex min-h-screen w-full max-w-[1680px] flex-col px-4 py-4 lg:flex-row lg:px-6">
-        <aside className="mb-4 flex w-full flex-col rounded-[28px] border border-ink/10 bg-panel/90 p-4 shadow-panel backdrop-blur lg:mb-0 lg:w-[296px] lg:p-5">
-          <div className="border-b border-ink/8 pb-5">
-            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.32em] text-ink/45">
-              Internal Control
-            </p>
-            <div className="mt-3 flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent text-sm font-semibold text-white shadow-[0_20px_50px_rgba(15,118,110,0.28)]">
-                MM
-              </div>
-              <div>
-                <h1 className="text-lg font-semibold tracking-[-0.03em]">
-                  {appName}
-                </h1>
-                <p className="text-sm text-ink/55">Phase 5 reliability layer</p>
-              </div>
-            </div>
+      <div className="flex min-h-screen w-full">
+        <aside className="hidden w-64 shrink-0 border-r border-border/80 bg-surface/90 lg:flex lg:flex-col">
+          <div className="border-b border-border/80 px-4 py-4">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="h-12 w-full justify-start gap-3 rounded-lg px-3 text-left shadow-none hover:bg-surface-muted"
+                >
+                  <span className="inline-flex size-9 items-center justify-center rounded-lg bg-ink text-sm font-semibold text-white">
+                    MM
+                  </span>
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="truncate text-sm font-semibold text-ink">
+                      {appName}
+                    </span>
+                    <span className="truncate text-xs text-ink-soft">
+                      Operator workspace
+                    </span>
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col gap-1">
+                    <p className="truncate text-sm font-medium text-ink">
+                      {session.user.email}
+                    </p>
+                    <p className="text-xs text-ink-soft">
+                      Default mode: {selectedMode}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem asChild>
+                    <a
+                      href="https://my.mollie.com/dashboard/org_19456510"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <ExternalLink />
+                      Open Mollie dashboard
+                    </a>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild variant="destructive">
+                  <button type="submit" form="dashboard-signout" className="w-full">
+                    <LogOut />
+                    Sign out
+                  </button>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <form id="dashboard-signout" action={signOutUser} />
           </div>
 
-          <div className="pt-5">
+          <div className="px-3 py-4">
             <AppShellNav />
-          </div>
-
-          <div className="mt-auto rounded-[22px] border border-ink/8 bg-white/72 p-4">
-            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-ink/45">
-              Session
-            </p>
-            <p className="mt-3 text-sm font-semibold text-ink">{session.user.email}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <StatusPill tone={env.MOLLIE_DEFAULT_MODE === "live" ? "warning" : "accent"}>
-                {env.MOLLIE_DEFAULT_MODE} mode
-              </StatusPill>
-              <StatusPill tone={platformIsReady ? "accent" : "warning"}>
-                {platformIsReady ? "configured" : "setup pending"}
-              </StatusPill>
-            </div>
-            <form action={signOutUser} className="mt-4">
-              <button
-                type="submit"
-                className="inline-flex rounded-full border border-ink/10 px-4 py-2 text-sm font-medium text-ink/72 transition-colors hover:bg-ink hover:text-white"
-              >
-                Sign out
-              </button>
-            </form>
           </div>
         </aside>
 
-        <div className="flex min-h-[calc(100vh-2rem)] flex-1 flex-col lg:pl-4">
-          <header className="mb-4 flex min-h-[92px] items-center justify-between rounded-[28px] border border-ink/10 bg-white/88 px-6 py-5 shadow-panel backdrop-blur">
-            <div>
-              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.28em] text-ink/45">
-                Subscription operations
-              </p>
-              <p className="mt-1 text-sm text-ink/65">
-                Webhooks, durable alerts, reconciliation, and guarded
-                subscription operations now sit on top of the onboarding flow.
-              </p>
+        <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+          <header className="sticky top-0 z-30 border-b border-border/80 bg-canvas/95 backdrop-blur">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 lg:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="h-10 gap-3 rounded-lg px-2 shadow-none">
+                    <span className="inline-flex size-8 items-center justify-center rounded-lg bg-ink text-xs font-semibold text-white">
+                      MM
+                    </span>
+                    <span className="text-sm font-semibold">{appName}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-64">
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col gap-1">
+                      <p className="truncate text-sm font-medium text-ink">
+                        {session.user.email}
+                      </p>
+                      <p className="text-xs text-ink-soft">
+                        Default mode: {selectedMode}
+                      </p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem asChild>
+                      <a
+                        href="https://my.mollie.com/dashboard/org_19456510"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <ExternalLink />
+                        Open Mollie dashboard
+                      </a>
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild variant="destructive">
+                    <button
+                      type="submit"
+                      form="dashboard-signout-mobile"
+                      className="w-full"
+                    >
+                      <LogOut />
+                      Sign out
+                    </button>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <DashboardModeToggle selectedMode={selectedMode} />
+              <form id="dashboard-signout-mobile" action={signOutUser} />
             </div>
-
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <StatusPill tone={setupStatus.auth.ready ? "accent" : "warning"}>
-                auth {setupStatus.auth.ready ? "ready" : "pending"}
-              </StatusPill>
-              <StatusPill tone={setupStatus.database.ready ? "accent" : "warning"}>
-                db {setupStatus.database.ready ? "ready" : "pending"}
-              </StatusPill>
+            {selectedMode === "test" ? (
+              <div className="flex justify-center px-4 py-3">
+                <TestModeBanner selectedMode={selectedMode} />
+              </div>
+            ) : null}
+            <div className="border-t border-border/80 px-4 py-2 lg:hidden">
+              <AppShellNav orientation="horizontal" />
             </div>
           </header>
 
-          <main className="flex-1 rounded-[32px] border border-ink/10 bg-white/88 p-5 shadow-panel backdrop-blur sm:p-6">
+          <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8">
             {children}
           </main>
         </div>

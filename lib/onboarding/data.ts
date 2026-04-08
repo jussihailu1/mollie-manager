@@ -2,6 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 
+import type { DashboardModeFilter } from "@/lib/dashboard-mode";
 import { query } from "@/lib/db";
 
 export type CustomerOverview = {
@@ -131,58 +132,73 @@ export type OperationalAlert = {
   type: "payment" | "subscription";
 };
 
-export const listCustomers = cache(async () => {
-  const result = await query<CustomerOverview>(`
-    select
-      c.id,
-      c.mode,
-      c.mollie_customer_id as "mollieCustomerId",
-      c.full_name as "fullName",
-      c.email,
-      c.notes,
-      c.created_at as "createdAt",
-      latest_payment.id as "latestFirstPaymentId",
-      latest_payment.checkout_url as "latestFirstPaymentCheckoutUrl",
-      latest_payment.mollie_status as "latestFirstPaymentStatus",
-      latest_payment.paid_at as "latestFirstPaymentPaidAt",
-      latest_mandate.id as "latestMandateId",
-      latest_mandate.mollie_status as "latestMandateStatus",
-      coalesce(latest_mandate.is_valid, false) as "hasValidMandate",
-      latest_subscription.id as "latestSubscriptionId",
-      latest_subscription.local_status as "latestSubscriptionStatus",
-      coalesce(subscription_counts.total, 0)::int as "subscriptionCount"
-    from customers c
-    left join lateral (
-      select p.*
-      from payments p
-      where p.customer_id = c.id and p.payment_type = 'first'
-      order by p.created_at desc
-      limit 1
-    ) latest_payment on true
-    left join lateral (
-      select m.*
-      from mandates m
-      where m.customer_id = c.id
-      order by m.created_at desc
-      limit 1
-    ) latest_mandate on true
-    left join lateral (
-      select s.*
-      from subscriptions s
-      where s.customer_id = c.id
-      order by s.created_at desc
-      limit 1
-    ) latest_subscription on true
-    left join lateral (
-      select count(*) as total
-      from subscriptions s
-      where s.customer_id = c.id
-    ) subscription_counts on true
-    order by c.created_at desc
-  `);
+function toModeParam(mode?: DashboardModeFilter) {
+  return !mode || mode === "all" ? null : mode;
+}
+
+const listCustomersByMode = cache(async (mode: DashboardModeFilter) => {
+  const modeParam = toModeParam(mode);
+  const result = await query<CustomerOverview>(
+    `
+      select
+        c.id,
+        c.mode,
+        c.mollie_customer_id as "mollieCustomerId",
+        c.full_name as "fullName",
+        c.email,
+        c.notes,
+        c.created_at as "createdAt",
+        latest_payment.id as "latestFirstPaymentId",
+        latest_payment.checkout_url as "latestFirstPaymentCheckoutUrl",
+        latest_payment.mollie_status as "latestFirstPaymentStatus",
+        latest_payment.paid_at as "latestFirstPaymentPaidAt",
+        latest_mandate.id as "latestMandateId",
+        latest_mandate.mollie_status as "latestMandateStatus",
+        coalesce(latest_mandate.is_valid, false) as "hasValidMandate",
+        latest_subscription.id as "latestSubscriptionId",
+        latest_subscription.local_status as "latestSubscriptionStatus",
+        coalesce(subscription_counts.total, 0)::int as "subscriptionCount"
+      from customers c
+      left join lateral (
+        select p.*
+        from payments p
+        where p.customer_id = c.id and p.payment_type = 'first'
+        order by p.created_at desc
+        limit 1
+      ) latest_payment on true
+      left join lateral (
+        select m.*
+        from mandates m
+        where m.customer_id = c.id
+        order by m.created_at desc
+        limit 1
+      ) latest_mandate on true
+      left join lateral (
+        select s.*
+        from subscriptions s
+        where s.customer_id = c.id
+        order by s.created_at desc
+        limit 1
+      ) latest_subscription on true
+      left join lateral (
+        select count(*) as total
+        from subscriptions s
+        where s.customer_id = c.id
+      ) subscription_counts on true
+      where ($1::mollie_mode is null or c.mode = $1)
+      order by c.created_at desc
+    `,
+    [modeParam],
+  );
 
   return result.rows;
 });
+
+export async function listCustomers(options?: {
+  mode?: DashboardModeFilter;
+}) {
+  return listCustomersByMode(options?.mode ?? "all");
+}
 
 export const getCustomerDetail = cache(async (customerId: string) => {
   const [customersResult, paymentsResult, mandatesResult, subscriptionsResult] =
@@ -323,67 +339,89 @@ export const getCustomerDetail = cache(async (customerId: string) => {
   } satisfies CustomerDetail;
 });
 
-export const listSubscriptions = cache(async () => {
-  const result = await query<SubscriptionOverview>(`
-    select
-      s.id,
-      s.description,
-      s.interval,
-      s.amount_value::text as "amountValue",
-      s.amount_currency as "amountCurrency",
-      s.local_status as "localStatus",
-      s.mollie_status as "mollieStatus",
-      s.start_date::text as "startDate",
-      s.canceled_at as "canceledAt",
-      s.stop_after_current_period as "stopAfterCurrentPeriod",
-      s.metadata ->> 'nextPaymentDate' as "nextPaymentDate",
-      s.created_at as "createdAt",
-      s.mandate_id as "mandateId",
-      s.mode,
-      s.mollie_subscription_id as "mollieSubscriptionId",
-      c.id as "customerId",
-      c.full_name as "customerName",
-      c.email as "customerEmail"
-    from subscriptions s
-    inner join customers c on c.id = s.customer_id
-    order by s.created_at desc
-  `);
+const listSubscriptionsByMode = cache(async (mode: DashboardModeFilter) => {
+  const modeParam = toModeParam(mode);
+  const result = await query<SubscriptionOverview>(
+    `
+      select
+        s.id,
+        s.description,
+        s.interval,
+        s.amount_value::text as "amountValue",
+        s.amount_currency as "amountCurrency",
+        s.local_status as "localStatus",
+        s.mollie_status as "mollieStatus",
+        s.start_date::text as "startDate",
+        s.canceled_at as "canceledAt",
+        s.stop_after_current_period as "stopAfterCurrentPeriod",
+        s.metadata ->> 'nextPaymentDate' as "nextPaymentDate",
+        s.created_at as "createdAt",
+        s.mandate_id as "mandateId",
+        s.mode,
+        s.mollie_subscription_id as "mollieSubscriptionId",
+        c.id as "customerId",
+        c.full_name as "customerName",
+        c.email as "customerEmail"
+      from subscriptions s
+      inner join customers c on c.id = s.customer_id
+      where ($1::mollie_mode is null or s.mode = $1)
+      order by s.created_at desc
+    `,
+    [modeParam],
+  );
 
   return result.rows;
 });
 
-export const listPayments = cache(async () => {
-  const result = await query<PaymentOverview>(`
-    select
-      p.id,
-      p.mode,
-      p.payment_type as "paymentType",
-      p.mollie_payment_id as "molliePaymentId",
-      p.mollie_status as "mollieStatus",
-      p.sequence_type as "sequenceType",
-      p.method,
-      p.amount_value::text as "amountValue",
-      p.amount_currency as "amountCurrency",
-      p.checkout_url as "checkoutUrl",
-      p.paid_at as "paidAt",
-      p.failed_at as "failedAt",
-      p.created_at as "createdAt",
-      p.mandate_id as "mandateId",
-      c.id as "customerId",
-      c.full_name as "customerName",
-      c.email as "customerEmail",
-      s.id as "subscriptionId",
-      s.description as "subscriptionDescription"
-    from payments p
-    left join customers c on c.id = p.customer_id
-    left join subscriptions s on s.id = p.subscription_id
-    order by
-      coalesce(p.paid_at, p.failed_at, p.created_at) desc,
-      p.created_at desc
-  `);
+export async function listSubscriptions(options?: {
+  mode?: DashboardModeFilter;
+}) {
+  return listSubscriptionsByMode(options?.mode ?? "all");
+}
+
+const listPaymentsByMode = cache(async (mode: DashboardModeFilter) => {
+  const modeParam = toModeParam(mode);
+  const result = await query<PaymentOverview>(
+    `
+      select
+        p.id,
+        p.mode,
+        p.payment_type as "paymentType",
+        p.mollie_payment_id as "molliePaymentId",
+        p.mollie_status as "mollieStatus",
+        p.sequence_type as "sequenceType",
+        p.method,
+        p.amount_value::text as "amountValue",
+        p.amount_currency as "amountCurrency",
+        p.checkout_url as "checkoutUrl",
+        p.paid_at as "paidAt",
+        p.failed_at as "failedAt",
+        p.created_at as "createdAt",
+        p.mandate_id as "mandateId",
+        c.id as "customerId",
+        c.full_name as "customerName",
+        c.email as "customerEmail",
+        s.id as "subscriptionId",
+        s.description as "subscriptionDescription"
+      from payments p
+      left join customers c on c.id = p.customer_id
+      left join subscriptions s on s.id = p.subscription_id
+      where ($1::mollie_mode is null or p.mode = $1)
+      order by
+        coalesce(p.paid_at, p.failed_at, p.created_at) desc,
+        p.created_at desc
+    `,
+    [modeParam],
+  );
 
   return result.rows;
 });
+
+export async function listPayments(options?: {
+  mode?: DashboardModeFilter;
+}) {
+  return listPaymentsByMode(options?.mode ?? "all");
+}
 
 export const listOperationalAlerts = cache(async () => {
   const result = await query<OperationalAlert>(`
