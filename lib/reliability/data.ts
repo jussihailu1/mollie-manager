@@ -1,9 +1,10 @@
 import "server-only";
 
+import { sql } from "drizzle-orm";
 import { cache } from "react";
 
 import type { DashboardModeFilter } from "@/lib/dashboard-mode";
-import { query } from "@/lib/db";
+import { getDb } from "@/lib/db";
 
 export type AlertInboxItem = {
   createdAt: string;
@@ -45,7 +46,7 @@ function toModeParam(mode?: DashboardModeFilter) {
   return !mode || mode === "all" ? null : mode;
 }
 
-const alertModeExpression = `
+const alertModeExpression = sql<"live" | "test" | null>`
   coalesce(
     p.mode,
     s.mode,
@@ -60,8 +61,7 @@ const alertModeExpression = `
 
 const listAlertInboxByMode = cache(async (mode: DashboardModeFilter) => {
   const modeParam = toModeParam(mode);
-  const result = await query<AlertInboxItem>(
-    `
+  const result = await getDb().execute<AlertInboxItem>(sql`
       select
         a.id,
         a.severity,
@@ -82,7 +82,7 @@ const listAlertInboxByMode = cache(async (mode: DashboardModeFilter) => {
       left join customers customer on customer.id = a.customer_id
       left join customers fallback_customer on fallback_customer.id = coalesce(p.customer_id, s.customer_id)
       left join customers c on c.id = coalesce(customer.id, fallback_customer.id)
-      where ($1::mollie_mode is null or ${alertModeExpression} = $1)
+      where (${modeParam}::mollie_mode is null or ${alertModeExpression} = ${modeParam})
       order by
         case a.status
           when 'open' then 0
@@ -90,9 +90,7 @@ const listAlertInboxByMode = cache(async (mode: DashboardModeFilter) => {
           else 2
         end,
         a.created_at desc
-    `,
-    [modeParam],
-  );
+    `);
 
   return result.rows;
 });
@@ -105,8 +103,7 @@ export async function listAlertInbox(options?: {
 
 const listRecentWebhookEventsByMode = cache(async (mode: DashboardModeFilter) => {
   const modeParam = toModeParam(mode);
-  const result = await query<WebhookEventOverview>(
-    `
+  const result = await getDb().execute<WebhookEventOverview>(sql`
       select
         id,
         mode,
@@ -118,12 +115,10 @@ const listRecentWebhookEventsByMode = cache(async (mode: DashboardModeFilter) =>
         received_at as "receivedAt",
         processed_at as "processedAt"
       from webhook_events
-      where ($1::mollie_mode is null or mode = $1)
+      where (${modeParam}::mollie_mode is null or mode = ${modeParam})
       order by received_at desc
       limit 12
-    `,
-    [modeParam],
-  );
+    `);
 
   return result.rows;
 });
@@ -136,8 +131,7 @@ export async function listRecentWebhookEvents(options?: {
 
 const getReliabilitySnapshotByMode = cache(async (mode: DashboardModeFilter) => {
   const modeParam = toModeParam(mode);
-  const result = await query<ReliabilitySnapshot>(
-    `
+  const result = await getDb().execute<ReliabilitySnapshot>(sql`
       with alert_records as (
         select
           a.status,
@@ -152,32 +146,30 @@ const getReliabilitySnapshotByMode = cache(async (mode: DashboardModeFilter) => 
       select
         count(*) filter (
           where status = 'open'
-            and ($1::mollie_mode is null or mode = $1)
+            and (${modeParam}::mollie_mode is null or mode = ${modeParam})
         )::int as "openAlertCount",
         count(*) filter (
           where status in ('open', 'acknowledged')
-            and ($1::mollie_mode is null or mode = $1)
+            and (${modeParam}::mollie_mode is null or mode = ${modeParam})
         )::int as "unresolvedAlertCount",
         (
           select count(*)::int
           from webhook_events w
           where w.processing_status = 'failed'
-            and ($1::mollie_mode is null or w.mode = $1)
+            and (${modeParam}::mollie_mode is null or w.mode = ${modeParam})
         ) as "failedWebhookCount",
         (
           select max(w.received_at)
           from webhook_events w
-          where ($1::mollie_mode is null or w.mode = $1)
+          where (${modeParam}::mollie_mode is null or w.mode = ${modeParam})
         ) as "lastReceivedWebhookAt",
         (
           select max(w.processed_at)
           from webhook_events w
-          where ($1::mollie_mode is null or w.mode = $1)
+          where (${modeParam}::mollie_mode is null or w.mode = ${modeParam})
         ) as "lastProcessedWebhookAt"
       from alert_records
-    `,
-    [modeParam],
-  );
+    `);
 
   return (
     result.rows[0] ?? {

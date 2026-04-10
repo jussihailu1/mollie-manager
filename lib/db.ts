@@ -1,12 +1,15 @@
 import "server-only";
 
 import { cache } from "react";
-import type { PoolClient, QueryResultRow } from "pg";
+import { sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
+import * as schema from "@/db/schema";
 import { getDatabaseConfig } from "@/lib/env";
 
 declare global {
+  var __mollieManagerDb: Database | undefined;
   var __mollieManagerPool: Pool | undefined;
 }
 
@@ -19,6 +22,18 @@ function createPool() {
     max: 10,
   });
 }
+
+function createDb() {
+  return drizzle(getDbPool(), {
+    schema,
+  });
+}
+
+export type Database = ReturnType<typeof createDb>;
+export type DbTransaction = Parameters<
+  Parameters<Database["transaction"]>[0]
+>[0];
+export type DbClient = Database | DbTransaction;
 
 export function isDatabaseConfigured() {
   try {
@@ -37,30 +52,18 @@ export function getDbPool() {
   return globalThis.__mollieManagerPool;
 }
 
-export async function query<T extends QueryResultRow = QueryResultRow>(
-  text: string,
-  params: readonly unknown[] = [],
-) {
-  return getDbPool().query<T>(text, params as unknown[]);
+export function getDb() {
+  if (!globalThis.__mollieManagerDb) {
+    globalThis.__mollieManagerDb = createDb();
+  }
+
+  return globalThis.__mollieManagerDb;
 }
 
 export async function transaction<T>(
-  callback: (client: PoolClient) => Promise<T>,
+  callback: (client: DbTransaction) => Promise<T>,
 ) {
-  const client = await getDbPool().connect();
-
-  try {
-    await client.query("BEGIN");
-    const result = await callback(client);
-    await client.query("COMMIT");
-
-    return result;
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+  return getDb().transaction(callback);
 }
 
 export const checkDatabaseConnection = cache(async () => {
@@ -72,7 +75,7 @@ export const checkDatabaseConnection = cache(async () => {
   }
 
   try {
-    await query("select 1 as ok");
+    await getDb().execute(sql`select 1 as ok`);
 
     return {
       ok: true,

@@ -1,9 +1,10 @@
 import "server-only";
 
+import { sql } from "drizzle-orm";
 import { cache } from "react";
 
 import type { DashboardModeFilter } from "@/lib/dashboard-mode";
-import { query } from "@/lib/db";
+import { getDb } from "@/lib/db";
 
 export type CustomerOverview = {
   createdAt: string;
@@ -138,8 +139,7 @@ function toModeParam(mode?: DashboardModeFilter) {
 
 const listCustomersByMode = cache(async (mode: DashboardModeFilter) => {
   const modeParam = toModeParam(mode);
-  const result = await query<CustomerOverview>(
-    `
+  const result = await getDb().execute<CustomerOverview>(sql`
       select
         c.id,
         c.mode,
@@ -185,11 +185,9 @@ const listCustomersByMode = cache(async (mode: DashboardModeFilter) => {
         from subscriptions s
         where s.customer_id = c.id
       ) subscription_counts on true
-      where ($1::mollie_mode is null or c.mode = $1)
+      where (${modeParam}::mollie_mode is null or c.mode = ${modeParam})
       order by c.created_at desc
-    `,
-    [modeParam],
-  );
+    `);
 
   return result.rows;
 });
@@ -203,8 +201,7 @@ export async function listCustomers(options?: {
 export const getCustomerDetail = cache(async (customerId: string) => {
   const [customersResult, paymentsResult, mandatesResult, subscriptionsResult] =
     await Promise.all([
-      query<CustomerOverview>(
-        `
+      getDb().execute<CustomerOverview>(sql`
           select
             c.id,
             c.mode,
@@ -250,13 +247,10 @@ export const getCustomerDetail = cache(async (customerId: string) => {
             from subscriptions s
             where s.customer_id = c.id
           ) subscription_counts on true
-          where c.id = $1
+          where c.id = ${customerId}
           limit 1
-        `,
-        [customerId],
-      ),
-      query<PaymentRecord>(
-        `
+        `),
+      getDb().execute<PaymentRecord>(sql`
           select
             p.id,
             p.payment_type as "paymentType",
@@ -273,13 +267,10 @@ export const getCustomerDetail = cache(async (customerId: string) => {
             p.mandate_id as "mandateId",
             p.created_at as "createdAt"
           from payments p
-          where p.customer_id = $1
+          where p.customer_id = ${customerId}
           order by p.created_at desc
-        `,
-        [customerId],
-      ),
-      query<MandateRecord>(
-        `
+        `),
+      getDb().execute<MandateRecord>(sql`
           select
             m.id,
             m.mollie_mandate_id as "mollieMandateId",
@@ -289,13 +280,10 @@ export const getCustomerDetail = cache(async (customerId: string) => {
             m.details,
             m.created_at as "createdAt"
           from mandates m
-          where m.customer_id = $1
+          where m.customer_id = ${customerId}
           order by m.created_at desc
-        `,
-        [customerId],
-      ),
-      query<SubscriptionRecord>(
-        `
+        `),
+      getDb().execute<SubscriptionRecord>(sql`
           select
             s.id,
             s.description,
@@ -312,11 +300,9 @@ export const getCustomerDetail = cache(async (customerId: string) => {
             s.metadata ->> 'nextPaymentDate' as "nextPaymentDate",
             s.created_at as "createdAt"
           from subscriptions s
-          where s.customer_id = $1
+          where s.customer_id = ${customerId}
           order by s.created_at desc
-        `,
-        [customerId],
-      ),
+        `),
     ]);
 
   const customer = customersResult.rows[0];
@@ -341,8 +327,7 @@ export const getCustomerDetail = cache(async (customerId: string) => {
 
 const listSubscriptionsByMode = cache(async (mode: DashboardModeFilter) => {
   const modeParam = toModeParam(mode);
-  const result = await query<SubscriptionOverview>(
-    `
+  const result = await getDb().execute<SubscriptionOverview>(sql`
       select
         s.id,
         s.description,
@@ -364,11 +349,9 @@ const listSubscriptionsByMode = cache(async (mode: DashboardModeFilter) => {
         c.email as "customerEmail"
       from subscriptions s
       inner join customers c on c.id = s.customer_id
-      where ($1::mollie_mode is null or s.mode = $1)
+      where (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
       order by s.created_at desc
-    `,
-    [modeParam],
-  );
+    `);
 
   return result.rows;
 });
@@ -381,8 +364,7 @@ export async function listSubscriptions(options?: {
 
 const listPaymentsByMode = cache(async (mode: DashboardModeFilter) => {
   const modeParam = toModeParam(mode);
-  const result = await query<PaymentOverview>(
-    `
+  const result = await getDb().execute<PaymentOverview>(sql`
       select
         p.id,
         p.mode,
@@ -406,13 +388,11 @@ const listPaymentsByMode = cache(async (mode: DashboardModeFilter) => {
       from payments p
       left join customers c on c.id = p.customer_id
       left join subscriptions s on s.id = p.subscription_id
-      where ($1::mollie_mode is null or p.mode = $1)
+      where (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
       order by
         coalesce(p.paid_at, p.failed_at, p.created_at) desc,
         p.created_at desc
-    `,
-    [modeParam],
-  );
+    `);
 
   return result.rows;
 });
@@ -424,7 +404,7 @@ export async function listPayments(options?: {
 }
 
 export const listOperationalAlerts = cache(async () => {
-  const result = await query<OperationalAlert>(`
+  const result = await getDb().execute<OperationalAlert>(sql`
     select
       p.id,
       'payment' as "type",

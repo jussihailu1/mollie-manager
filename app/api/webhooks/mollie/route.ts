@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
+
 import { getMollieWebhookConfig } from "@/lib/env";
-import { query } from "@/lib/db";
+import { getDb } from "@/lib/db";
 import { syncPaymentByMollieId, syncSubscriptionByMollieId } from "@/lib/reliability/sync";
 
 type ExistingResourceMode = {
@@ -90,23 +92,19 @@ export async function POST(request: Request) {
   const webhookEventId = crypto.randomUUID();
   const existingMode =
     (
-      await query<ExistingResourceMode>(
-        `
+      await getDb().execute<ExistingResourceMode>(sql`
           select mode
           from payments
-          where mollie_payment_id = $1
+          where mollie_payment_id = ${parsed.resourceId}
           union all
           select mode
           from subscriptions
-          where mollie_subscription_id = $1
+          where mollie_subscription_id = ${parsed.resourceId}
           limit 1
-        `,
-        [parsed.resourceId],
-      )
+        `)
     ).rows[0]?.mode ?? "test";
 
-  await query(
-    `
+  await getDb().execute(sql`
       insert into webhook_events (
         id,
         mode,
@@ -117,64 +115,48 @@ export async function POST(request: Request) {
         payload,
         processing_status
       ) values (
-        $1,
-        $2,
-        $3,
-        $4,
-        $5,
-        $6,
-        $7::jsonb,
+        ${webhookEventId},
+        ${existingMode},
+        ${parsed.resourceType ?? null},
+        ${parsed.resourceId},
+        ${parsed.resourceType ?? "mollie-webhook"},
+        ${request.headers.get("x-request-id") ?? null},
+        ${JSON.stringify(parsed.payload)}::jsonb,
         'pending'
       )
-    `,
-    [
-      webhookEventId,
-      existingMode,
-      parsed.resourceType ?? null,
-      parsed.resourceId,
-      parsed.resourceType ?? "mollie-webhook",
-      request.headers.get("x-request-id") ?? null,
-      JSON.stringify(parsed.payload),
-    ],
-  );
+    `);
 
   try {
     const result = await processWebhookResource(parsed.resourceId);
 
-    await query(
-      `
+    await getDb().execute(sql`
         update webhook_events
         set
           mode = coalesce(
-            (select mode from payments where id = $2 limit 1),
-            (select mode from subscriptions where id = $3 limit 1),
+            (select mode from payments where id = ${result.paymentId} limit 1),
+            (select mode from subscriptions where id = ${result.subscriptionId} limit 1),
             mode
           ),
           processing_status = 'processed',
           error_message = null,
           last_attempt_at = now(),
           processed_at = now()
-        where id = $1
-      `,
-      [webhookEventId, result.paymentId, result.subscriptionId],
-    );
+        where id = ${webhookEventId}
+      `);
 
     return new Response("OK", {
       status: 200,
     });
   } catch (error) {
-    await query(
-      `
+    await getDb().execute(sql`
         update webhook_events
         set
           processing_status = 'failed',
-          error_message = $2,
+          error_message = ${serializeError(error)},
           retry_count = retry_count + 1,
           last_attempt_at = now()
-        where id = $1
-      `,
-      [webhookEventId, serializeError(error)],
-    );
+        where id = ${webhookEventId}
+      `);
 
     return new Response("Webhook processing failed", {
       status: 500,

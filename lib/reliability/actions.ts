@@ -2,12 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
+import { sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { writeAuditLog } from "@/lib/audit";
 import { requireViewerSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
-import { query, transaction } from "@/lib/db";
+import { getDb, transaction } from "@/lib/db";
 import { env } from "@/lib/env";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { deliverAlertEmail } from "@/lib/reliability/alerts";
@@ -130,18 +131,15 @@ export async function replayWebhookEventAction(formData: FormData) {
 
   await requireViewerSession();
 
-  const result = await query<StoredWebhookEvent>(
-    `
+  const result = await getDb().execute<StoredWebhookEvent>(sql`
       select
         id,
         resource_id as "resourceId",
         resource_type as "resourceType"
       from webhook_events
-      where id = $1
+      where id = ${parsed.data.webhookEventId}
       limit 1
-    `,
-    [parsed.data.webhookEventId],
-  );
+    `);
   const event = result.rows[0];
 
   if (!event?.resourceId) {
@@ -153,8 +151,7 @@ export async function replayWebhookEventAction(formData: FormData) {
   try {
     await processStoredWebhookResource(event.resourceId);
 
-    await query(
-      `
+    await getDb().execute(sql`
         update webhook_events
         set
           processing_status = 'processed',
@@ -162,10 +159,8 @@ export async function replayWebhookEventAction(formData: FormData) {
           retry_count = retry_count + 1,
           last_attempt_at = now(),
           processed_at = now()
-        where id = $1
-      `,
-      [event.id],
-    );
+        where id = ${event.id}
+      `);
 
     revalidatePath("/settings");
     revalidatePath("/alerts");
@@ -176,18 +171,15 @@ export async function replayWebhookEventAction(formData: FormData) {
     });
   } catch (error) {
     unstable_rethrow(error);
-    await query(
-      `
+    await getDb().execute(sql`
         update webhook_events
         set
           processing_status = 'failed',
-          error_message = $2,
+          error_message = ${serializeError(error)},
           retry_count = retry_count + 1,
           last_attempt_at = now()
-        where id = $1
-      `,
-      [event.id, serializeError(error)],
-    );
+        where id = ${event.id}
+      `);
 
     redirectWithMessage(parsed.data.returnTo, {
       error: serializeError(error),
@@ -229,28 +221,26 @@ export async function sendTestAlertAction(formData: FormData) {
   ].join("\n");
 
   await transaction(async (client) => {
-    await client.query(
-      `
+    await client.execute(sql`
         insert into alerts (
           id,
           severity,
           title,
           message,
           payload
-        ) values ($1, 'info', $2, $3, $4::jsonb)
-      `,
-      [
-        alertId,
-        title,
-        message,
-        JSON.stringify({
+        ) values (
+          ${alertId},
+          'info',
+          ${title},
+          ${message},
+          ${JSON.stringify({
           kind: "manual_test",
           mode: selectedMode,
           requestedAt,
           requestedBy: session.user.email ?? null,
-        }),
-      ],
-    );
+        })}::jsonb
+        )
+      `);
   });
 
   const delivery = await deliverAlertEmail({

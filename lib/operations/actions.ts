@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
+import { sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { writeAuditLog } from "@/lib/audit";
@@ -134,28 +135,20 @@ export async function cancelSubscriptionAction(formData: FormData) {
     );
 
     await transaction(async (client) => {
-      await client.query(
-        `
+      await client.execute(sql`
           update subscriptions
           set
             local_status = 'future_charges_stopped',
-            mollie_status = $2,
+            mollie_status = ${canceledSubscription.status},
             stop_after_current_period = true,
-            canceled_at = coalesce($3::timestamptz, now()),
-            metadata = $4::jsonb,
+            canceled_at = coalesce(${canceledSubscription.canceledAt ?? null}::timestamptz, now()),
+            metadata = ${JSON.stringify({
+              nextPaymentDate: canceledSubscription.nextPaymentDate ?? null,
+            })}::jsonb,
             updated_at = now(),
             last_synced_at = now()
-          where id = $1
-        `,
-        [
-          subscription.id,
-          canceledSubscription.status,
-          canceledSubscription.canceledAt ?? null,
-          JSON.stringify({
-            nextPaymentDate: canceledSubscription.nextPaymentDate ?? null,
-          }),
-        ],
-      );
+          where id = ${subscription.id}
+        `);
 
       await writeAuditLog(
         {

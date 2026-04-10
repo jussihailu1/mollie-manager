@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
-import type { PoolClient } from "pg";
+import { sql } from "drizzle-orm";
 import {
   Locale,
   MandateStatus,
@@ -14,7 +14,7 @@ import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { requireViewerSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
-import { transaction } from "@/lib/db";
+import { transaction, type DbTransaction } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getMollieClient, getMollieWebhookUrl } from "@/lib/mollie/client";
 import { getCustomerDetail, type MandateRecord } from "@/lib/onboarding/data";
@@ -98,41 +98,35 @@ async function getLocalCustomer(customerId: string) {
   return detail?.customer ?? null;
 }
 
-async function getLocalPayments(customerId: string, client: PoolClient) {
-  const result = await client.query<LocalPaymentRecord>(
-    `
+async function getLocalPayments(customerId: string, client: DbTransaction) {
+  const result = await client.execute<LocalPaymentRecord>(sql`
       select
         id,
         mollie_payment_id as "molliePaymentId",
         payment_type as "paymentType"
       from payments
-      where customer_id = $1 and mollie_payment_id is not null
+      where customer_id = ${customerId} and mollie_payment_id is not null
       order by created_at desc
-    `,
-    [customerId],
-  );
+    `);
 
   return result.rows;
 }
 
-async function getLocalSubscriptions(customerId: string, client: PoolClient) {
-  const result = await client.query<LocalSubscriptionRecord>(
-    `
+async function getLocalSubscriptions(customerId: string, client: DbTransaction) {
+  const result = await client.execute<LocalSubscriptionRecord>(sql`
       select
         id,
         mollie_subscription_id as "mollieSubscriptionId"
       from subscriptions
-      where customer_id = $1 and mollie_subscription_id is not null
+      where customer_id = ${customerId} and mollie_subscription_id is not null
       order by created_at desc
-    `,
-    [customerId],
-  );
+    `);
 
   return result.rows;
 }
 
 async function upsertMandate(
-  client: PoolClient,
+  client: DbTransaction,
   customerId: string,
   mode: "live" | "test",
   mandate: {
@@ -143,20 +137,16 @@ async function upsertMandate(
     status?: string;
   },
 ) {
-  const existing = await client.query<{ id: string }>(
-    `
+  const existing = await client.execute<{ id: string }>(sql`
       select id
       from mandates
-      where mode = $1 and mollie_mandate_id = $2
+      where mode = ${mode} and mollie_mandate_id = ${mandate.id}
       limit 1
-    `,
-    [mode, mandate.id],
-  );
+    `);
 
   const localMandateId = existing.rows[0]?.id ?? crypto.randomUUID();
 
-  await client.query(
-    `
+  await client.execute(sql`
       insert into mandates (
         id,
         customer_id,
@@ -170,15 +160,19 @@ async function upsertMandate(
         updated_at,
         last_synced_at
       ) values (
-        $1,
-        $2,
-        $3,
-        $4,
-        $5,
-        $6,
-        $7,
-        $8::jsonb,
-        coalesce($9::timestamptz, now()),
+        ${localMandateId},
+        ${customerId},
+        ${mode},
+        ${mandate.id},
+        ${mandate.method ?? null},
+        ${mandate.status ?? null},
+        ${mandate.status === MandateStatus.valid},
+        ${JSON.stringify(
+          typeof mandate.details === "object" && mandate.details !== null
+            ? mandate.details
+            : {},
+        )}::jsonb,
+        coalesce(${mandate.createdAt ?? null}::timestamptz, now()),
         now(),
         now()
       )
@@ -191,23 +185,7 @@ async function upsertMandate(
         details = excluded.details,
         updated_at = now(),
         last_synced_at = now()
-    `,
-    [
-      localMandateId,
-      customerId,
-      mode,
-      mandate.id,
-      mandate.method ?? null,
-      mandate.status ?? null,
-      mandate.status === MandateStatus.valid,
-      JSON.stringify(
-        typeof mandate.details === "object" && mandate.details !== null
-          ? mandate.details
-          : {},
-      ),
-      mandate.createdAt ?? null,
-    ],
-  );
+    `);
 
   return localMandateId;
 }
@@ -274,8 +252,7 @@ export async function createCustomerAction(formData: FormData) {
     });
 
     await transaction(async (client) => {
-      await client.query(
-        `
+      await client.execute(sql`
           insert into customers (
             id,
             mode,
@@ -289,32 +266,21 @@ export async function createCustomerAction(formData: FormData) {
             updated_at,
             last_synced_at
           ) values (
-            $1,
-            $2,
-            $3,
-            $4,
-            $5,
-            $6,
-            $7,
-            $8::jsonb,
+            ${localCustomerId},
+            ${createdCustomer.mode},
+            ${createdCustomer.id},
+            ${parsed.data.fullName},
+            ${parsed.data.email},
+            ${createdCustomer.locale ?? "nl_NL"},
+            ${parsed.data.notes ?? null},
+            ${JSON.stringify({
+              mollieCreatedAt: createdCustomer.createdAt,
+            })}::jsonb,
             now(),
             now(),
             now()
           )
-        `,
-        [
-          localCustomerId,
-          createdCustomer.mode,
-          createdCustomer.id,
-          parsed.data.fullName,
-          parsed.data.email,
-          createdCustomer.locale ?? "nl_NL",
-          parsed.data.notes ?? null,
-          JSON.stringify({
-            mollieCreatedAt: createdCustomer.createdAt,
-          }),
-        ],
-      );
+        `);
 
       await writeAuditLog(
         {
@@ -411,8 +377,7 @@ export async function createFirstPaymentAction(formData: FormData) {
     });
 
     await transaction(async (client) => {
-      await client.query(
-        `
+      await client.execute(sql`
           insert into payments (
             id,
             customer_id,
@@ -433,46 +398,29 @@ export async function createFirstPaymentAction(formData: FormData) {
             updated_at,
             last_synced_at
           ) values (
-            $1,
-            $2,
-            $3,
+            ${localPaymentId},
+            ${customer.id},
+            ${payment.mode},
             'first',
-            $4,
-            $5,
-            $6,
-            $7,
-            $8,
-            $9,
-            $10,
-            $11::timestamptz,
-            $12::timestamptz,
-            $13::timestamptz,
-            $14::jsonb,
+            ${payment.id},
+            ${payment.status},
+            ${payment.sequenceType},
+            ${payment.method ?? null},
+            ${amountValue},
+            ${payment.amount.currency},
+            ${payment.getCheckoutUrl()},
+            ${payment.expiresAt ?? null}::timestamptz,
+            ${payment.paidAt ?? null}::timestamptz,
+            ${payment.failedAt ?? null}::timestamptz,
+            ${JSON.stringify({
+              description: payment.description,
+              redirectUrl: payment.redirectUrl ?? null,
+            })}::jsonb,
             now(),
             now(),
             now()
           )
-        `,
-        [
-          localPaymentId,
-          customer.id,
-          payment.mode,
-          payment.id,
-          payment.status,
-          payment.sequenceType,
-          payment.method ?? null,
-          amountValue,
-          payment.amount.currency,
-          payment.getCheckoutUrl(),
-          payment.expiresAt ?? null,
-          payment.paidAt ?? null,
-          payment.failedAt ?? null,
-          JSON.stringify({
-            description: payment.description,
-            redirectUrl: payment.redirectUrl ?? null,
-          }),
-        ],
-      );
+        `);
 
       await writeAuditLog(
         {
@@ -555,34 +503,21 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
           ? mandateIdMap.get(payment.mandateId) ?? null
           : null;
 
-        await client.query(
-          `
+        await client.execute(sql`
             update payments
             set
-              mandate_id = $2,
-              mollie_status = $3,
-              sequence_type = $4,
-              method = $5,
-              checkout_url = $6,
-              expires_at = $7::timestamptz,
-              paid_at = $8::timestamptz,
-              failed_at = $9::timestamptz,
+              mandate_id = ${linkedMandateId},
+              mollie_status = ${payment.status},
+              sequence_type = ${payment.sequenceType},
+              method = ${payment.method ?? null},
+              checkout_url = ${payment.getCheckoutUrl()},
+              expires_at = ${payment.expiresAt ?? null}::timestamptz,
+              paid_at = ${payment.paidAt ?? null}::timestamptz,
+              failed_at = ${payment.failedAt ?? null}::timestamptz,
               updated_at = now(),
               last_synced_at = now()
-            where id = $1
-          `,
-          [
-            localPayment.id,
-            linkedMandateId,
-            payment.status,
-            payment.sequenceType,
-            payment.method ?? null,
-            payment.getCheckoutUrl(),
-            payment.expiresAt ?? null,
-            payment.paidAt ?? null,
-            payment.failedAt ?? null,
-          ],
-        );
+            where id = ${localPayment.id}
+          `);
       }
 
       const localSubscriptions = await getLocalSubscriptions(customer.id, client);
@@ -595,22 +530,15 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
           },
         );
 
-        await client.query(
-          `
+        await client.execute(sql`
             update subscriptions
             set
-              mollie_status = $2,
-              local_status = $3,
+              mollie_status = ${subscription.status},
+              local_status = ${mapSubscriptionLifecycle(subscription.status)},
               updated_at = now(),
               last_synced_at = now()
-            where id = $1
-          `,
-          [
-            localSubscription.id,
-            subscription.status,
-            mapSubscriptionLifecycle(subscription.status),
-          ],
-        );
+            where id = ${localSubscription.id}
+          `);
       }
 
       await writeAuditLog(
@@ -723,8 +651,7 @@ export async function createSubscriptionAction(formData: FormData) {
     });
 
     await transaction(async (client) => {
-      await client.query(
-        `
+      await client.execute(sql`
           insert into subscriptions (
             id,
             customer_id,
@@ -745,48 +672,32 @@ export async function createSubscriptionAction(formData: FormData) {
             updated_at,
             last_synced_at
           ) values (
-            $1,
-            $2,
-            $3,
-            $4,
-            $5,
-            $6,
-            $7,
-            $8,
-            $9,
-            $10,
-            $11,
-            $12,
-            $13::date,
-            $14,
-            $15::jsonb,
+            ${localSubscriptionId},
+            ${detail.customer.id},
+            ${preferredMandate.id},
+            ${subscription.mode},
+            ${subscription.id},
+            ${mapSubscriptionLifecycle(subscription.status)},
+            ${subscription.status},
+            ${subscription.description},
+            ${subscription.interval},
+            ${subscription.amount.value},
+            ${subscription.amount.currency},
+            ${
+              latestPaidFirstPayment.paidAt
+                ? new Date(latestPaidFirstPayment.paidAt).getUTCDate()
+                : null
+            },
+            ${subscription.startDate}::date,
+            ${false},
+            ${JSON.stringify({
+              nextPaymentDate: subscription.nextPaymentDate ?? null,
+            })}::jsonb,
             now(),
             now(),
             now()
           )
-        `,
-        [
-          localSubscriptionId,
-          detail.customer.id,
-          preferredMandate.id,
-          subscription.mode,
-          subscription.id,
-          mapSubscriptionLifecycle(subscription.status),
-          subscription.status,
-          subscription.description,
-          subscription.interval,
-          subscription.amount.value,
-          subscription.amount.currency,
-          latestPaidFirstPayment.paidAt
-            ? new Date(latestPaidFirstPayment.paidAt).getUTCDate()
-            : null,
-          subscription.startDate,
-          false,
-          JSON.stringify({
-            nextPaymentDate: subscription.nextPaymentDate ?? null,
-          }),
-        ],
-      );
+        `);
 
       await writeAuditLog(
         {

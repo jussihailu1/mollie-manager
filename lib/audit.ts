@@ -1,9 +1,9 @@
 import "server-only";
 
-import type { PoolClient } from "pg";
+import { sql } from "drizzle-orm";
 
 import { requireViewerSession } from "@/lib/auth/session";
-import { query } from "@/lib/db";
+import { getDb, type DbClient } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 
 type AuditInput = {
@@ -28,7 +28,7 @@ type AuditActor =
 
 export async function writeAuditLog(
   input: AuditInput,
-  client?: PoolClient,
+  client?: DbClient,
   actor?: AuditActor,
 ) {
   let actorEmail = actor?.email ?? null;
@@ -40,20 +40,9 @@ export async function writeAuditLog(
     actorKind = "user";
   }
 
-  const params = [
-    crypto.randomUUID(),
-    actorKind,
-    actorEmail,
-    input.action,
-    input.entityType,
-    input.entityId,
-    input.mode ?? null,
-    input.outcome,
-    input.summary,
-    JSON.stringify(input.details ?? {}),
-  ];
+  const db = client ?? getDb();
 
-  const statement = `
+  await db.execute(sql`
     insert into audit_logs (
       id,
       actor_kind,
@@ -65,13 +54,17 @@ export async function writeAuditLog(
       outcome,
       summary,
       details
-    ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
-  `;
-
-  if (client) {
-    await client.query(statement, params);
-    return;
-  }
-
-  await query(statement, params);
+    ) values (
+      ${crypto.randomUUID()},
+      ${actorKind},
+      ${actorEmail},
+      ${input.action},
+      ${input.entityType},
+      ${input.entityId},
+      ${input.mode ?? null},
+      ${input.outcome},
+      ${input.summary},
+      ${JSON.stringify(input.details ?? {})}::jsonb
+    )
+  `);
 }

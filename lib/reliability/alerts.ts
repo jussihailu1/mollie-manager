@@ -1,8 +1,8 @@
 import "server-only";
 
-import type { PoolClient } from "pg";
+import { sql } from "drizzle-orm";
 
-import { query } from "@/lib/db";
+import { getDb, type DbClient } from "@/lib/db";
 import { sendPlainEmail, notificationsAreConfigured } from "@/lib/notifications/email";
 
 type AlertSeverity = "critical" | "warning";
@@ -26,53 +26,40 @@ export async function resolveAlertsForEntity(
     paymentId?: string | null;
     subscriptionId?: string | null;
   },
-  client?: PoolClient,
+  client?: DbClient,
 ) {
   if (!input.paymentId && !input.subscriptionId) {
     return;
   }
 
-  const statement = `
+  const db = client ?? getDb();
+
+  await db.execute(sql`
     update alerts
     set
       status = 'resolved',
       resolved_at = now(),
       updated_at = now()
     where status = 'open'
-      and ($1::text is null or payment_id = $1)
-      and ($2::text is null or subscription_id = $2)
-  `;
-  const params = [input.paymentId ?? null, input.subscriptionId ?? null];
-
-  if (client) {
-    await client.query(statement, params);
-    return;
-  }
-
-  await query(statement, params);
+      and (${input.paymentId ?? null}::text is null or payment_id = ${input.paymentId ?? null})
+      and (${input.subscriptionId ?? null}::text is null or subscription_id = ${input.subscriptionId ?? null})
+  `);
 }
 
 export async function openAlert(
   input: AlertInput,
-  client?: PoolClient,
+  client?: DbClient,
 ) {
-  const existingStatement = `
+  const db = client ?? getDb();
+  const existing = await db.execute<ExistingAlert>(sql`
     select id
     from alerts
     where status = 'open'
-      and title = $1
-      and coalesce(payment_id, '') = coalesce($2, '')
-      and coalesce(subscription_id, '') = coalesce($3, '')
+      and title = ${input.title}
+      and coalesce(payment_id, '') = coalesce(${input.paymentId ?? null}, '')
+      and coalesce(subscription_id, '') = coalesce(${input.subscriptionId ?? null}, '')
     limit 1
-  `;
-  const existingParams = [
-    input.title,
-    input.paymentId ?? null,
-    input.subscriptionId ?? null,
-  ];
-  const existing = client
-    ? await client.query<ExistingAlert>(existingStatement, existingParams)
-    : await query<ExistingAlert>(existingStatement, existingParams);
+  `);
 
   if (existing.rows[0]?.id) {
     return {
@@ -82,7 +69,7 @@ export async function openAlert(
   }
 
   const alertId = crypto.randomUUID();
-  const statement = `
+  await db.execute(sql`
     insert into alerts (
       id,
       severity,
@@ -92,24 +79,17 @@ export async function openAlert(
       subscription_id,
       payment_id,
       payload
-    ) values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
-  `;
-  const params = [
-    alertId,
-    input.severity,
-    input.title,
-    input.message,
-    input.customerId ?? null,
-    input.subscriptionId ?? null,
-    input.paymentId ?? null,
-    JSON.stringify(input.payload ?? {}),
-  ];
-
-  if (client) {
-    await client.query(statement, params);
-  } else {
-    await query(statement, params);
-  }
+    ) values (
+      ${alertId},
+      ${input.severity},
+      ${input.title},
+      ${input.message},
+      ${input.customerId ?? null},
+      ${input.subscriptionId ?? null},
+      ${input.paymentId ?? null},
+      ${JSON.stringify(input.payload ?? {})}::jsonb
+    )
+  `);
 
   return {
     id: alertId,
@@ -135,16 +115,13 @@ export async function deliverAlertEmail(input: {
       text: `${input.title}\n\n${input.message}`,
     });
 
-    await query(
-      `
+    await getDb().execute(sql`
         update alerts
         set
           email_sent_at = now(),
           updated_at = now()
-        where id = $1
-      `,
-      [input.alertId],
-    );
+        where id = ${input.alertId}
+      `);
   } catch (error) {
     return {
       delivered: false,
