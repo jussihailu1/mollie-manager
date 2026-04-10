@@ -60,15 +60,15 @@ export default function PaymentLinksPage() {
           <div className="flex flex-wrap gap-2">
             <StatusPill tone="warning">Create links</StatusPill>
             <StatusPill tone="muted">Track expiry</StatusPill>
-            <StatusPill tone="muted">Open checkout</StatusPill>
+            <StatusPill tone="muted">Open link</StatusPill>
             <StatusPill tone="muted">Link history</StatusPill>
           </div>
         </DetailSection>
       </section>
 
       <EmptyState
-        title="Payment links are not wired yet"
-        description="The recurring subscription workflow is already live. This page is reserved for standalone payment-link support in a later pass."
+        title="Standalone payment links are not wired yet"
+        description="The subscription workflow can create customer-linked first-payment links. This page is reserved for separate one-off payment-link support in a later pass."
         action={
           <Link
             href="/customers"

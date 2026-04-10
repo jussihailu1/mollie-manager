@@ -226,6 +226,14 @@ export default async function CustomersPage({
         >
           {filteredCustomers.map((customer) => {
             const stage = getCustomerStage(customer);
+            const firstPaymentStatus =
+              customer.latestFirstPaymentStatus ??
+              customer.latestFirstPaymentLinkStatus;
+            const firstPaymentUrl =
+              customer.latestFirstPaymentStatus === "paid"
+                ? null
+                : customer.latestFirstPaymentLinkUrl ??
+                  customer.latestFirstPaymentCheckoutUrl;
 
             return (
               <tr key={customer.id} className="align-top">
@@ -262,8 +270,8 @@ export default async function CustomersPage({
                 </td>
                 <td className="px-4 py-4">
                   <p className="text-sm font-medium text-ink">
-                    {customer.latestFirstPaymentStatus
-                      ? formatLabel(customer.latestFirstPaymentStatus)
+                    {firstPaymentStatus
+                      ? formatLabel(firstPaymentStatus)
                       : "Missing"}
                   </p>
                   <p className="mt-1 text-xs text-ink-soft">
@@ -293,14 +301,14 @@ export default async function CustomersPage({
                 </td>
                 <td className="px-4 py-4">
                   <div className="flex flex-wrap justify-end gap-2">
-                    {customer.latestFirstPaymentCheckoutUrl ? (
+                    {firstPaymentUrl ? (
                       <a
-                        href={customer.latestFirstPaymentCheckoutUrl}
+                        href={firstPaymentUrl}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex min-h-9 items-center justify-center rounded-lg border border-border-strong px-3 py-1.5 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-muted hover:text-ink"
                       >
-                        Checkout
+                        Payment link
                       </a>
                     ) : null}
                     <Link

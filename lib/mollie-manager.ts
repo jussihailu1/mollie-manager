@@ -63,7 +63,7 @@ export const onboardingFlow = [
   {
     title: "First payment",
     description:
-      "Issue a customer-linked first payment, restricted to iDEAL, and share the returned Mollie checkout URL manually via WhatsApp.",
+      "Issue a customer-linked first-payment link, restricted to iDEAL, and share the durable Mollie Payment Link URL manually via WhatsApp.",
     label: "Core",
     tone: "accent",
   },
@@ -247,7 +247,7 @@ export const moduleRegistry = {
     phaseDescription:
       "It will become useful after the core recurring flow is stable.",
     phaseCallout:
-      "The primary subscription setup flow should use a customer first payment, then share its checkout URL manually.",
+      "The primary subscription setup flow already uses customer-linked first-payment links; this module is for separate one-off links.",
     states: ["draft", "active", "expired"],
     capabilities: [
       "Create and inspect real Mollie payment-link objects for one-off collection scenarios.",

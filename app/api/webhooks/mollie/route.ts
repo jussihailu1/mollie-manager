@@ -2,7 +2,11 @@ import { sql } from "drizzle-orm";
 
 import { getMollieWebhookConfig } from "@/lib/env";
 import { getDb } from "@/lib/db";
-import { syncPaymentByMollieId, syncSubscriptionByMollieId } from "@/lib/reliability/sync";
+import {
+  syncPaymentByMollieId,
+  syncPaymentLinkByMollieId,
+  syncSubscriptionByMollieId,
+} from "@/lib/reliability/sync";
 
 type ExistingResourceMode = {
   mode: "live" | "test";
@@ -68,6 +72,14 @@ async function processWebhookResource(resourceId: string) {
     });
   }
 
+  if (resourceId.startsWith("pl_")) {
+    return syncPaymentLinkByMollieId(resourceId, {
+      actor: {
+        kind: "system",
+      },
+    });
+  }
+
   throw new Error("Unsupported webhook resource id.");
 }
 
@@ -100,6 +112,10 @@ export async function POST(request: Request) {
           select mode
           from subscriptions
           where mollie_subscription_id = ${parsed.resourceId}
+          union all
+          select mode
+          from payment_links
+          where mollie_payment_link_id = ${parsed.resourceId}
           limit 1
         `)
     ).rows[0]?.mode ?? "test";
@@ -135,6 +151,7 @@ export async function POST(request: Request) {
           mode = coalesce(
             (select mode from payments where id = ${result.paymentId} limit 1),
             (select mode from subscriptions where id = ${result.subscriptionId} limit 1),
+            (select mode from payment_links where id = ${result.paymentLinkId} limit 1),
             mode
           ),
           processing_status = 'processed',

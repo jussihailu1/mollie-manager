@@ -32,6 +32,15 @@ type CustomerPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+const unsuccessfulFirstPaymentStatuses = new Set(["canceled", "expired", "failed"]);
+const terminalFirstPaymentLinkStatuses = new Set([
+  "archived",
+  "canceled",
+  "expired",
+  "failed",
+  "paid",
+]);
+
 function resolveSubscriptionReadiness(
   detail: NonNullable<Awaited<ReturnType<typeof getCustomerDetail>>>,
 ) {
@@ -44,6 +53,19 @@ function resolveSubscriptionReadiness(
       payment.mollieStatus === "paid" &&
       payment.paidAt,
   );
+  const latestFirstPaymentLink = detail.paymentLinks[0] ?? null;
+  const activeFirstPaymentLink = detail.paymentLinks.find(
+    (paymentLink) =>
+      !terminalFirstPaymentLinkStatuses.has(paymentLink.mollieStatus ?? "open"),
+  );
+  const firstPaymentShareUrl =
+    latestPaidFirstPayment
+      ? null
+      : activeFirstPaymentLink?.checkoutUrl ??
+        (latestFirstPayment &&
+        !unsuccessfulFirstPaymentStatuses.has(latestFirstPayment.mollieStatus ?? "")
+          ? latestFirstPayment.checkoutUrl
+          : null);
   const readyMandate = detail.mandates.find(
     (mandate) =>
       (mandate.method === "directdebit" || mandate.method === "directDebit") &&
@@ -55,7 +77,10 @@ function resolveSubscriptionReadiness(
 
   return {
     activeSubscription,
+    activeFirstPaymentLink,
+    firstPaymentShareUrl,
     latestFirstPayment,
+    latestFirstPaymentLink,
     latestPaidFirstPayment,
     readyMandate,
   };
@@ -66,7 +91,9 @@ function getWorkspaceNotice(
 ) {
   const {
     activeSubscription,
+    firstPaymentShareUrl,
     latestFirstPayment,
+    latestFirstPaymentLink,
     latestPaidFirstPayment,
     readyMandate,
   } = resolveSubscriptionReadiness(detail);
@@ -80,19 +107,30 @@ function getWorkspaceNotice(
     };
   }
 
-  if (!latestFirstPayment) {
+  if (!latestFirstPayment && !latestFirstPaymentLink) {
     return {
       message:
-        "Start with a real first iDEAL payment. That checkout URL is what you share manually to begin the mandate flow.",
-      title: "Create the first payment",
+        "Start with a customer-linked Mollie Payment Link. The durable link is what you share manually to begin the mandate flow.",
+      title: "Create the first payment link",
       tone: "warning" as const,
     };
   }
 
   if (!latestPaidFirstPayment) {
+    if (latestFirstPaymentLink?.mollieStatus === "paid") {
+      return {
+        message:
+          "The first payment link is marked paid. Run sync so the payment and mandate are visible locally before creating the subscription.",
+        title: "Sync the paid payment link",
+        tone: "warning" as const,
+      };
+    }
+
     return {
       message:
-        "The first payment exists but is not paid yet. Share the checkout URL, wait for completion, then run a sync before creating the subscription.",
+        firstPaymentShareUrl
+          ? "The first payment link exists but is not paid yet. Share the Payment Link URL, wait for completion, then run a sync before creating the subscription."
+          : "The first payment is not paid yet. Create or sync a first-payment link before creating the subscription.",
       title: "Wait for the first payment to complete",
       tone: "warning" as const,
     };
@@ -153,7 +191,9 @@ export default async function CustomerDetailPage({
   const error = getSingleSearchParam(resolvedSearchParams.error);
   const {
     activeSubscription,
+    firstPaymentShareUrl,
     latestFirstPayment,
+    latestFirstPaymentLink,
     latestPaidFirstPayment,
     readyMandate,
   } = resolveSubscriptionReadiness(detail);
@@ -162,6 +202,18 @@ export default async function CustomerDetailPage({
     latestPaidFirstPayment && readyMandate && !activeSubscription,
   );
   const defaultDescription = `${detail.customer.fullName ?? "Customer"} monthly subscription`;
+  const firstPaymentStatus =
+    latestFirstPayment?.mollieStatus ?? latestFirstPaymentLink?.mollieStatus ?? null;
+  const firstPaymentAmount =
+    latestFirstPayment ?? latestFirstPaymentLink ?? null;
+  const firstPaymentCreatedAt =
+    latestFirstPayment?.createdAt ?? latestFirstPaymentLink?.createdAt ?? null;
+  const firstPaymentUrl =
+    firstPaymentShareUrl ??
+    latestFirstPaymentLink?.checkoutUrl ??
+    latestFirstPayment?.checkoutUrl ??
+    null;
+  const hasFirstPaymentStart = Boolean(latestFirstPayment || latestFirstPaymentLink);
 
   return (
     <div className="space-y-6">
@@ -204,11 +256,11 @@ export default async function CustomerDetailPage({
           },
           {
             label: "First payment",
-            value: latestFirstPayment ? formatLabel(latestFirstPayment.mollieStatus) : "Missing",
-            helper: latestFirstPayment
+            value: firstPaymentStatus ? formatLabel(firstPaymentStatus) : "Missing",
+            helper: firstPaymentAmount
               ? formatCurrency(
-                  latestFirstPayment.amountValue,
-                  latestFirstPayment.amountCurrency,
+                  firstPaymentAmount.amountValue,
+                  firstPaymentAmount.amountCurrency,
                 )
               : "create now",
             tone: latestPaidFirstPayment ? "accent" : "warning",
@@ -235,14 +287,14 @@ export default async function CustomerDetailPage({
         title={workspaceNotice.title}
         message={workspaceNotice.message}
         actions={
-          latestFirstPayment?.checkoutUrl ? (
+          firstPaymentShareUrl ? (
             <a
-              href={latestFirstPayment.checkoutUrl}
+              href={firstPaymentShareUrl}
               target="_blank"
               rel="noreferrer"
               className="inline-flex min-h-9 items-center justify-center rounded-lg border border-current/15 bg-white/70 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-white"
             >
-              Open checkout
+              Open payment link
             </a>
           ) : null
         }
@@ -251,45 +303,46 @@ export default async function CustomerDetailPage({
       <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
         <DetailSection
           title="Subscription setup"
-          description="The workflow stays linear: first payment, mandate sync, then subscription creation."
+          description="The workflow stays linear: first payment link, mandate sync, then subscription creation."
         >
           <div className="divide-y divide-border">
             <div className="flex flex-col gap-3 py-3 first:pt-0 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-semibold text-ink">1. First payment</p>
-                  <StatusPill tone={getStatusTone(latestFirstPayment?.mollieStatus)}>
-                    {latestFirstPayment
-                      ? formatLabel(latestFirstPayment.mollieStatus)
+                  <p className="text-sm font-semibold text-ink">1. First payment link</p>
+                  <StatusPill tone={getStatusTone(firstPaymentStatus)}>
+                    {firstPaymentStatus
+                      ? formatLabel(firstPaymentStatus)
                       : "Missing"}
                   </StatusPill>
                 </div>
                 <p className="mt-1 text-sm leading-6 text-ink-soft">
-                  Charge the real first installment through iDEAL and send the
-                  returned Mollie checkout URL manually.
+                  Share the durable Mollie Payment Link for the real first
+                  installment. The resulting iDEAL payment establishes the
+                  mandate.
                 </p>
                 <p className="mt-2 text-xs text-ink-soft">
-                  {latestFirstPayment
-                    ? `Created ${formatDateTime(latestFirstPayment.createdAt)}`
-                    : "No first payment has been created yet."}
+                  {firstPaymentCreatedAt
+                    ? `Created ${formatDateTime(firstPaymentCreatedAt)}`
+                    : "No first payment link has been created yet."}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {latestFirstPayment?.checkoutUrl ? (
+                {firstPaymentShareUrl ? (
                   <a
-                    href={latestFirstPayment.checkoutUrl}
+                    href={firstPaymentShareUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex min-h-9 items-center justify-center rounded-lg border border-border-strong px-3 py-1.5 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-muted hover:text-ink"
                   >
-                    Checkout
+                    Payment link
                   </a>
                 ) : null}
                 <DrawerForm
-                  triggerLabel={latestFirstPayment ? "New first payment" : "Create first payment"}
-                  triggerVariant={latestFirstPayment ? "secondary" : "primary"}
-                  title="Create first payment"
-                  description="This creates a real customer-linked first payment in Mollie, restricted to iDEAL, so the customer can complete the first installment and establish the mandate flow."
+                  triggerLabel={hasFirstPaymentStart ? "New payment link" : "Create payment link"}
+                  triggerVariant={hasFirstPaymentStart ? "secondary" : "primary"}
+                  title="Create first payment link"
+                  description="This creates a durable customer-linked Mollie Payment Link, restricted to iDEAL, so the customer can complete the first installment and establish the mandate flow."
                 >
                   <form action={createFirstPaymentAction} className="space-y-4">
                     <input type="hidden" name="customerId" value={detail.customer.id} />
@@ -327,10 +380,10 @@ export default async function CustomerDetailPage({
                     </div>
                     <div className="flex justify-end">
                       <FormActionButton
-                        confirmMessage="Create a real first payment in Mollie for this customer?"
-                        pendingLabel="Creating payment..."
+                        confirmMessage="Create a durable first-payment link in Mollie for this customer?"
+                        pendingLabel="Creating payment link..."
                       >
-                        Create first payment
+                        Create payment link
                       </FormActionButton>
                     </div>
                   </form>
@@ -488,24 +541,26 @@ export default async function CustomerDetailPage({
       <section className="grid gap-4 xl:grid-cols-[1fr_1fr]">
         <DetailSection
           title="Current first payment"
-          description="Keep the shareable checkout link and the latest payment timestamps close to the workflow."
+          description="Keep the shareable Payment Link URL and the latest payment timestamps close to the workflow."
         >
-          {!latestFirstPayment ? (
+          {!hasFirstPaymentStart ? (
             <EmptyState
-              title="No first payment yet"
-              description="Use the drawer above to create the first iDEAL payment and generate the Mollie checkout URL."
+              title="No first payment link yet"
+              description="Use the drawer above to create the first-payment link and generate the Mollie Payment Link URL."
             />
           ) : (
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
-                <StatusPill tone={getStatusTone(latestFirstPayment.mollieStatus)}>
-                  {formatLabel(latestFirstPayment.mollieStatus)}
+                <StatusPill tone={getStatusTone(firstPaymentStatus)}>
+                  {formatLabel(firstPaymentStatus)}
                 </StatusPill>
                 <StatusPill tone="muted">
-                  {formatLabel(latestFirstPayment.paymentType)}
+                  {latestFirstPayment
+                    ? formatLabel(latestFirstPayment.paymentType)
+                    : "First payment link"}
                 </StatusPill>
                 <StatusPill tone="muted">
-                  {latestFirstPayment.method
+                  {latestFirstPayment?.method
                     ? formatLabel(latestFirstPayment.method)
                     : "Method pending"}
                 </StatusPill>
@@ -514,34 +569,36 @@ export default async function CustomerDetailPage({
                 <div>
                   <dt className="font-semibold text-ink">Amount</dt>
                   <dd className="mt-1">
-                    {formatCurrency(
-                      latestFirstPayment.amountValue,
-                      latestFirstPayment.amountCurrency,
-                    )}
+                    {firstPaymentAmount
+                      ? formatCurrency(
+                          firstPaymentAmount.amountValue,
+                          firstPaymentAmount.amountCurrency,
+                        )
+                      : "-"}
                   </dd>
                 </div>
                 <div>
                   <dt className="font-semibold text-ink">Sequence type</dt>
                   <dd className="mt-1">
-                    {formatLabel(latestFirstPayment.sequenceType)}
+                    {formatLabel(latestFirstPayment?.sequenceType ?? "first")}
                   </dd>
                 </div>
                 <div>
                   <dt className="font-semibold text-ink">Created</dt>
-                  <dd className="mt-1">{formatDateTime(latestFirstPayment.createdAt)}</dd>
+                  <dd className="mt-1">{formatDateTime(firstPaymentCreatedAt)}</dd>
                 </div>
                 <div>
                   <dt className="font-semibold text-ink">Paid</dt>
-                  <dd className="mt-1">{formatDateTime(latestFirstPayment.paidAt)}</dd>
+                  <dd className="mt-1">{formatDateTime(latestFirstPayment?.paidAt)}</dd>
                 </div>
               </dl>
-              {latestFirstPayment.checkoutUrl ? (
+              {firstPaymentUrl ? (
                 <div className="rounded-[14px] border border-border bg-surface-subtle px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-soft">
-                    Checkout URL
+                    Payment Link URL
                   </p>
                   <p className="mt-2 break-all font-mono text-[0.82rem] leading-6 text-ink-soft">
-                    {latestFirstPayment.checkoutUrl}
+                    {firstPaymentUrl}
                   </p>
                 </div>
               ) : null}

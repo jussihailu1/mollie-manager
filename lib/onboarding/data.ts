@@ -14,6 +14,9 @@ export type CustomerOverview = {
   id: string;
   latestFirstPaymentCheckoutUrl: string | null;
   latestFirstPaymentId: string | null;
+  latestFirstPaymentLinkId: string | null;
+  latestFirstPaymentLinkStatus: string | null;
+  latestFirstPaymentLinkUrl: string | null;
   latestFirstPaymentPaidAt: string | null;
   latestFirstPaymentStatus: string | null;
   latestMandateId: string | null;
@@ -41,6 +44,19 @@ export type PaymentRecord = {
   paidAt: string | null;
   paymentType: string;
   sequenceType: string | null;
+};
+
+export type PaymentLinkRecord = {
+  amountCurrency: string;
+  amountValue: string;
+  checkoutUrl: string | null;
+  createdAt: string;
+  description: string;
+  expiresAt: string | null;
+  id: string;
+  metadata: Record<string, unknown>;
+  molliePaymentLinkId: string | null;
+  mollieStatus: string | null;
 };
 
 export type MandateRecord = {
@@ -73,6 +89,7 @@ export type SubscriptionRecord = {
 export type CustomerDetail = {
   customer: CustomerOverview;
   mandates: MandateRecord[];
+  paymentLinks: PaymentLinkRecord[];
   payments: PaymentRecord[];
   subscriptions: SubscriptionRecord[];
 };
@@ -152,6 +169,9 @@ const listCustomersByMode = cache(async (mode: DashboardModeFilter) => {
         latest_payment.checkout_url as "latestFirstPaymentCheckoutUrl",
         latest_payment.mollie_status as "latestFirstPaymentStatus",
         latest_payment.paid_at as "latestFirstPaymentPaidAt",
+        latest_payment_link.id as "latestFirstPaymentLinkId",
+        latest_payment_link.checkout_url as "latestFirstPaymentLinkUrl",
+        latest_payment_link.mollie_status as "latestFirstPaymentLinkStatus",
         latest_mandate.id as "latestMandateId",
         latest_mandate.mollie_status as "latestMandateStatus",
         coalesce(latest_mandate.is_valid, false) as "hasValidMandate",
@@ -166,6 +186,16 @@ const listCustomersByMode = cache(async (mode: DashboardModeFilter) => {
         order by p.created_at desc
         limit 1
       ) latest_payment on true
+      left join lateral (
+        select pl.*
+        from payment_links pl
+        where
+          pl.customer_id = c.id
+          and pl.metadata ->> 'source' = 'subscription_onboarding'
+          and pl.metadata ->> 'paymentType' = 'first'
+        order by pl.created_at desc
+        limit 1
+      ) latest_payment_link on true
       left join lateral (
         select m.*
         from mandates m
@@ -199,8 +229,13 @@ export async function listCustomers(options?: {
 }
 
 export const getCustomerDetail = cache(async (customerId: string) => {
-  const [customersResult, paymentsResult, mandatesResult, subscriptionsResult] =
-    await Promise.all([
+  const [
+    customersResult,
+    paymentsResult,
+    paymentLinksResult,
+    mandatesResult,
+    subscriptionsResult,
+  ] = await Promise.all([
       getDb().execute<CustomerOverview>(sql`
           select
             c.id,
@@ -214,6 +249,9 @@ export const getCustomerDetail = cache(async (customerId: string) => {
             latest_payment.checkout_url as "latestFirstPaymentCheckoutUrl",
             latest_payment.mollie_status as "latestFirstPaymentStatus",
             latest_payment.paid_at as "latestFirstPaymentPaidAt",
+            latest_payment_link.id as "latestFirstPaymentLinkId",
+            latest_payment_link.checkout_url as "latestFirstPaymentLinkUrl",
+            latest_payment_link.mollie_status as "latestFirstPaymentLinkStatus",
             latest_mandate.id as "latestMandateId",
             latest_mandate.mollie_status as "latestMandateStatus",
             coalesce(latest_mandate.is_valid, false) as "hasValidMandate",
@@ -228,6 +266,16 @@ export const getCustomerDetail = cache(async (customerId: string) => {
             order by p.created_at desc
             limit 1
           ) latest_payment on true
+          left join lateral (
+            select pl.*
+            from payment_links pl
+            where
+              pl.customer_id = c.id
+              and pl.metadata ->> 'source' = 'subscription_onboarding'
+              and pl.metadata ->> 'paymentType' = 'first'
+            order by pl.created_at desc
+            limit 1
+          ) latest_payment_link on true
           left join lateral (
             select m.*
             from mandates m
@@ -269,6 +317,25 @@ export const getCustomerDetail = cache(async (customerId: string) => {
           from payments p
           where p.customer_id = ${customerId}
           order by p.created_at desc
+        `),
+      getDb().execute<PaymentLinkRecord>(sql`
+          select
+            pl.id,
+            pl.mollie_payment_link_id as "molliePaymentLinkId",
+            pl.mollie_status as "mollieStatus",
+            pl.description,
+            pl.amount_value::text as "amountValue",
+            pl.amount_currency as "amountCurrency",
+            pl.checkout_url as "checkoutUrl",
+            pl.expires_at as "expiresAt",
+            pl.metadata,
+            pl.created_at as "createdAt"
+          from payment_links pl
+          where
+            pl.customer_id = ${customerId}
+            and pl.metadata ->> 'source' = 'subscription_onboarding'
+            and pl.metadata ->> 'paymentType' = 'first'
+          order by pl.created_at desc
         `),
       getDb().execute<MandateRecord>(sql`
           select
@@ -318,6 +385,13 @@ export const getCustomerDetail = cache(async (customerId: string) => {
       details:
         typeof mandate.details === "object" && mandate.details !== null
           ? mandate.details
+          : {},
+    })),
+    paymentLinks: paymentLinksResult.rows.map((paymentLink) => ({
+      ...paymentLink,
+      metadata:
+        typeof paymentLink.metadata === "object" && paymentLink.metadata !== null
+          ? paymentLink.metadata
           : {},
     })),
     payments: paymentsResult.rows,

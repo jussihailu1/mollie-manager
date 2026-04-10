@@ -14,6 +14,28 @@ import {
 } from "@/lib/reliability/alerts";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 
+type MollieAmount = {
+  currency: string;
+  value: string;
+};
+
+type MolliePaymentLink = {
+  allowedMethods?: string[];
+  amount?: MollieAmount;
+  archived: boolean;
+  createdAt?: string;
+  customerId?: string;
+  description: string;
+  expiresAt?: string;
+  getPaymentUrl: () => string;
+  getPayments: () => AsyncIterable<Payment>;
+  id: string;
+  minimumAmount?: MollieAmount;
+  paidAt?: string;
+  reusable?: boolean;
+  sequenceType: string;
+};
+
 type SyncActor = {
   email?: string | null;
   kind: "system" | "user";
@@ -35,8 +57,14 @@ type LocalSubscriptionLink = {
   mollieSubscriptionId: string | null;
 };
 
-type LocalPaymentLink = {
+type LocalPaymentRow = {
   id: string;
+};
+
+type LocalStoredPaymentLink = {
+  customerId: string | null;
+  id: string;
+  molliePaymentLinkId: string | null;
 };
 
 type LocalMandateLink = {
@@ -46,8 +74,11 @@ type LocalMandateLink = {
 type WebhookProcessingResult = {
   customerId: string | null;
   paymentId: string | null;
+  paymentLinkId: string | null;
   subscriptionId: string | null;
 };
+
+const unsuccessfulPaymentStatuses = new Set(["canceled", "expired", "failed"]);
 
 function buildModesToTry(preferredMode?: MollieMode) {
   const orderedModes: MollieMode[] = preferredMode
@@ -97,6 +128,29 @@ async function findPaymentAcrossModes(
   }
 
   throw lastError ?? new Error("Payment was not found in Mollie.");
+}
+
+async function findPaymentLinkAcrossModes(
+  molliePaymentLinkId: string,
+  preferredMode?: MollieMode,
+) {
+  let lastError: unknown;
+
+  for (const mode of buildModesToTry(preferredMode)) {
+    try {
+      const paymentLink = (await getMollieClient(mode).paymentLinks.get(
+        molliePaymentLinkId,
+      )) as unknown as MolliePaymentLink;
+      return {
+        mode,
+        paymentLink,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error("Payment link was not found in Mollie.");
 }
 
 async function findSubscriptionAcrossModes(
@@ -199,6 +253,25 @@ async function getManagedSubscriptionByMollieId(
   return result.rows[0] ?? null;
 }
 
+async function getLocalPaymentLinkByMollieId(
+  mode: MollieMode,
+  molliePaymentLinkId: string,
+  client?: DbClient,
+) {
+  const db = client ?? getDb();
+  const result = await db.execute<LocalStoredPaymentLink>(sql`
+      select
+        id,
+        customer_id as "customerId",
+        mollie_payment_link_id as "molliePaymentLinkId"
+      from payment_links
+      where mode = ${mode} and mollie_payment_link_id = ${molliePaymentLinkId}
+      limit 1
+    `);
+
+  return result.rows[0] ?? null;
+}
+
 async function findLocalMandateId(
   mode: MollieMode,
   mollieMandateId: string | undefined,
@@ -286,6 +359,210 @@ async function upsertMandatesForCustomer(
   }
 
   return mandateIdMap;
+}
+
+async function collectPaymentLinkPayments(paymentLink: MolliePaymentLink) {
+  const payments: Payment[] = [];
+
+  for await (const payment of paymentLink.getPayments()) {
+    payments.push(payment);
+
+    if (payments.length >= 50) {
+      break;
+    }
+  }
+
+  return payments;
+}
+
+function derivePaymentLinkStatus(
+  paymentLink: MolliePaymentLink,
+  payments: Payment[],
+) {
+  const latestPayment = payments[0] ?? null;
+
+  if (paymentLink.archived) {
+    return "archived";
+  }
+
+  if (paymentLink.paidAt || payments.some((payment) => payment.status === "paid")) {
+    return "paid";
+  }
+
+  if (latestPayment && unsuccessfulPaymentStatuses.has(latestPayment.status)) {
+    return latestPayment.status;
+  }
+
+  return "open";
+}
+
+function buildPaymentLinkMetadata(
+  paymentLink: MolliePaymentLink,
+  payments: Payment[],
+) {
+  const latestPayment = payments[0] ?? null;
+
+  return {
+    allowedMethods: paymentLink.allowedMethods ?? ["ideal"],
+    latestPaymentId: latestPayment?.id ?? null,
+    latestPaymentStatus: latestPayment?.status ?? null,
+    mollieCustomerId: paymentLink.customerId ?? null,
+    paymentIds: payments.map((payment) => payment.id),
+    paymentType: "first",
+    reusable: paymentLink.reusable ?? false,
+    sequenceType: paymentLink.sequenceType,
+    source: "subscription_onboarding",
+  };
+}
+
+async function upsertPaymentLinkFromMollie(
+  mode: MollieMode,
+  paymentLink: MolliePaymentLink,
+  payments: Payment[],
+  options: {
+    actor: SyncActor;
+    customerId?: string | null;
+  },
+) {
+  const linkedCustomer =
+    options.customerId ??
+    (await getLocalCustomerByMollieId(mode, paymentLink.customerId))?.id ??
+    null;
+  const paymentLinkAmount =
+    paymentLink.amount ?? paymentLink.minimumAmount ?? payments[0]?.amount ?? {
+      currency: "EUR",
+      value: "0.00",
+    };
+  const paymentLinkStatus = derivePaymentLinkStatus(paymentLink, payments);
+  let localPaymentLinkId = crypto.randomUUID();
+
+  await transaction(async (client) => {
+    const existingPaymentLink = await getLocalPaymentLinkByMollieId(
+      mode,
+      paymentLink.id,
+      client,
+    );
+    localPaymentLinkId = existingPaymentLink?.id ?? localPaymentLinkId;
+
+    await client.execute(sql`
+        insert into payment_links (
+          id,
+          customer_id,
+          mode,
+          mollie_payment_link_id,
+          mollie_status,
+          description,
+          amount_value,
+          amount_currency,
+          checkout_url,
+          expires_at,
+          metadata,
+          created_at,
+          updated_at,
+          last_synced_at
+        ) values (
+          ${localPaymentLinkId},
+          ${linkedCustomer ?? existingPaymentLink?.customerId ?? null},
+          ${mode},
+          ${paymentLink.id},
+          ${paymentLinkStatus},
+          ${paymentLink.description},
+          ${paymentLinkAmount.value},
+          ${paymentLinkAmount.currency},
+          ${paymentLink.getPaymentUrl()},
+          ${paymentLink.expiresAt ?? null}::timestamptz,
+          ${JSON.stringify(buildPaymentLinkMetadata(paymentLink, payments))}::jsonb,
+          coalesce(${paymentLink.createdAt ?? null}::timestamptz, now()),
+          now(),
+          now()
+        )
+        on conflict (mode, mollie_payment_link_id)
+        do update set
+          customer_id = coalesce(excluded.customer_id, payment_links.customer_id),
+          mollie_status = excluded.mollie_status,
+          description = excluded.description,
+          amount_value = excluded.amount_value,
+          amount_currency = excluded.amount_currency,
+          checkout_url = excluded.checkout_url,
+          expires_at = excluded.expires_at,
+          metadata = excluded.metadata,
+          updated_at = now(),
+          last_synced_at = now()
+      `);
+
+    await writeAuditLog(
+      {
+        action: "payment_link.sync",
+        details: {
+          localPaymentLinkId,
+          molliePaymentLinkId: paymentLink.id,
+          paymentCount: payments.length,
+          paymentLinkStatus,
+        },
+        entityId: localPaymentLinkId,
+        entityType: "payment_link",
+        mode,
+        outcome: "success",
+        summary: "Refreshed a payment link from Mollie.",
+      },
+      client,
+      options.actor,
+    );
+  });
+
+  return localPaymentLinkId;
+}
+
+async function syncMatchingPaymentLinkForPayment(
+  mode: MollieMode,
+  payment: Payment,
+  customerId: string | null,
+  actor: SyncActor,
+) {
+  if (!customerId && !payment.customerId) {
+    return null;
+  }
+
+  const candidates = await getDb().execute<LocalStoredPaymentLink>(sql`
+      select
+        id,
+        customer_id as "customerId",
+        mollie_payment_link_id as "molliePaymentLinkId"
+      from payment_links
+      where
+        mode = ${mode}
+        and mollie_payment_link_id is not null
+        and metadata ->> 'source' = 'subscription_onboarding'
+        and metadata ->> 'paymentType' = 'first'
+        and (
+          customer_id = ${customerId}
+          or metadata ->> 'mollieCustomerId' = ${payment.customerId ?? null}
+        )
+      order by created_at desc
+      limit 10
+    `);
+
+  for (const candidate of candidates.rows) {
+    if (!candidate.molliePaymentLinkId) {
+      continue;
+    }
+
+    const paymentLink = (await getMollieClient(mode).paymentLinks.get(
+      candidate.molliePaymentLinkId,
+    )) as unknown as MolliePaymentLink;
+    const payments = await collectPaymentLinkPayments(paymentLink);
+
+    if (!payments.some((linkedPayment) => linkedPayment.id === payment.id)) {
+      continue;
+    }
+
+    return upsertPaymentLinkFromMollie(mode, paymentLink, payments, {
+      actor,
+      customerId: candidate.customerId ?? customerId,
+    });
+  }
+
+  return null;
 }
 
 async function handlePaymentAlerts(input: {
@@ -410,6 +687,7 @@ export async function syncPaymentByMollieId(
   options?: {
     actor?: SyncActor;
     preferredMode?: MollieMode;
+    syncPaymentLinks?: boolean;
   },
 ) {
   const actor = options?.actor ?? {
@@ -436,7 +714,7 @@ export async function syncPaymentByMollieId(
       (await findLocalMandateId(mode, payment.mandateId, client)) ??
       localSubscription?.mandateId ??
       null;
-    const existingPayment = await client.execute<LocalPaymentLink>(sql`
+    const existingPayment = await client.execute<LocalPaymentRow>(sql`
         select id
         from payments
         where mode = ${mode} and mollie_payment_id = ${payment.id}
@@ -541,11 +819,68 @@ export async function syncPaymentByMollieId(
     payment,
     subscriptionId: localSubscription?.id ?? null,
   });
+  const localPaymentLinkId =
+    options?.syncPaymentLinks === false
+      ? null
+      : await syncMatchingPaymentLinkForPayment(
+          mode,
+          payment,
+          resolvedCustomerId,
+          actor,
+        );
 
   return {
     customerId: resolvedCustomerId,
     paymentId: localPaymentId,
+    paymentLinkId: localPaymentLinkId,
     subscriptionId: localSubscription?.id ?? null,
+  } satisfies WebhookProcessingResult;
+}
+
+export async function syncPaymentLinkByMollieId(
+  molliePaymentLinkId: string,
+  options?: {
+    actor?: SyncActor;
+    preferredMode?: MollieMode;
+  },
+) {
+  const actor = options?.actor ?? {
+    kind: "system" as const,
+  };
+  const { mode, paymentLink } = await findPaymentLinkAcrossModes(
+    molliePaymentLinkId,
+    options?.preferredMode,
+  );
+  const payments = await collectPaymentLinkPayments(paymentLink);
+  const existingPaymentLink = await getLocalPaymentLinkByMollieId(mode, paymentLink.id);
+  const localCustomer = await getLocalCustomerByMollieId(mode, paymentLink.customerId);
+  const localPaymentLinkId = await upsertPaymentLinkFromMollie(
+    mode,
+    paymentLink,
+    payments,
+    {
+      actor,
+      customerId: localCustomer?.id ?? existingPaymentLink?.customerId ?? null,
+    },
+  );
+  let latestResult: WebhookProcessingResult = {
+    customerId: localCustomer?.id ?? existingPaymentLink?.customerId ?? null,
+    paymentId: null,
+    paymentLinkId: localPaymentLinkId,
+    subscriptionId: null,
+  };
+
+  for (const payment of payments) {
+    latestResult = await syncPaymentByMollieId(payment.id, {
+      actor,
+      preferredMode: mode,
+      syncPaymentLinks: false,
+    });
+  }
+
+  return {
+    ...latestResult,
+    paymentLinkId: localPaymentLinkId,
   } satisfies WebhookProcessingResult;
 }
 
@@ -612,7 +947,7 @@ export async function syncSubscriptionByLocalId(
       `);
 
     for (const payment of payments) {
-      const existingPayment = await client.execute<LocalPaymentLink>(sql`
+      const existingPayment = await client.execute<LocalPaymentRow>(sql`
           select id
           from payments
           where mode = ${localSubscription.mode} and mollie_payment_id = ${payment.id}
@@ -716,7 +1051,7 @@ export async function syncSubscriptionByLocalId(
   });
 
   for (const payment of payments) {
-    const syncedPayment = await getDb().execute<LocalPaymentLink>(sql`
+    const syncedPayment = await getDb().execute<LocalPaymentRow>(sql`
         select id
         from payments
         where mode = ${localSubscription.mode} and mollie_payment_id = ${payment.id}
@@ -742,6 +1077,7 @@ export async function syncSubscriptionByLocalId(
   return {
     customerId: localSubscription.customerId,
     paymentId: null,
+    paymentLinkId: null,
     subscriptionId: resolvedSubscriptionId,
   } satisfies WebhookProcessingResult;
 }
@@ -788,9 +1124,23 @@ export async function reconcileOperationalData(actor?: SyncActor) {
         and mollie_payment_id is not null
       order by created_at desc
     `);
+  const paymentLinks = await getDb().execute<{ molliePaymentLinkId: string }>(sql`
+      select mollie_payment_link_id as "molliePaymentLinkId"
+      from payment_links
+      where mollie_payment_link_id is not null
+        and metadata ->> 'source' = 'subscription_onboarding'
+        and metadata ->> 'paymentType' = 'first'
+      order by created_at desc
+    `);
 
   for (const subscription of subscriptions.rows) {
     await syncSubscriptionByLocalId(subscription.id, {
+      actor: effectiveActor,
+    });
+  }
+
+  for (const paymentLink of paymentLinks.rows) {
+    await syncPaymentLinkByMollieId(paymentLink.molliePaymentLinkId, {
       actor: effectiveActor,
     });
   }
@@ -806,6 +1156,7 @@ export async function reconcileOperationalData(actor?: SyncActor) {
       action: "reconciliation.run",
       details: {
         firstPaymentCount: firstPayments.rows.length,
+        paymentLinkCount: paymentLinks.rows.length,
         subscriptionCount: subscriptions.rows.length,
       },
       entityId: "system",
@@ -819,6 +1170,7 @@ export async function reconcileOperationalData(actor?: SyncActor) {
 
   return {
     firstPaymentsChecked: firstPayments.rows.length,
+    paymentLinksChecked: paymentLinks.rows.length,
     subscriptionsChecked: subscriptions.rows.length,
   };
 }

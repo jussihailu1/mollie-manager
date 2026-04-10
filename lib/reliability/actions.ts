@@ -15,6 +15,7 @@ import { deliverAlertEmail } from "@/lib/reliability/alerts";
 import {
   reconcileOperationalData,
   syncPaymentByMollieId,
+  syncPaymentLinkByMollieId,
   syncSubscriptionByMollieId,
 } from "@/lib/reliability/sync";
 
@@ -79,6 +80,14 @@ async function processStoredWebhookResource(resourceId: string) {
     });
   }
 
+  if (resourceId.startsWith("pl_")) {
+    return syncPaymentLinkByMollieId(resourceId, {
+      actor: {
+        kind: "system",
+      },
+    });
+  }
+
   throw new Error("Unsupported webhook resource id.");
 }
 
@@ -107,7 +116,7 @@ export async function runReconciliationAction(formData: FormData) {
     revalidatePath("/subscriptions");
     revalidatePath("/customers");
     redirectWithMessage(parsed.data.returnTo, {
-      notice: `Reconciliation complete. Checked ${result.subscriptionsChecked} subscriptions and ${result.firstPaymentsChecked} first payments.`,
+      notice: `Reconciliation complete. Checked ${result.subscriptionsChecked} subscriptions, ${result.paymentLinksChecked} payment links, and ${result.firstPaymentsChecked} first payments.`,
     });
   } catch (error) {
     unstable_rethrow(error);

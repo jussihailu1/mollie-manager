@@ -18,6 +18,7 @@ import { transaction, type DbTransaction } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getMollieClient, getMollieWebhookUrl } from "@/lib/mollie/client";
 import { getCustomerDetail, type MandateRecord } from "@/lib/onboarding/data";
+import { syncPaymentLinkByMollieId } from "@/lib/reliability/sync";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 
 const createCustomerSchema = z.object({
@@ -41,6 +42,13 @@ const createSubscriptionSchema = z.object({
   customerId: z.string().uuid(),
   description: z.string().trim().min(2).max(140),
 });
+
+const renewableFirstPaymentLinkStatuses = new Set([
+  "archived",
+  "canceled",
+  "expired",
+  "failed",
+]);
 
 type LocalPaymentRecord = {
   id: string;
@@ -343,6 +351,10 @@ export async function createFirstPaymentAction(formData: FormData) {
       payment.mollieStatus !== "expired" &&
       payment.mollieStatus !== "canceled",
   );
+  const existingFirstPaymentLink = detail?.paymentLinks.find(
+    (paymentLink) =>
+      !renewableFirstPaymentLinkStatuses.has(paymentLink.mollieStatus ?? "open"),
+  );
 
   if (existingFirstPayment) {
     redirectWithMessage(`/customers/${customer.id}`, {
@@ -353,11 +365,22 @@ export async function createFirstPaymentAction(formData: FormData) {
     });
   }
 
+  if (existingFirstPaymentLink) {
+    redirectWithMessage(`/customers/${customer.id}`, {
+      error:
+        existingFirstPaymentLink.mollieStatus === "paid"
+          ? "A paid first payment link already exists for this customer. Sync it before creating another one."
+          : "A first payment link already exists for this customer. Reuse or sync it before creating another one.",
+    });
+  }
+
   try {
     const amountValue = normalizeAmountValue(parsed.data.amountValue);
     const mollie = getMollieClient(customer.mode);
-    const localPaymentId = crypto.randomUUID();
-    const payment = await mollie.customerPayments.create({
+    const localPaymentLinkId = crypto.randomUUID();
+    const webhookUrl = getMollieWebhookUrl();
+    const paymentLink = await mollie.paymentLinks.create({
+      allowedMethods: [PaymentMethod.ideal],
       amount: {
         currency: "EUR",
         value: amountValue,
@@ -365,58 +388,60 @@ export async function createFirstPaymentAction(formData: FormData) {
       customerId: mollieCustomerId,
       description: parsed.data.description,
       idempotencyKey: crypto.randomUUID(),
-      metadata: {
-        customerId: customer.id,
-        localPaymentId,
-        paymentType: "first",
-      },
-      method: PaymentMethod.ideal,
-      redirectUrl: `${env.APP_URL}/customers/${customer.id}?notice=Returned+from+Mollie.+Use+sync+to+refresh+payment+status.`,
+      reusable: false,
       sequenceType: SequenceType.first,
-      webhookUrl: getMollieWebhookUrl(),
+      webhookUrl,
     });
+    const paymentLinkStatus = paymentLink.archived
+      ? "archived"
+      : paymentLink.paidAt
+        ? "paid"
+        : "open";
+    const paymentLinkAmount = paymentLink.amount ?? {
+      currency: "EUR",
+      value: amountValue,
+    };
 
     await transaction(async (client) => {
       await client.execute(sql`
-          insert into payments (
+          insert into payment_links (
             id,
             customer_id,
             mode,
-            payment_type,
-            mollie_payment_id,
+            mollie_payment_link_id,
             mollie_status,
-            sequence_type,
-            method,
+            description,
             amount_value,
             amount_currency,
             checkout_url,
             expires_at,
-            paid_at,
-            failed_at,
             metadata,
             created_at,
             updated_at,
             last_synced_at
           ) values (
-            ${localPaymentId},
+            ${localPaymentLinkId},
             ${customer.id},
-            ${payment.mode},
-            'first',
-            ${payment.id},
-            ${payment.status},
-            ${payment.sequenceType},
-            ${payment.method ?? null},
-            ${amountValue},
-            ${payment.amount.currency},
-            ${payment.getCheckoutUrl()},
-            ${payment.expiresAt ?? null}::timestamptz,
-            ${payment.paidAt ?? null}::timestamptz,
-            ${payment.failedAt ?? null}::timestamptz,
+            ${paymentLink.mode},
+            ${paymentLink.id},
+            ${paymentLinkStatus},
+            ${paymentLink.description},
+            ${paymentLinkAmount.value},
+            ${paymentLinkAmount.currency},
+            ${paymentLink.getPaymentUrl()},
+            ${paymentLink.expiresAt ?? null}::timestamptz,
             ${JSON.stringify({
-              description: payment.description,
-              redirectUrl: payment.redirectUrl ?? null,
+              allowedMethods: paymentLink.allowedMethods ?? [PaymentMethod.ideal],
+              latestPaymentId: null,
+              latestPaymentStatus: null,
+              mollieCustomerId,
+              paymentType: "first",
+              reusable: paymentLink.reusable ?? false,
+              sequenceType: paymentLink.sequenceType ?? SequenceType.first,
+              source: "subscription_onboarding",
+              webhookUrl,
             })}::jsonb,
-            now(),
+            coalesce(${paymentLink.createdAt ?? null}::timestamptz, now()),
             now(),
             now()
           )
@@ -424,16 +449,16 @@ export async function createFirstPaymentAction(formData: FormData) {
 
       await writeAuditLog(
         {
-          action: "payment.first.create",
+          action: "payment_link.first.create",
           details: {
-            localPaymentId,
-            molliePaymentId: payment.id,
+            localPaymentLinkId,
+            molliePaymentLinkId: paymentLink.id,
           },
-          entityId: localPaymentId,
-          entityType: "payment",
-          mode: payment.mode,
+          entityId: localPaymentLinkId,
+          entityType: "payment_link",
+          mode: paymentLink.mode,
           outcome: "success",
-          summary: "Created the first iDEAL payment for mandate setup.",
+          summary: "Created a durable first-payment link for mandate setup.",
         },
         client,
       );
@@ -442,7 +467,7 @@ export async function createFirstPaymentAction(formData: FormData) {
     revalidatePath(`/customers/${customer.id}`);
     revalidatePath("/customers");
     redirectWithMessage(`/customers/${customer.id}`, {
-      notice: "First payment created. Share the Mollie checkout URL with the customer.",
+      notice: "First payment link created. Share the durable Mollie Payment Link URL with the customer.",
     });
   } catch (error) {
     unstable_rethrow(error);
@@ -463,7 +488,7 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
     });
   }
 
-  await requireViewerSession();
+  const session = await requireViewerSession();
 
   const customer = await getLocalCustomer(parsed.data.customerId);
 
@@ -473,6 +498,7 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
     });
   }
   const mollieCustomerId = customer.mollieCustomerId;
+  const customerDetail = await getCustomerDetail(customer.id);
 
   try {
     const mollie = getMollieClient(customer.mode);
@@ -547,6 +573,7 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
           details: {
             localCustomerId: customer.id,
             mandateCount: mandates.length,
+            paymentLinkCount: customerDetail?.paymentLinks.length ?? 0,
           },
           entityId: customer.id,
           entityType: "customer",
@@ -557,6 +584,20 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
         client,
       );
     });
+
+    for (const paymentLink of customerDetail?.paymentLinks ?? []) {
+      if (!paymentLink.molliePaymentLinkId) {
+        continue;
+      }
+
+      await syncPaymentLinkByMollieId(paymentLink.molliePaymentLinkId, {
+        actor: {
+          email: session.user.email ?? null,
+          kind: "user",
+        },
+        preferredMode: customer.mode,
+      });
+    }
 
     revalidatePath(`/customers/${customer.id}`);
     revalidatePath("/customers");
