@@ -80,7 +80,11 @@ type WebhookProcessingResult = {
 
 const unsuccessfulPaymentStatuses = new Set(["canceled", "expired", "failed"]);
 
-function buildModesToTry(preferredMode?: MollieMode) {
+function buildModesToTry(preferredMode?: MollieMode, strictMode = false) {
+  if (preferredMode && strictMode) {
+    return isMollieConfigured(preferredMode) ? [preferredMode] : [];
+  }
+
   const orderedModes: MollieMode[] = preferredMode
     ? [preferredMode, preferredMode === "live" ? "test" : "live"]
     : ["live", "test"];
@@ -112,10 +116,11 @@ function hasChargeback(payment: Payment) {
 async function findPaymentAcrossModes(
   molliePaymentId: string,
   preferredMode?: MollieMode,
+  strictMode = false,
 ) {
   let lastError: unknown;
 
-  for (const mode of buildModesToTry(preferredMode)) {
+  for (const mode of buildModesToTry(preferredMode, strictMode)) {
     try {
       const payment = await getMollieClient(mode).payments.get(molliePaymentId);
       return {
@@ -133,10 +138,11 @@ async function findPaymentAcrossModes(
 async function findPaymentLinkAcrossModes(
   molliePaymentLinkId: string,
   preferredMode?: MollieMode,
+  strictMode = false,
 ) {
   let lastError: unknown;
 
-  for (const mode of buildModesToTry(preferredMode)) {
+  for (const mode of buildModesToTry(preferredMode, strictMode)) {
     try {
       const paymentLink = (await getMollieClient(mode).paymentLinks.get(
         molliePaymentLinkId,
@@ -157,10 +163,11 @@ async function findSubscriptionAcrossModes(
   mollieSubscriptionId: string,
   customerMollieId: string,
   preferredMode?: MollieMode,
+  strictMode = false,
 ) {
   let lastError: unknown;
 
-  for (const mode of buildModesToTry(preferredMode)) {
+  for (const mode of buildModesToTry(preferredMode, strictMode)) {
     try {
       const client = getMollieClient(mode);
       const subscription = await client.customerSubscriptions.get(
@@ -687,6 +694,7 @@ export async function syncPaymentByMollieId(
   options?: {
     actor?: SyncActor;
     preferredMode?: MollieMode;
+    strictMode?: boolean;
     syncPaymentLinks?: boolean;
   },
 ) {
@@ -696,6 +704,7 @@ export async function syncPaymentByMollieId(
   const { mode, payment } = await findPaymentAcrossModes(
     molliePaymentId,
     options?.preferredMode,
+    options?.strictMode,
   );
   const localCustomer = await getLocalCustomerByMollieId(mode, payment.customerId);
   const localSubscription = await getManagedSubscriptionByMollieId(
@@ -842,6 +851,7 @@ export async function syncPaymentLinkByMollieId(
   options?: {
     actor?: SyncActor;
     preferredMode?: MollieMode;
+    strictMode?: boolean;
   },
 ) {
   const actor = options?.actor ?? {
@@ -850,6 +860,7 @@ export async function syncPaymentLinkByMollieId(
   const { mode, paymentLink } = await findPaymentLinkAcrossModes(
     molliePaymentLinkId,
     options?.preferredMode,
+    options?.strictMode,
   );
   const payments = await collectPaymentLinkPayments(paymentLink);
   const existingPaymentLink = await getLocalPaymentLinkByMollieId(mode, paymentLink.id);
@@ -874,6 +885,7 @@ export async function syncPaymentLinkByMollieId(
     latestResult = await syncPaymentByMollieId(payment.id, {
       actor,
       preferredMode: mode,
+      strictMode: true,
       syncPaymentLinks: false,
     });
   }
@@ -888,6 +900,7 @@ export async function syncSubscriptionByLocalId(
   localSubscriptionId: string,
   options?: {
     actor?: SyncActor;
+    strictMode?: boolean;
   },
 ) {
   const actor = options?.actor ?? {
@@ -903,6 +916,7 @@ export async function syncSubscriptionByLocalId(
     localSubscription.mollieSubscriptionId,
     localSubscription.customerMollieId,
     localSubscription.mode,
+    options?.strictMode,
   );
   const resolvedSubscriptionId = localSubscription.id;
 
@@ -1087,6 +1101,7 @@ export async function syncSubscriptionByMollieId(
   options?: {
     actor?: SyncActor;
     preferredMode?: MollieMode;
+    strictMode?: boolean;
   },
 ) {
   const localSubscription =
@@ -1096,8 +1111,10 @@ export async function syncSubscriptionByMollieId(
           mollieSubscriptionId,
         )
       : null) ??
-    (await getManagedSubscriptionByMollieId("live", mollieSubscriptionId)) ??
-    (await getManagedSubscriptionByMollieId("test", mollieSubscriptionId));
+    (options?.strictMode
+      ? null
+      : ((await getManagedSubscriptionByMollieId("live", mollieSubscriptionId)) ??
+        (await getManagedSubscriptionByMollieId("test", mollieSubscriptionId))));
 
   if (!localSubscription) {
     throw new Error("Subscription was not found locally.");
@@ -1105,16 +1122,19 @@ export async function syncSubscriptionByMollieId(
 
   return syncSubscriptionByLocalId(localSubscription.id, {
     actor: options?.actor,
+    strictMode: options?.strictMode,
   });
 }
 
-export async function reconcileOperationalData(actor?: SyncActor) {
+export async function reconcileOperationalData(actor?: SyncActor, mode?: MollieMode) {
   const effectiveActor = actor ?? {
     kind: "system" as const,
   };
+  const modeParam = mode ?? null;
   const subscriptions = await getDb().execute<{ id: string }>(sql`
       select id
       from subscriptions
+      where (${modeParam}::mollie_mode is null or mode = ${modeParam})
       order by created_at desc
     `);
   const firstPayments = await getDb().execute<{ molliePaymentId: string }>(sql`
@@ -1122,12 +1142,14 @@ export async function reconcileOperationalData(actor?: SyncActor) {
       from payments
       where payment_type = 'first'
         and mollie_payment_id is not null
+        and (${modeParam}::mollie_mode is null or mode = ${modeParam})
       order by created_at desc
     `);
   const paymentLinks = await getDb().execute<{ molliePaymentLinkId: string }>(sql`
       select mollie_payment_link_id as "molliePaymentLinkId"
       from payment_links
       where mollie_payment_link_id is not null
+        and (${modeParam}::mollie_mode is null or mode = ${modeParam})
         and metadata ->> 'source' = 'subscription_onboarding'
         and metadata ->> 'paymentType' = 'first'
       order by created_at desc
@@ -1136,18 +1158,23 @@ export async function reconcileOperationalData(actor?: SyncActor) {
   for (const subscription of subscriptions.rows) {
     await syncSubscriptionByLocalId(subscription.id, {
       actor: effectiveActor,
+      strictMode: Boolean(mode),
     });
   }
 
   for (const paymentLink of paymentLinks.rows) {
     await syncPaymentLinkByMollieId(paymentLink.molliePaymentLinkId, {
       actor: effectiveActor,
+      preferredMode: mode,
+      strictMode: Boolean(mode),
     });
   }
 
   for (const payment of firstPayments.rows) {
     await syncPaymentByMollieId(payment.molliePaymentId, {
       actor: effectiveActor,
+      preferredMode: mode,
+      strictMode: Boolean(mode),
     });
   }
 
@@ -1161,6 +1188,7 @@ export async function reconcileOperationalData(actor?: SyncActor) {
       },
       entityId: "system",
       entityType: "reconciliation",
+      mode,
       outcome: "success",
       summary: "Completed a full reconciliation pass against Mollie.",
     },

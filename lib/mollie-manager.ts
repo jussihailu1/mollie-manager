@@ -1,4 +1,4 @@
-export const appName = "Mollie Manager";
+export const appName = "Kify";
 
 export const dashboardNavigation = [
   {

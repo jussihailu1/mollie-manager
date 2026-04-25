@@ -7,12 +7,13 @@ import { z } from "zod";
 
 import { writeAuditLog } from "@/lib/audit";
 import { requireViewerSession } from "@/lib/auth/session";
+import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { transaction } from "@/lib/db";
 import { getMollieClient } from "@/lib/mollie/client";
 import { getManagedSubscription, syncSubscriptionByLocalId } from "@/lib/reliability/sync";
 
 const manageSubscriptionSchema = z.object({
-  returnTo: z.string().trim().startsWith("/").default("/subscriptions"),
+  returnTo: z.string().trim().startsWith("/").default("/customers"),
   subscriptionId: z.string().uuid(),
 });
 
@@ -53,17 +54,18 @@ export async function syncSubscriptionAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/subscriptions", {
+    redirectWithMessage("/customers", {
       error: "Subscription id is missing.",
     });
   }
 
   const session = await requireViewerSession();
+  const selectedMode = await getSelectedMollieMode();
   const subscription = await getManagedSubscription(parsed.data.subscriptionId);
 
-  if (!subscription) {
-    redirectWithMessage("/subscriptions", {
-      error: "Subscription not found.",
+  if (!subscription || subscription.mode !== selectedMode) {
+    redirectWithMessage("/customers", {
+      error: "Subscription not found in the selected Mollie mode.",
     });
   }
 
@@ -73,13 +75,12 @@ export async function syncSubscriptionAction(formData: FormData) {
         email: session.user.email ?? null,
         kind: "user",
       },
+      strictMode: true,
     });
 
-    revalidatePath("/subscriptions");
+    revalidatePath("/customers");
     revalidatePath("/payments");
-    revalidatePath("/alerts");
-    revalidatePath("/settings");
-    revalidatePath(`/customers/${subscription.customerId}`);
+    revalidatePath("/notifications");
     redirectWithMessage(parsed.data.returnTo, {
       notice: "Subscription and payment history refreshed from Mollie.",
     });
@@ -98,17 +99,18 @@ export async function cancelSubscriptionAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/subscriptions", {
+    redirectWithMessage("/customers", {
       error: "Subscription id is missing.",
     });
   }
 
   const session = await requireViewerSession();
+  const selectedMode = await getSelectedMollieMode();
   const subscription = await getManagedSubscription(parsed.data.subscriptionId);
 
-  if (!subscription) {
-    redirectWithMessage("/subscriptions", {
-      error: "Subscription not found.",
+  if (!subscription || subscription.mode !== selectedMode) {
+    redirectWithMessage("/customers", {
+      error: "Subscription not found in the selected Mollie mode.",
     });
   }
 
@@ -176,13 +178,12 @@ export async function cancelSubscriptionAction(formData: FormData) {
         email: session.user.email ?? null,
         kind: "user",
       },
+      strictMode: true,
     });
 
-    revalidatePath("/subscriptions");
+    revalidatePath("/customers");
     revalidatePath("/payments");
-    revalidatePath("/alerts");
-    revalidatePath("/settings");
-    revalidatePath(`/customers/${subscription.customerId}`);
+    revalidatePath("/notifications");
     redirectWithMessage(parsed.data.returnTo, {
       notice: "Future charges stopped. The subscription state was refreshed from Mollie.",
     });

@@ -20,15 +20,21 @@ import {
 } from "@/lib/reliability/sync";
 
 const redirectSchema = z.object({
-  returnTo: z.string().trim().startsWith("/").default("/settings"),
+  returnTo: z.string().trim().startsWith("/").default("/notifications"),
 });
 
 const replayWebhookSchema = redirectSchema.extend({
   webhookEventId: z.string().uuid(),
 });
 
+const updateAlertStatusSchema = redirectSchema.extend({
+  alertId: z.string().uuid(),
+  status: z.enum(["open", "acknowledged", "resolved"]),
+});
+
 type StoredWebhookEvent = {
   id: string;
+  mode: "live" | "test";
   resourceId: string | null;
   resourceType: string | null;
 };
@@ -63,12 +69,30 @@ function serializeError(error: unknown) {
   return "Something went wrong while processing the reliability task.";
 }
 
-async function processStoredWebhookResource(resourceId: string) {
+const alertModeExpression = sql<"live" | "test" | null>`
+  coalesce(
+    p.mode,
+    s.mode,
+    c.mode,
+    case
+      when a.payload ->> 'mode' in ('test', 'live')
+        then (a.payload ->> 'mode')::mollie_mode
+      else null
+    end
+  )
+`;
+
+async function processStoredWebhookResource(
+  resourceId: string,
+  mode: "live" | "test",
+) {
   if (resourceId.startsWith("tr_")) {
     return syncPaymentByMollieId(resourceId, {
       actor: {
         kind: "system",
       },
+      preferredMode: mode,
+      strictMode: true,
     });
   }
 
@@ -77,6 +101,8 @@ async function processStoredWebhookResource(resourceId: string) {
       actor: {
         kind: "system",
       },
+      preferredMode: mode,
+      strictMode: true,
     });
   }
 
@@ -85,10 +111,44 @@ async function processStoredWebhookResource(resourceId: string) {
       actor: {
         kind: "system",
       },
+      preferredMode: mode,
+      strictMode: true,
     });
   }
 
   throw new Error("Unsupported webhook resource id.");
+}
+
+async function updateAlertStatus(
+  alertId: string,
+  status: "open" | "acknowledged" | "resolved",
+  mode: "live" | "test",
+) {
+  await getDb().execute(sql`
+      update alerts
+      set
+        status = ${status},
+        acknowledged_at = case
+          when ${status} in ('acknowledged', 'resolved')
+            then coalesce(acknowledged_at, now())
+          else null
+        end,
+        resolved_at = case
+          when ${status} = 'resolved'
+            then coalesce(resolved_at, now())
+          else null
+        end,
+        updated_at = now()
+      where id = ${alertId}
+        and id in (
+          select a.id
+          from alerts a
+          left join payments p on p.id = a.payment_id
+          left join subscriptions s on s.id = a.subscription_id
+          left join customers c on c.id = coalesce(a.customer_id, p.customer_id, s.customer_id)
+          where ${alertModeExpression} = ${mode}
+        )
+    `);
 }
 
 export async function runReconciliationAction(formData: FormData) {
@@ -97,23 +157,23 @@ export async function runReconciliationAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/settings", {
+    redirectWithMessage("/notifications", {
       error: "Reconciliation target is missing.",
     });
   }
 
   const session = await requireViewerSession();
+  const selectedMode = await getSelectedMollieMode();
 
   try {
     const result = await reconcileOperationalData({
       email: session.user.email ?? null,
       kind: "user",
-    });
+    }, selectedMode);
 
-    revalidatePath("/settings");
-    revalidatePath("/alerts");
+    revalidatePath("/");
+    revalidatePath("/notifications");
     revalidatePath("/payments");
-    revalidatePath("/subscriptions");
     revalidatePath("/customers");
     redirectWithMessage(parsed.data.returnTo, {
       notice: `Reconciliation complete. Checked ${result.subscriptionsChecked} subscriptions, ${result.paymentLinksChecked} payment links, and ${result.firstPaymentsChecked} first payments.`,
@@ -133,20 +193,23 @@ export async function replayWebhookEventAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/settings", {
+    redirectWithMessage("/notifications", {
       error: "Webhook event id is missing.",
     });
   }
 
   await requireViewerSession();
+  const selectedMode = await getSelectedMollieMode();
 
   const result = await getDb().execute<StoredWebhookEvent>(sql`
       select
         id,
+        mode,
         resource_id as "resourceId",
         resource_type as "resourceType"
       from webhook_events
       where id = ${parsed.data.webhookEventId}
+        and mode = ${selectedMode}
       limit 1
     `);
   const event = result.rows[0];
@@ -158,7 +221,7 @@ export async function replayWebhookEventAction(formData: FormData) {
   }
 
   try {
-    await processStoredWebhookResource(event.resourceId);
+    await processStoredWebhookResource(event.resourceId, event.mode);
 
     await getDb().execute(sql`
         update webhook_events
@@ -171,10 +234,9 @@ export async function replayWebhookEventAction(formData: FormData) {
         where id = ${event.id}
       `);
 
-    revalidatePath("/settings");
-    revalidatePath("/alerts");
+    revalidatePath("/notifications");
     revalidatePath("/payments");
-    revalidatePath("/subscriptions");
+    revalidatePath("/customers");
     redirectWithMessage(parsed.data.returnTo, {
       notice: "Webhook event replayed successfully.",
     });
@@ -202,7 +264,7 @@ export async function sendTestAlertAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/settings", {
+    redirectWithMessage("/notifications", {
       error: "Notification target is missing.",
     });
   }
@@ -270,6 +332,7 @@ export async function sendTestAlertAction(formData: FormData) {
       },
       entityId: alertId,
       entityType: "alert",
+      mode: selectedMode,
       outcome: delivered ? "success" : "failure",
       summary: delivered
         ? "Sent a manual SMTP test alert."
@@ -282,8 +345,7 @@ export async function sendTestAlertAction(formData: FormData) {
     },
   );
 
-  revalidatePath("/settings");
-  revalidatePath("/alerts");
+  revalidatePath("/notifications");
 
   if (!delivered) {
     redirectWithMessage(parsed.data.returnTo, {
@@ -294,6 +356,90 @@ export async function sendTestAlertAction(formData: FormData) {
   }
 
   redirectWithMessage(parsed.data.returnTo, {
-    notice: "Test alert sent. Check your inbox and the Alerts page.",
+    notice: "Test alert sent. Check your inbox and the notifications page.",
   });
+}
+
+export async function setAlertStatusAction(formData: FormData) {
+  const parsed = updateAlertStatusSchema.safeParse({
+    alertId: formData.get("alertId"),
+    returnTo: formData.get("returnTo") || undefined,
+    status: formData.get("status"),
+  });
+
+  if (!parsed.success) {
+    redirectWithMessage("/notifications", {
+      error: "Alert update details are missing.",
+    });
+  }
+
+  await requireViewerSession();
+  const selectedMode = await getSelectedMollieMode();
+  await updateAlertStatus(parsed.data.alertId, parsed.data.status, selectedMode);
+
+  revalidatePath("/");
+  revalidatePath("/notifications");
+  redirect(parsed.data.returnTo);
+}
+
+export async function markAllAlertsReadAction(formData: FormData) {
+  const parsed = redirectSchema.safeParse({
+    returnTo: formData.get("returnTo") || undefined,
+  });
+
+  if (!parsed.success) {
+    redirectWithMessage("/notifications", {
+      error: "Notification target is missing.",
+    });
+  }
+
+  await requireViewerSession();
+  const selectedMode = await getSelectedMollieMode();
+
+  await getDb().execute(sql`
+      update alerts
+      set
+        status = 'acknowledged',
+        acknowledged_at = coalesce(acknowledged_at, now()),
+        updated_at = now()
+      where status = 'open'
+        and id in (
+          select a.id
+          from alerts a
+          left join payments p on p.id = a.payment_id
+          left join subscriptions s on s.id = a.subscription_id
+          left join customers c on c.id = coalesce(a.customer_id, p.customer_id, s.customer_id)
+          where ${alertModeExpression} = ${selectedMode}
+        )
+    `);
+
+  revalidatePath("/");
+  revalidatePath("/notifications");
+  redirect(parsed.data.returnTo);
+}
+
+export async function openAlertAction(formData: FormData) {
+  const parsed = z
+    .object({
+      alertId: z.string().uuid(),
+      redirectTo: z.string().trim().startsWith("/"),
+    })
+    .safeParse({
+      alertId: formData.get("alertId"),
+      redirectTo: formData.get("redirectTo"),
+    });
+
+  if (!parsed.success) {
+    redirectWithMessage("/notifications", {
+      error: "Alert target is missing.",
+    });
+  }
+
+  await requireViewerSession();
+  const selectedMode = await getSelectedMollieMode();
+  await updateAlertStatus(parsed.data.alertId, "acknowledged", selectedMode);
+
+  revalidatePath("/");
+  revalidatePath("/notifications");
+  redirect(parsed.data.redirectTo);
 }

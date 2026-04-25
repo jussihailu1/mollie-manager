@@ -2,11 +2,13 @@ const moneyFormatters = new Map<string, Intl.NumberFormat>();
 
 const dateFormatter = new Intl.DateTimeFormat("nl-NL", {
   dateStyle: "medium",
+  timeZone: "Europe/Amsterdam",
 });
 
 const dateTimeFormatter = new Intl.DateTimeFormat("nl-NL", {
   dateStyle: "medium",
   timeStyle: "short",
+  timeZone: "Europe/Amsterdam",
 });
 
 function parseDate(value: string) {

@@ -18,6 +18,13 @@ import {
 
 export const mollieModeEnum = pgEnum("mollie_mode", ["test", "live"]);
 
+export const eboekhoudenLinkStatusEnum = pgEnum("eboekhouden_link_status", [
+  "linked",
+  "unlinked",
+  "needs_review",
+  "sync_error",
+]);
+
 export const subscriptionLifecycleStateEnum = pgEnum(
   "subscription_lifecycle_state",
   [
@@ -70,6 +77,21 @@ export const customers = pgTable(
     id: text("id").primaryKey(),
     mode: mollieModeEnum("mode").notNull(),
     mollieCustomerId: text("mollie_customer_id"),
+    eboekhoudenRelationId: integer("eboekhouden_relation_id"),
+    eboekhoudenRelationCode: text("eboekhouden_relation_code"),
+    eboekhoudenLinkStatus: eboekhoudenLinkStatusEnum(
+      "eboekhouden_link_status",
+    )
+      .notNull()
+      .default("unlinked"),
+    eboekhoudenSyncedAt: timestamp("eboekhouden_synced_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    eboekhoudenRelationSnapshot: jsonb("eboekhouden_relation_snapshot")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     fullName: text("full_name"),
     email: text("email").notNull(),
     locale: text("locale").notNull().default("nl_NL"),
@@ -100,7 +122,15 @@ export const customers = pgTable(
       table.mode,
       table.mollieCustomerId,
     ),
+    unique("customers_mode_eboekhouden_relation_id_key").on(
+      table.mode,
+      table.eboekhoudenRelationId,
+    ),
     index("customers_mode_email_idx").on(table.mode, table.email),
+    index("customers_mode_eboekhouden_link_status_idx").on(
+      table.mode,
+      table.eboekhoudenLinkStatus,
+    ),
   ],
 );
 

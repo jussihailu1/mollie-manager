@@ -15,32 +15,65 @@ import { writeAuditLog } from "@/lib/audit";
 import { requireViewerSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { transaction, type DbTransaction } from "@/lib/db";
-import { env } from "@/lib/env";
+import {
+  getEboekhoudenRelation,
+  toPublicEboekhoudenError,
+  updateEboekhoudenRelation,
+} from "@/lib/eboekhouden/client";
+import {
+  localFieldsToRelationPatch,
+  relationToLocalFields,
+  type EboekhoudenRelation,
+  type LocalRelationFields,
+} from "@/lib/eboekhouden/relation-mapping";
 import { getMollieClient, getMollieWebhookUrl } from "@/lib/mollie/client";
 import { getCustomerDetail, type MandateRecord } from "@/lib/onboarding/data";
 import { syncPaymentLinkByMollieId } from "@/lib/reliability/sync";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 
 const createCustomerSchema = z.object({
+  address: z.string().trim().max(240).optional(),
+  businessName: z.string().trim().min(2).max(120),
+  contactName: z.string().trim().min(2).max(120),
   email: z.string().email(),
-  fullName: z.string().trim().min(2).max(120),
+  eboekhoudenRelationId: z.coerce.number().int().positive().optional(),
   notes: z.string().trim().max(1000).optional(),
+  phone: z.string().trim().max(80).optional(),
+  returnTo: z.string().trim().startsWith("/").default("/customers"),
+  source: z.enum(["local", "eboekhouden"]).default("local"),
+});
+
+const linkEboekhoudenRelationSchema = z.object({
+  address: z.string().trim().max(240).optional(),
+  businessName: z.string().trim().min(2).max(120),
+  contactName: z.string().trim().min(2).max(120),
+  customerId: z.string().uuid(),
+  email: z.string().email(),
+  eboekhoudenRelationId: z.coerce.number().int().positive(),
+  notes: z.string().trim().max(1000).optional(),
+  phone: z.string().trim().max(80).optional(),
+  returnTo: z.string().trim().startsWith("/").default("/customers"),
 });
 
 const createFirstPaymentSchema = z.object({
   amountValue: z.string().trim().min(1),
   customerId: z.string().uuid(),
   description: z.string().trim().min(2).max(140),
+  returnTo: z.string().trim().startsWith("/").default("/customers"),
 });
 
 const syncCustomerSchema = z.object({
   customerId: z.string().uuid(),
+  returnTo: z.string().trim().startsWith("/").default("/customers"),
 });
 
 const createSubscriptionSchema = z.object({
   amountValue: z.string().trim().min(1),
   customerId: z.string().uuid(),
   description: z.string().trim().min(2).max(140),
+  interval: z.enum(["weekly", "monthly", "yearly"]).default("monthly"),
+  returnTo: z.string().trim().startsWith("/").default("/customers"),
+  startDate: z.string().trim().optional(),
 });
 
 const renewableFirstPaymentLinkStatuses = new Set([
@@ -66,21 +99,35 @@ function buildPath(pathname: string, params?: URLSearchParams) {
   return search ? `${pathname}?${search}` : pathname;
 }
 
+function updatePath(
+  pathname: string,
+  updates: Record<string, string | null | undefined>,
+) {
+  const [basePath, existingSearch] = pathname.split("?", 2);
+  const params = new URLSearchParams(existingSearch ?? "");
+
+  for (const [key, value] of Object.entries(updates)) {
+    if (value === null || value === undefined || value.length === 0) {
+      params.delete(key);
+      continue;
+    }
+
+    params.set(key, value);
+  }
+
+  return buildPath(basePath, params);
+}
+
 function redirectWithMessage(
   pathname: string,
   options: { error?: string; notice?: string },
 ): never {
-  const params = new URLSearchParams();
-
-  if (options.notice) {
-    params.set("notice", options.notice);
-  }
-
-  if (options.error) {
-    params.set("error", options.error);
-  }
-
-  redirect(buildPath(pathname, params));
+  redirect(
+    updatePath(pathname, {
+      error: options.error,
+      notice: options.notice,
+    }),
+  );
 }
 
 function normalizeAmountValue(value: string) {
@@ -101,9 +148,98 @@ function serializeError(error: unknown) {
   return "Something went wrong while talking to Mollie.";
 }
 
-async function getLocalCustomer(customerId: string) {
-  const detail = await getCustomerDetail(customerId);
+function serializeIntegrationError(error: unknown) {
+  const eboekhoudenError = toPublicEboekhoudenError(error);
+
+  if (eboekhoudenError.code !== "unknown_error") {
+    return eboekhoudenError.message.slice(0, 180);
+  }
+
+  return serializeError(error);
+}
+
+function toRelationFields(data: {
+  address?: string;
+  businessName: string;
+  contactName: string;
+  email: string;
+  notes?: string;
+  phone?: string;
+}): LocalRelationFields {
+  return {
+    address: data.address ?? "",
+    businessName: data.businessName,
+    contactName: data.contactName,
+    email: data.email,
+    notes: data.notes ?? "",
+    phone: data.phone ?? "",
+  };
+}
+
+function shouldPatchRelation(
+  relation: EboekhoudenRelation,
+  fields: LocalRelationFields,
+) {
+  const existingFields = relationToLocalFields(relation);
+
+  return Object.entries(fields).some(([field, value]) => {
+    const currentValue = existingFields[field as keyof LocalRelationFields];
+    return value.trim().length > 0 && currentValue.trim() !== value.trim();
+  });
+}
+
+async function updateRelationFromLocalFields(
+  relationId: number,
+  fields: LocalRelationFields,
+) {
+  const relation = await getEboekhoudenRelation(relationId);
+
+  if (!shouldPatchRelation(relation, fields)) {
+    return relation;
+  }
+
+  await updateEboekhoudenRelation(
+    relationId,
+    localFieldsToRelationPatch(fields, relation),
+  );
+
+  return getEboekhoudenRelation(relationId);
+}
+
+async function getLocalCustomer(customerId: string, mode: "live" | "test") {
+  const detail = await getCustomerDetail(customerId, mode);
   return detail?.customer ?? null;
+}
+
+async function assertRelationIsAvailable(
+  relationId: number,
+  mode: "live" | "test",
+  excludeCustomerId?: string,
+) {
+  const existing = await transaction(async (client) => {
+    const result = excludeCustomerId
+      ? await client.execute<{ id: string }>(sql`
+          select id
+          from customers
+          where mode = ${mode}
+            and eboekhouden_relation_id = ${relationId}
+            and id <> ${excludeCustomerId}
+          limit 1
+        `)
+      : await client.execute<{ id: string }>(sql`
+        select id
+        from customers
+        where mode = ${mode}
+          and eboekhouden_relation_id = ${relationId}
+        limit 1
+      `);
+
+    return result.rows[0] ?? null;
+  });
+
+  if (existing) {
+    throw new Error("This e-Boekhouden relation is already linked to another customer.");
+  }
 }
 
 async function getLocalPayments(customerId: string, client: DbTransaction) {
@@ -232,9 +368,15 @@ function findPreferredMandate(mandates: MandateRecord[]) {
 
 export async function createCustomerAction(formData: FormData) {
   const parsed = createCustomerSchema.safeParse({
+    address: formData.get("address") || undefined,
+    businessName: formData.get("businessName"),
+    contactName: formData.get("contactName"),
     email: formData.get("email"),
-    fullName: formData.get("fullName"),
+    eboekhoudenRelationId: formData.get("eboekhoudenRelationId") || undefined,
     notes: formData.get("notes") || undefined,
+    phone: formData.get("phone") || undefined,
+    returnTo: formData.get("returnTo") || undefined,
+    source: formData.get("source") || "local",
   });
 
   if (!parsed.success) {
@@ -248,15 +390,34 @@ export async function createCustomerAction(formData: FormData) {
   try {
     const localCustomerId = crypto.randomUUID();
     const selectedMode = await getSelectedMollieMode();
+    const relationFields = toRelationFields(parsed.data);
+    const relationIdToLink =
+      parsed.data.source === "eboekhouden"
+        ? parsed.data.eboekhoudenRelationId
+        : undefined;
+
+    if (relationIdToLink) {
+      await assertRelationIsAvailable(relationIdToLink, selectedMode);
+    }
+
+    const linkedRelation =
+      relationIdToLink
+        ? await updateRelationFromLocalFields(relationIdToLink, relationFields)
+        : null;
+
     const mollie = getMollieClient(selectedMode);
     const createdCustomer = await mollie.customers.create({
       email: parsed.data.email,
       idempotencyKey: crypto.randomUUID(),
       locale: Locale.nl_NL,
       metadata: {
+        address: parsed.data.address ?? null,
+        businessName: parsed.data.businessName,
+        contactName: parsed.data.contactName,
         localCustomerId,
+        phone: parsed.data.phone ?? null,
       },
-      name: parsed.data.fullName,
+      name: parsed.data.businessName,
     });
 
     await transaction(async (client) => {
@@ -265,6 +426,11 @@ export async function createCustomerAction(formData: FormData) {
             id,
             mode,
             mollie_customer_id,
+            eboekhouden_relation_id,
+            eboekhouden_relation_code,
+            eboekhouden_link_status,
+            eboekhouden_synced_at,
+            eboekhouden_relation_snapshot,
             full_name,
             email,
             locale,
@@ -275,14 +441,23 @@ export async function createCustomerAction(formData: FormData) {
             last_synced_at
           ) values (
             ${localCustomerId},
-            ${createdCustomer.mode},
+            ${selectedMode},
             ${createdCustomer.id},
-            ${parsed.data.fullName},
+            ${linkedRelation?.id ?? null},
+            ${linkedRelation?.code ?? null},
+            ${linkedRelation ? "linked" : "unlinked"}::eboekhouden_link_status,
+            ${linkedRelation ? sql`now()` : null},
+            ${JSON.stringify(linkedRelation ?? {})}::jsonb,
+            ${parsed.data.businessName},
             ${parsed.data.email},
             ${createdCustomer.locale ?? "nl_NL"},
             ${parsed.data.notes ?? null},
             ${JSON.stringify({
+              address: parsed.data.address ?? null,
+              businessName: parsed.data.businessName,
+              contactName: parsed.data.contactName,
               mollieCreatedAt: createdCustomer.createdAt,
+              phone: parsed.data.phone ?? null,
             })}::jsonb,
             now(),
             now(),
@@ -292,29 +467,144 @@ export async function createCustomerAction(formData: FormData) {
 
       await writeAuditLog(
         {
-          action: "customer.create",
+          action: linkedRelation ? "customer.create_from_eboekhouden" : "customer.create",
           details: {
+            eboekhoudenRelationId: linkedRelation?.id ?? null,
             localCustomerId,
             mollieCustomerId: createdCustomer.id,
           },
           entityId: localCustomerId,
           entityType: "customer",
-          mode: createdCustomer.mode,
+          mode: selectedMode,
           outcome: "success",
-          summary: "Created customer in Mollie and stored it locally.",
+          summary: linkedRelation
+            ? "Imported an e-Boekhouden relation, created a Mollie customer, and stored the local bridge."
+            : "Created customer in Mollie and stored it locally.",
         },
         client,
       );
     });
 
+    const returnTo = updatePath(parsed.data.returnTo, {
+      focus: localCustomerId,
+    });
+
+    revalidatePath("/");
     revalidatePath("/customers");
-    redirectWithMessage(`/customers/${localCustomerId}`, {
-      notice: "Customer created. You can now generate the first payment link.",
+    revalidatePath("/payments");
+    redirectWithMessage(returnTo, {
+      notice: linkedRelation
+        ? "Customer imported from e-Boekhouden. You can now generate the first payment link."
+        : "Customer created as unlinked from e-Boekhouden. You can now generate the first payment link.",
     });
   } catch (error) {
     unstable_rethrow(error);
     redirectWithMessage("/customers", {
-      error: serializeError(error),
+      error: serializeIntegrationError(error),
+    });
+  }
+}
+
+export async function linkEboekhoudenRelationAction(formData: FormData) {
+  const parsed = linkEboekhoudenRelationSchema.safeParse({
+    address: formData.get("address") || undefined,
+    businessName: formData.get("businessName"),
+    contactName: formData.get("contactName"),
+    customerId: formData.get("customerId"),
+    email: formData.get("email"),
+    eboekhoudenRelationId: formData.get("eboekhoudenRelationId"),
+    notes: formData.get("notes") || undefined,
+    phone: formData.get("phone") || undefined,
+    returnTo: formData.get("returnTo") || undefined,
+  });
+
+  if (!parsed.success) {
+    redirectWithMessage("/customers", {
+      error: parsed.error.issues[0]?.message ?? "Enter valid customer details.",
+    });
+  }
+
+  const session = await requireViewerSession();
+  const selectedMode = await getSelectedMollieMode();
+  const returnTo = updatePath(parsed.data.returnTo, {
+    focus: parsed.data.customerId,
+  });
+  const customer = await getLocalCustomer(parsed.data.customerId, selectedMode);
+
+  if (!customer) {
+    redirectWithMessage(returnTo, {
+      error: "Customer not found in the selected Mollie mode.",
+    });
+  }
+
+  try {
+    await assertRelationIsAvailable(
+      parsed.data.eboekhoudenRelationId,
+      selectedMode,
+      customer.id,
+    );
+
+    const relationFields = toRelationFields(parsed.data);
+    const linkedRelation = await updateRelationFromLocalFields(
+      parsed.data.eboekhoudenRelationId,
+      relationFields,
+    );
+
+    await transaction(async (client) => {
+      await client.execute(sql`
+          update customers
+          set
+            eboekhouden_relation_id = ${linkedRelation.id},
+            eboekhouden_relation_code = ${linkedRelation.code ?? null},
+            eboekhouden_link_status = 'linked',
+            eboekhouden_synced_at = now(),
+            eboekhouden_relation_snapshot = ${JSON.stringify(linkedRelation)}::jsonb,
+            full_name = ${parsed.data.businessName},
+            email = ${parsed.data.email},
+            notes = ${parsed.data.notes ?? null},
+            metadata = metadata || ${JSON.stringify({
+              address: parsed.data.address ?? null,
+              businessName: parsed.data.businessName,
+              contactName: parsed.data.contactName,
+              phone: parsed.data.phone ?? null,
+            })}::jsonb,
+            updated_at = now(),
+            last_synced_at = now()
+          where id = ${customer.id}
+            and mode = ${selectedMode}
+        `);
+
+      await writeAuditLog(
+        {
+          action: "customer.eboekhouden.link",
+          details: {
+            eboekhoudenRelationId: linkedRelation.id,
+            localCustomerId: customer.id,
+          },
+          entityId: customer.id,
+          entityType: "customer",
+          mode: selectedMode,
+          outcome: "success",
+          summary: "Linked local customer to an e-Boekhouden relation.",
+        },
+        client,
+        {
+          email: session.user.email ?? null,
+          kind: "user",
+        },
+      );
+    });
+
+    revalidatePath("/");
+    revalidatePath("/customers");
+    revalidatePath("/payments");
+    redirectWithMessage(returnTo, {
+      notice: "Customer linked to e-Boekhouden.",
+    });
+  } catch (error) {
+    unstable_rethrow(error);
+    redirectWithMessage(returnTo, {
+      error: serializeIntegrationError(error),
     });
   }
 }
@@ -324,6 +614,7 @@ export async function createFirstPaymentAction(formData: FormData) {
     amountValue: formData.get("amountValue"),
     customerId: formData.get("customerId"),
     description: formData.get("description"),
+    returnTo: formData.get("returnTo") || undefined,
   });
 
   if (!parsed.success) {
@@ -334,16 +625,20 @@ export async function createFirstPaymentAction(formData: FormData) {
 
   await requireViewerSession();
 
-  const customer = await getLocalCustomer(parsed.data.customerId);
+  const selectedMode = await getSelectedMollieMode();
+  const customer = await getLocalCustomer(parsed.data.customerId, selectedMode);
+  const returnTo = updatePath(parsed.data.returnTo, {
+    focus: parsed.data.customerId,
+  });
 
   if (!customer || !customer.mollieCustomerId) {
     redirectWithMessage("/customers", {
-      error: "Customer not found or not linked to Mollie.",
+      error: "Customer not found in the selected Mollie mode or not linked to Mollie.",
     });
   }
   const mollieCustomerId = customer.mollieCustomerId;
 
-  const detail = await getCustomerDetail(customer.id);
+  const detail = await getCustomerDetail(customer.id, selectedMode);
   const existingFirstPayment = detail?.payments.find(
     (payment) =>
       payment.paymentType === "first" &&
@@ -357,7 +652,7 @@ export async function createFirstPaymentAction(formData: FormData) {
   );
 
   if (existingFirstPayment) {
-    redirectWithMessage(`/customers/${customer.id}`, {
+    redirectWithMessage(returnTo, {
       error:
         existingFirstPayment.mollieStatus === "paid"
           ? "A paid first payment already exists for this customer."
@@ -366,7 +661,7 @@ export async function createFirstPaymentAction(formData: FormData) {
   }
 
   if (existingFirstPaymentLink) {
-    redirectWithMessage(`/customers/${customer.id}`, {
+    redirectWithMessage(returnTo, {
       error:
         existingFirstPaymentLink.mollieStatus === "paid"
           ? "A paid first payment link already exists for this customer. Sync it before creating another one."
@@ -376,7 +671,7 @@ export async function createFirstPaymentAction(formData: FormData) {
 
   try {
     const amountValue = normalizeAmountValue(parsed.data.amountValue);
-    const mollie = getMollieClient(customer.mode);
+    const mollie = getMollieClient(selectedMode);
     const localPaymentLinkId = crypto.randomUUID();
     const webhookUrl = getMollieWebhookUrl();
     const paymentLink = await mollie.paymentLinks.create({
@@ -422,7 +717,7 @@ export async function createFirstPaymentAction(formData: FormData) {
           ) values (
             ${localPaymentLinkId},
             ${customer.id},
-            ${paymentLink.mode},
+            ${selectedMode},
             ${paymentLink.id},
             ${paymentLinkStatus},
             ${paymentLink.description},
@@ -456,7 +751,7 @@ export async function createFirstPaymentAction(formData: FormData) {
           },
           entityId: localPaymentLinkId,
           entityType: "payment_link",
-          mode: paymentLink.mode,
+          mode: selectedMode,
           outcome: "success",
           summary: "Created a durable first-payment link for mandate setup.",
         },
@@ -464,14 +759,16 @@ export async function createFirstPaymentAction(formData: FormData) {
       );
     });
 
-    revalidatePath(`/customers/${customer.id}`);
+    revalidatePath("/");
     revalidatePath("/customers");
-    redirectWithMessage(`/customers/${customer.id}`, {
-      notice: "First payment link created. Share the durable Mollie Payment Link URL with the customer.",
+    revalidatePath("/payments");
+    redirectWithMessage(returnTo, {
+      notice:
+        "First payment link created. Share the durable Mollie Payment Link URL with the customer.",
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(`/customers/${customer.id}`, {
+    redirectWithMessage(returnTo, {
       error: serializeError(error),
     });
   }
@@ -480,6 +777,7 @@ export async function createFirstPaymentAction(formData: FormData) {
 export async function syncCustomerBillingStateAction(formData: FormData) {
   const parsed = syncCustomerSchema.safeParse({
     customerId: formData.get("customerId"),
+    returnTo: formData.get("returnTo") || undefined,
   });
 
   if (!parsed.success) {
@@ -490,18 +788,22 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
 
   const session = await requireViewerSession();
 
-  const customer = await getLocalCustomer(parsed.data.customerId);
+  const selectedMode = await getSelectedMollieMode();
+  const customer = await getLocalCustomer(parsed.data.customerId, selectedMode);
+  const returnTo = updatePath(parsed.data.returnTo, {
+    focus: parsed.data.customerId,
+  });
 
   if (!customer || !customer.mollieCustomerId) {
     redirectWithMessage("/customers", {
-      error: "Customer not found or not linked to Mollie.",
+      error: "Customer not found in the selected Mollie mode or not linked to Mollie.",
     });
   }
   const mollieCustomerId = customer.mollieCustomerId;
-  const customerDetail = await getCustomerDetail(customer.id);
+  const customerDetail = await getCustomerDetail(customer.id, selectedMode);
 
   try {
-    const mollie = getMollieClient(customer.mode);
+    const mollie = getMollieClient(selectedMode);
     const mandates = await mollie.customerMandates.page({
       customerId: mollieCustomerId,
     });
@@ -595,19 +897,21 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
           email: session.user.email ?? null,
           kind: "user",
         },
-        preferredMode: customer.mode,
+        preferredMode: selectedMode,
+        strictMode: true,
       });
     }
 
-    revalidatePath(`/customers/${customer.id}`);
+    revalidatePath("/");
     revalidatePath("/customers");
-    revalidatePath("/subscriptions");
-    redirectWithMessage(`/customers/${customer.id}`, {
+    revalidatePath("/payments");
+    revalidatePath("/notifications");
+    redirectWithMessage(returnTo, {
       notice: "Customer state refreshed from Mollie.",
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(`/customers/${customer.id}`, {
+    redirectWithMessage(returnTo, {
       error: serializeError(error),
     });
   }
@@ -618,21 +922,28 @@ export async function createSubscriptionAction(formData: FormData) {
     amountValue: formData.get("amountValue"),
     customerId: formData.get("customerId"),
     description: formData.get("description"),
+    interval: formData.get("interval") || undefined,
+    returnTo: formData.get("returnTo") || undefined,
+    startDate: formData.get("startDate") || undefined,
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/subscriptions", {
+    redirectWithMessage("/customers", {
       error: parsed.error.issues[0]?.message ?? "Enter a valid subscription.",
     });
   }
 
   await requireViewerSession();
 
-  const detail = await getCustomerDetail(parsed.data.customerId);
+  const selectedMode = await getSelectedMollieMode();
+  const detail = await getCustomerDetail(parsed.data.customerId, selectedMode);
+  const returnTo = updatePath(parsed.data.returnTo, {
+    focus: parsed.data.customerId,
+  });
 
   if (!detail || !detail.customer.mollieCustomerId) {
     redirectWithMessage("/customers", {
-      error: "Customer not found or not linked to Mollie.",
+      error: "Customer not found in the selected Mollie mode or not linked to Mollie.",
     });
   }
   const mollieCustomerId = detail.customer.mollieCustomerId;
@@ -649,20 +960,20 @@ export async function createSubscriptionAction(formData: FormData) {
   );
 
   if (!latestPaidFirstPayment) {
-    redirectWithMessage(`/customers/${detail.customer.id}`, {
+    redirectWithMessage(returnTo, {
       error: "A successful first payment is required before creating the subscription.",
     });
   }
 
   if (!preferredMandate) {
-    redirectWithMessage(`/customers/${detail.customer.id}`, {
+    redirectWithMessage(returnTo, {
       error:
         "No pending or valid direct debit mandate is available yet. Sync the customer first.",
     });
   }
 
   if (existingSubscription) {
-    redirectWithMessage(`/customers/${detail.customer.id}`, {
+    redirectWithMessage(returnTo, {
       error:
         "This customer already has a local subscription record in progress or active. Review it before creating another one.",
     });
@@ -670,8 +981,16 @@ export async function createSubscriptionAction(formData: FormData) {
 
   try {
     const amountValue = normalizeAmountValue(parsed.data.amountValue);
-    const startDate = toNextMonthlyStartDate(latestPaidFirstPayment.paidAt!);
-    const mollie = getMollieClient(detail.customer.mode);
+    const startDate = parsed.data.startDate?.length
+      ? parsed.data.startDate
+      : toNextMonthlyStartDate(latestPaidFirstPayment.paidAt!);
+    const intervalMap = {
+      monthly: "1 month",
+      weekly: "1 week",
+      yearly: "12 months",
+    } as const;
+    const mollieInterval = intervalMap[parsed.data.interval];
+    const mollie = getMollieClient(selectedMode);
     const localSubscriptionId = crypto.randomUUID();
     const subscription = await mollie.customerSubscriptions.create({
       amount: {
@@ -681,7 +1000,7 @@ export async function createSubscriptionAction(formData: FormData) {
       customerId: mollieCustomerId,
       description: parsed.data.description,
       idempotencyKey: crypto.randomUUID(),
-      interval: "1 month",
+      interval: mollieInterval,
       mandateId: preferredMandate.mollieMandateId,
       metadata: {
         customerId: detail.customer.id,
@@ -716,7 +1035,7 @@ export async function createSubscriptionAction(formData: FormData) {
             ${localSubscriptionId},
             ${detail.customer.id},
             ${preferredMandate.id},
-            ${subscription.mode},
+            ${selectedMode},
             ${subscription.id},
             ${mapSubscriptionLifecycle(subscription.status)},
             ${subscription.status},
@@ -724,11 +1043,7 @@ export async function createSubscriptionAction(formData: FormData) {
             ${subscription.interval},
             ${subscription.amount.value},
             ${subscription.amount.currency},
-            ${
-              latestPaidFirstPayment.paidAt
-                ? new Date(latestPaidFirstPayment.paidAt).getUTCDate()
-                : null
-            },
+            ${new Date(startDate).getUTCDate()},
             ${subscription.startDate}::date,
             ${false},
             ${JSON.stringify({
@@ -750,7 +1065,7 @@ export async function createSubscriptionAction(formData: FormData) {
           },
           entityId: localSubscriptionId,
           entityType: "subscription",
-          mode: subscription.mode,
+          mode: selectedMode,
           outcome: "success",
           summary: "Created a monthly subscription from a verified first payment.",
         },
@@ -758,15 +1073,15 @@ export async function createSubscriptionAction(formData: FormData) {
       );
     });
 
-    revalidatePath(`/customers/${detail.customer.id}`);
+    revalidatePath("/");
     revalidatePath("/customers");
-    revalidatePath("/subscriptions");
-    redirectWithMessage(`/customers/${detail.customer.id}`, {
+    revalidatePath("/payments");
+    redirectWithMessage(returnTo, {
       notice: "Subscription created. Future charges are now scheduled in Mollie.",
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(`/customers/${detail.customer.id}`, {
+    redirectWithMessage(returnTo, {
       error: serializeError(error),
     });
   }

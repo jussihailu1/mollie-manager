@@ -12,6 +12,7 @@ export type AlertInboxItem = {
   customerId: string | null;
   customerName: string | null;
   emailSentAt: string | null;
+  href: string;
   id: string;
   message: string;
   paymentId: string | null;
@@ -42,6 +43,17 @@ export type ReliabilitySnapshot = {
   unresolvedAlertCount: number;
 };
 
+export type AuditActivityItem = {
+  action: string;
+  createdAt: string;
+  entityId: string;
+  entityType: string;
+  id: string;
+  mode: "live" | "test" | null;
+  outcome: "failure" | "success";
+  summary: string;
+};
+
 function toModeParam(mode?: DashboardModeFilter) {
   return !mode || mode === "all" ? null : mode;
 }
@@ -59,6 +71,15 @@ const alertModeExpression = sql<"live" | "test" | null>`
   )
 `;
 
+const customerBusinessNameExpression = sql<string | null>`
+  coalesce(
+    nullif(customer.metadata ->> 'businessName', ''),
+    nullif(fallback_customer.metadata ->> 'businessName', ''),
+    customer.full_name,
+    fallback_customer.full_name
+  )
+`;
+
 const listAlertInboxByMode = cache(async (mode: DashboardModeFilter) => {
   const modeParam = toModeParam(mode);
   const result = await getDb().execute<AlertInboxItem>(sql`
@@ -73,8 +94,14 @@ const listAlertInboxByMode = cache(async (mode: DashboardModeFilter) => {
         a.payment_id as "paymentId",
         a.email_sent_at as "emailSentAt",
         a.created_at as "createdAt",
-        coalesce(customer.full_name, fallback_customer.full_name) as "customerName",
+        ${customerBusinessNameExpression} as "customerName",
         coalesce(customer.email, fallback_customer.email) as "customerEmail",
+        case
+          when a.payment_id is not null then concat('/payments?focus=', a.payment_id)
+          when coalesce(customer.id, fallback_customer.id) is not null
+            then concat('/customers?focus=', coalesce(customer.id, fallback_customer.id))
+          else '/notifications'
+        end as "href",
         ${alertModeExpression} as "mode"
       from alerts a
       left join payments p on p.id = a.payment_id
@@ -186,4 +213,31 @@ export async function getReliabilitySnapshot(options?: {
   mode?: DashboardModeFilter;
 }) {
   return getReliabilitySnapshotByMode(options?.mode ?? "all");
+}
+
+const listRecentAuditActivityByMode = cache(async (mode: DashboardModeFilter) => {
+  const modeParam = toModeParam(mode);
+  const result = await getDb().execute<AuditActivityItem>(sql`
+      select
+        id,
+        action,
+        entity_type as "entityType",
+        entity_id as "entityId",
+        mode,
+        outcome,
+        summary,
+        created_at as "createdAt"
+      from audit_logs
+      where (${modeParam}::mollie_mode is null or mode = ${modeParam})
+      order by created_at desc
+      limit 8
+    `);
+
+  return result.rows;
+});
+
+export async function listRecentAuditActivity(options?: {
+  mode?: DashboardModeFilter;
+}) {
+  return listRecentAuditActivityByMode(options?.mode ?? "all");
 }

@@ -12,7 +12,7 @@ export async function GET() {
   ]);
 
   return Response.json({
-    app: "Mollie Manager",
+    app: "Kify",
     currentMode: env.MOLLIE_DEFAULT_MODE,
     phase: "reliability",
     status:

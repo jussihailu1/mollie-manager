@@ -7,7 +7,14 @@ import type { DashboardModeFilter } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
 
 export type CustomerOverview = {
+  address: string | null;
+  businessName: string | null;
+  contactName: string | null;
   createdAt: string;
+  eboekhoudenLinkStatus: "linked" | "unlinked" | "needs_review" | "sync_error";
+  eboekhoudenRelationCode: string | null;
+  eboekhoudenRelationId: number | null;
+  eboekhoudenSyncedAt: string | null;
   email: string;
   fullName: string | null;
   hasValidMandate: boolean;
@@ -26,6 +33,7 @@ export type CustomerOverview = {
   mode: "live" | "test";
   mollieCustomerId: string | null;
   notes: string | null;
+  phone: string | null;
   subscriptionCount: number;
 };
 
@@ -154,6 +162,14 @@ function toModeParam(mode?: DashboardModeFilter) {
   return !mode || mode === "all" ? null : mode;
 }
 
+const customerBusinessNameSelect = sql<string | null>`
+  coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name)
+`;
+
+const customerContactNameSelect = sql<string | null>`
+  coalesce(nullif(c.metadata ->> 'contactName', ''), c.full_name)
+`;
+
 const listCustomersByMode = cache(async (mode: DashboardModeFilter) => {
   const modeParam = toModeParam(mode);
   const result = await getDb().execute<CustomerOverview>(sql`
@@ -161,9 +177,17 @@ const listCustomersByMode = cache(async (mode: DashboardModeFilter) => {
         c.id,
         c.mode,
         c.mollie_customer_id as "mollieCustomerId",
+        c.eboekhouden_relation_id as "eboekhoudenRelationId",
+        c.eboekhouden_relation_code as "eboekhoudenRelationCode",
+        c.eboekhouden_link_status as "eboekhoudenLinkStatus",
+        c.eboekhouden_synced_at as "eboekhoudenSyncedAt",
         c.full_name as "fullName",
+        ${customerBusinessNameSelect} as "businessName",
+        ${customerContactNameSelect} as "contactName",
         c.email,
+        nullif(c.metadata ->> 'address', '') as "address",
         c.notes,
+        nullif(c.metadata ->> 'phone', '') as "phone",
         c.created_at as "createdAt",
         latest_payment.id as "latestFirstPaymentId",
         latest_payment.checkout_url as "latestFirstPaymentCheckoutUrl",
@@ -182,7 +206,7 @@ const listCustomersByMode = cache(async (mode: DashboardModeFilter) => {
       left join lateral (
         select p.*
         from payments p
-        where p.customer_id = c.id and p.payment_type = 'first'
+        where p.customer_id = c.id and p.mode = c.mode and p.payment_type = 'first'
         order by p.created_at desc
         limit 1
       ) latest_payment on true
@@ -191,6 +215,7 @@ const listCustomersByMode = cache(async (mode: DashboardModeFilter) => {
         from payment_links pl
         where
           pl.customer_id = c.id
+          and pl.mode = c.mode
           and pl.metadata ->> 'source' = 'subscription_onboarding'
           and pl.metadata ->> 'paymentType' = 'first'
         order by pl.created_at desc
@@ -199,21 +224,21 @@ const listCustomersByMode = cache(async (mode: DashboardModeFilter) => {
       left join lateral (
         select m.*
         from mandates m
-        where m.customer_id = c.id
+        where m.customer_id = c.id and m.mode = c.mode
         order by m.created_at desc
         limit 1
       ) latest_mandate on true
       left join lateral (
         select s.*
         from subscriptions s
-        where s.customer_id = c.id
+        where s.customer_id = c.id and s.mode = c.mode
         order by s.created_at desc
         limit 1
       ) latest_subscription on true
       left join lateral (
         select count(*) as total
         from subscriptions s
-        where s.customer_id = c.id
+        where s.customer_id = c.id and s.mode = c.mode
       ) subscription_counts on true
       where (${modeParam}::mollie_mode is null or c.mode = ${modeParam})
       order by c.created_at desc
@@ -228,7 +253,11 @@ export async function listCustomers(options?: {
   return listCustomersByMode(options?.mode ?? "all");
 }
 
-export const getCustomerDetail = cache(async (customerId: string) => {
+export const getCustomerDetail = cache(async (
+  customerId: string,
+  mode: DashboardModeFilter = "all",
+) => {
+  const modeParam = toModeParam(mode);
   const [
     customersResult,
     paymentsResult,
@@ -241,9 +270,17 @@ export const getCustomerDetail = cache(async (customerId: string) => {
             c.id,
             c.mode,
             c.mollie_customer_id as "mollieCustomerId",
+            c.eboekhouden_relation_id as "eboekhoudenRelationId",
+            c.eboekhouden_relation_code as "eboekhoudenRelationCode",
+            c.eboekhouden_link_status as "eboekhoudenLinkStatus",
+            c.eboekhouden_synced_at as "eboekhoudenSyncedAt",
             c.full_name as "fullName",
+            ${customerBusinessNameSelect} as "businessName",
+            ${customerContactNameSelect} as "contactName",
             c.email,
+            nullif(c.metadata ->> 'address', '') as "address",
             c.notes,
+            nullif(c.metadata ->> 'phone', '') as "phone",
             c.created_at as "createdAt",
             latest_payment.id as "latestFirstPaymentId",
             latest_payment.checkout_url as "latestFirstPaymentCheckoutUrl",
@@ -262,7 +299,7 @@ export const getCustomerDetail = cache(async (customerId: string) => {
           left join lateral (
             select p.*
             from payments p
-            where p.customer_id = c.id and p.payment_type = 'first'
+            where p.customer_id = c.id and p.mode = c.mode and p.payment_type = 'first'
             order by p.created_at desc
             limit 1
           ) latest_payment on true
@@ -271,6 +308,7 @@ export const getCustomerDetail = cache(async (customerId: string) => {
             from payment_links pl
             where
               pl.customer_id = c.id
+              and pl.mode = c.mode
               and pl.metadata ->> 'source' = 'subscription_onboarding'
               and pl.metadata ->> 'paymentType' = 'first'
             order by pl.created_at desc
@@ -279,23 +317,24 @@ export const getCustomerDetail = cache(async (customerId: string) => {
           left join lateral (
             select m.*
             from mandates m
-            where m.customer_id = c.id
+            where m.customer_id = c.id and m.mode = c.mode
             order by m.created_at desc
             limit 1
           ) latest_mandate on true
           left join lateral (
             select s.*
             from subscriptions s
-            where s.customer_id = c.id
+            where s.customer_id = c.id and s.mode = c.mode
             order by s.created_at desc
             limit 1
           ) latest_subscription on true
           left join lateral (
             select count(*) as total
             from subscriptions s
-            where s.customer_id = c.id
+            where s.customer_id = c.id and s.mode = c.mode
           ) subscription_counts on true
           where c.id = ${customerId}
+            and (${modeParam}::mollie_mode is null or c.mode = ${modeParam})
           limit 1
         `),
       getDb().execute<PaymentRecord>(sql`
@@ -316,6 +355,7 @@ export const getCustomerDetail = cache(async (customerId: string) => {
             p.created_at as "createdAt"
           from payments p
           where p.customer_id = ${customerId}
+            and (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
           order by p.created_at desc
         `),
       getDb().execute<PaymentLinkRecord>(sql`
@@ -333,6 +373,7 @@ export const getCustomerDetail = cache(async (customerId: string) => {
           from payment_links pl
           where
             pl.customer_id = ${customerId}
+            and (${modeParam}::mollie_mode is null or pl.mode = ${modeParam})
             and pl.metadata ->> 'source' = 'subscription_onboarding'
             and pl.metadata ->> 'paymentType' = 'first'
           order by pl.created_at desc
@@ -348,6 +389,7 @@ export const getCustomerDetail = cache(async (customerId: string) => {
             m.created_at as "createdAt"
           from mandates m
           where m.customer_id = ${customerId}
+            and (${modeParam}::mollie_mode is null or m.mode = ${modeParam})
           order by m.created_at desc
         `),
       getDb().execute<SubscriptionRecord>(sql`
@@ -368,6 +410,7 @@ export const getCustomerDetail = cache(async (customerId: string) => {
             s.created_at as "createdAt"
           from subscriptions s
           where s.customer_id = ${customerId}
+            and (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
           order by s.created_at desc
         `),
     ]);
@@ -419,10 +462,10 @@ const listSubscriptionsByMode = cache(async (mode: DashboardModeFilter) => {
         s.mode,
         s.mollie_subscription_id as "mollieSubscriptionId",
         c.id as "customerId",
-        c.full_name as "customerName",
+        coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail"
       from subscriptions s
-      inner join customers c on c.id = s.customer_id
+      inner join customers c on c.id = s.customer_id and c.mode = s.mode
       where (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
       order by s.created_at desc
     `);
@@ -455,13 +498,13 @@ const listPaymentsByMode = cache(async (mode: DashboardModeFilter) => {
         p.created_at as "createdAt",
         p.mandate_id as "mandateId",
         c.id as "customerId",
-        c.full_name as "customerName",
+        coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail",
         s.id as "subscriptionId",
         s.description as "subscriptionDescription"
       from payments p
-      left join customers c on c.id = p.customer_id
-      left join subscriptions s on s.id = p.subscription_id
+      left join customers c on c.id = p.customer_id and c.mode = p.mode
+      left join subscriptions s on s.id = p.subscription_id and s.mode = p.mode
       where (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
       order by
         coalesce(p.paid_at, p.failed_at, p.created_at) desc,
@@ -477,7 +520,8 @@ export async function listPayments(options?: {
   return listPaymentsByMode(options?.mode ?? "all");
 }
 
-export const listOperationalAlerts = cache(async () => {
+const listOperationalAlertsByMode = cache(async (mode: DashboardModeFilter) => {
+  const modeParam = toModeParam(mode);
   const result = await getDb().execute<OperationalAlert>(sql`
     select
       p.id,
@@ -500,12 +544,14 @@ export const listOperationalAlerts = cache(async () => {
       end as "summary",
       coalesce(p.disputed_at, p.failed_at, p.created_at) as "createdAt",
       c.id as "customerId",
-      c.full_name as "customerName",
+      coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
       c.email as "customerEmail",
       concat('/payments?focus=', p.id) as "href"
     from payments p
     left join customers c on c.id = p.customer_id
-    where p.disputed_at is not null or p.mollie_status in ('failed', 'expired')
+    where
+      (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
+      and (p.disputed_at is not null or p.mollie_status in ('failed', 'expired'))
 
     union all
 
@@ -526,15 +572,23 @@ export const listOperationalAlerts = cache(async () => {
       end as "summary",
       s.updated_at as "createdAt",
       c.id as "customerId",
-      c.full_name as "customerName",
+      coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
       c.email as "customerEmail",
-      concat('/subscriptions?focus=', s.id) as "href"
+      concat('/customers?focus=', c.id) as "href"
     from subscriptions s
     inner join customers c on c.id = s.customer_id
-    where s.local_status in ('payment_action_required', 'out_of_sync')
+    where
+      (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
+      and s.local_status in ('payment_action_required', 'out_of_sync')
 
     order by "createdAt" desc
   `);
 
   return result.rows;
 });
+
+export async function listOperationalAlerts(options?: {
+  mode?: DashboardModeFilter;
+}) {
+  return listOperationalAlertsByMode(options?.mode ?? "all");
+}
