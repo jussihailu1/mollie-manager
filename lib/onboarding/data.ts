@@ -11,6 +11,7 @@ export type CustomerOverview = {
   businessName: string | null;
   contactName: string | null;
   createdAt: string;
+  archivedAt: string | null;
   eboekhoudenLinkStatus: "linked" | "unlinked" | "needs_review" | "sync_error";
   eboekhoudenRelationCode: string | null;
   eboekhoudenRelationId: number | null;
@@ -29,7 +30,15 @@ export type CustomerOverview = {
   latestMandateId: string | null;
   latestMandateStatus: string | null;
   latestSubscriptionId: string | null;
+  latestSubscriptionAmountCurrency: string | null;
+  latestSubscriptionAmountValue: string | null;
+  latestSubscriptionDescription: string | null;
+  latestSubscriptionInterval: string | null;
+  latestSubscriptionMollieStatus: string | null;
+  latestSubscriptionNextPaymentDate: string | null;
+  latestSubscriptionStartDate: string | null;
   latestSubscriptionStatus: string | null;
+  latestSubscriptionStopAfterCurrentPeriod: boolean | null;
   mode: "live" | "test";
   mollieCustomerId: string | null;
   notes: string | null;
@@ -170,7 +179,10 @@ const customerContactNameSelect = sql<string | null>`
   coalesce(nullif(c.metadata ->> 'contactName', ''), c.full_name)
 `;
 
-const listCustomersByMode = cache(async (mode: DashboardModeFilter) => {
+const listCustomersByMode = cache(async (
+  mode: DashboardModeFilter,
+  archived: boolean,
+) => {
   const modeParam = toModeParam(mode);
   const result = await getDb().execute<CustomerOverview>(sql`
       select
@@ -189,6 +201,7 @@ const listCustomersByMode = cache(async (mode: DashboardModeFilter) => {
         c.notes,
         nullif(c.metadata ->> 'phone', '') as "phone",
         c.created_at as "createdAt",
+        c.archived_at as "archivedAt",
         latest_payment.id as "latestFirstPaymentId",
         latest_payment.checkout_url as "latestFirstPaymentCheckoutUrl",
         latest_payment.mollie_status as "latestFirstPaymentStatus",
@@ -200,7 +213,15 @@ const listCustomersByMode = cache(async (mode: DashboardModeFilter) => {
         latest_mandate.mollie_status as "latestMandateStatus",
         coalesce(latest_mandate.is_valid, false) as "hasValidMandate",
         latest_subscription.id as "latestSubscriptionId",
+        latest_subscription.amount_currency as "latestSubscriptionAmountCurrency",
+        latest_subscription.amount_value::text as "latestSubscriptionAmountValue",
+        latest_subscription.description as "latestSubscriptionDescription",
+        latest_subscription.interval as "latestSubscriptionInterval",
+        latest_subscription.mollie_status as "latestSubscriptionMollieStatus",
+        latest_subscription.metadata ->> 'nextPaymentDate' as "latestSubscriptionNextPaymentDate",
+        latest_subscription.start_date::text as "latestSubscriptionStartDate",
         latest_subscription.local_status as "latestSubscriptionStatus",
+        latest_subscription.stop_after_current_period as "latestSubscriptionStopAfterCurrentPeriod",
         coalesce(subscription_counts.total, 0)::int as "subscriptionCount"
       from customers c
       left join lateral (
@@ -240,7 +261,12 @@ const listCustomersByMode = cache(async (mode: DashboardModeFilter) => {
         from subscriptions s
         where s.customer_id = c.id and s.mode = c.mode
       ) subscription_counts on true
-      where (${modeParam}::mollie_mode is null or c.mode = ${modeParam})
+      where
+        (${modeParam}::mollie_mode is null or c.mode = ${modeParam})
+        and (
+          (${archived}::boolean = true and c.archived_at is not null)
+          or (${archived}::boolean = false and c.archived_at is null)
+        )
       order by c.created_at desc
     `);
 
@@ -248,9 +274,10 @@ const listCustomersByMode = cache(async (mode: DashboardModeFilter) => {
 });
 
 export async function listCustomers(options?: {
+  archived?: boolean;
   mode?: DashboardModeFilter;
 }) {
-  return listCustomersByMode(options?.mode ?? "all");
+  return listCustomersByMode(options?.mode ?? "all", options?.archived ?? false);
 }
 
 export const getCustomerDetail = cache(async (
@@ -282,6 +309,7 @@ export const getCustomerDetail = cache(async (
             c.notes,
             nullif(c.metadata ->> 'phone', '') as "phone",
             c.created_at as "createdAt",
+            c.archived_at as "archivedAt",
             latest_payment.id as "latestFirstPaymentId",
             latest_payment.checkout_url as "latestFirstPaymentCheckoutUrl",
             latest_payment.mollie_status as "latestFirstPaymentStatus",
@@ -293,7 +321,15 @@ export const getCustomerDetail = cache(async (
             latest_mandate.mollie_status as "latestMandateStatus",
             coalesce(latest_mandate.is_valid, false) as "hasValidMandate",
             latest_subscription.id as "latestSubscriptionId",
+            latest_subscription.amount_currency as "latestSubscriptionAmountCurrency",
+            latest_subscription.amount_value::text as "latestSubscriptionAmountValue",
+            latest_subscription.description as "latestSubscriptionDescription",
+            latest_subscription.interval as "latestSubscriptionInterval",
+            latest_subscription.mollie_status as "latestSubscriptionMollieStatus",
+            latest_subscription.metadata ->> 'nextPaymentDate' as "latestSubscriptionNextPaymentDate",
+            latest_subscription.start_date::text as "latestSubscriptionStartDate",
             latest_subscription.local_status as "latestSubscriptionStatus",
+            latest_subscription.stop_after_current_period as "latestSubscriptionStopAfterCurrentPeriod",
             coalesce(subscription_counts.total, 0)::int as "subscriptionCount"
           from customers c
           left join lateral (

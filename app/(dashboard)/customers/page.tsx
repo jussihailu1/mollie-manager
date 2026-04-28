@@ -10,9 +10,10 @@ export default async function CustomersPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
   const selectedMode = await getSelectedMollieMode();
-  const [resolvedSearchParams, customersResult] = await Promise.all([
+  const [resolvedSearchParams, customersResult, archivedCustomersResult] = await Promise.all([
     searchParams,
     listCustomers({ mode: selectedMode }),
+    listCustomers({ archived: true, mode: selectedMode }),
   ]);
 
   return (
@@ -22,9 +23,11 @@ export default async function CustomersPage({
         getSingleSearchParam(resolvedSearchParams.notice) ?? "",
         getSingleSearchParam(resolvedSearchParams.error) ?? "",
       ].join(":")}
+      archivedCustomers={archivedCustomersResult.map(toUiCustomerRecord)}
       customers={customersResult.map(toUiCustomerRecord)}
       error={getSingleSearchParam(resolvedSearchParams.error) ?? null}
       initialFocusId={getSingleSearchParam(resolvedSearchParams.focus) ?? null}
+      initialView={getSingleSearchParam(resolvedSearchParams.view) ?? "all"}
       notice={getSingleSearchParam(resolvedSearchParams.notice) ?? null}
     />
   );

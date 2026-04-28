@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { StatusPill } from "@/components/status-pill";
 import { getSetupStatus } from "@/lib/env";
 import { signInWithGoogle } from "@/lib/auth/actions";
-import { appName } from "@/lib/mollie-manager";
+import { appName } from "@/lib/app-config";
 
 type LoginPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

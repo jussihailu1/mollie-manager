@@ -80,7 +80,7 @@ Relevant files:
 - `app/(dashboard)/page.tsx`
 - `app/api/health/route.ts`
 - `app/globals.css`
-- `lib/mollie-manager.ts`
+- `lib/app-config.ts`
 - `.env.example`
 
 ### Phase 2: Platform Setup
@@ -123,7 +123,7 @@ Relevant files:
 
 - `app/(dashboard)/customers/page.tsx`
 - `app/(dashboard)/customers/[customerId]/page.tsx`
-- `app/(dashboard)/subscriptions/page.tsx`
+- `components/customers-workspace.tsx`
 - `lib/onboarding/actions.ts`
 - `lib/onboarding/data.ts`
 
@@ -131,7 +131,7 @@ Relevant files:
 
 Implemented:
 
-- subscriptions workspace
+- subscription details integrated into the customers workspace
 - payments workspace
 - derived alert queue
 - guarded "stop future charges" action
@@ -140,7 +140,7 @@ Implemented:
 
 Relevant files:
 
-- `app/(dashboard)/subscriptions/page.tsx`
+- `components/customers-workspace.tsx`
 - `app/(dashboard)/payments/page.tsx`
 - `app/(dashboard)/alerts/page.tsx`
 - `lib/operations/actions.ts`
@@ -243,7 +243,6 @@ Main UI:
 - `/`
 - `/customers`
 - `/customers/[customerId]`
-- `/subscriptions`
 - `/payments`
 - `/payment-links`
 - `/alerts`
@@ -337,7 +336,7 @@ At the time of documentation, `git status --short` showed uncommitted changes ac
 - `app/(dashboard)/*`
 - `app/globals.css`
 - `components/*`
-- `lib/mollie-manager.ts`
+- `lib/app-config.ts`
 - `lib/reliability/*`
 
 Treat the current working tree as the actual baseline the user sees, not just the last commit.

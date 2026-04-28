@@ -44,3 +44,4 @@ next-env.d.ts
 *.log
 /.codex
 scripts/fix-kruispunt-subscription-start-date.mjs
+scripts/delete-specific-payment.mjs

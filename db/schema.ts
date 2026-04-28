@@ -116,6 +116,10 @@ export const customers = pgTable(
       mode: "string",
       withTimezone: true,
     }),
+    archivedAt: timestamp("archived_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
   },
   (table) => [
     unique("customers_mode_mollie_customer_id_key").on(
@@ -131,6 +135,7 @@ export const customers = pgTable(
       table.mode,
       table.eboekhoudenLinkStatus,
     ),
+    index("customers_mode_archived_at_idx").on(table.mode, table.archivedAt),
   ],
 );
 

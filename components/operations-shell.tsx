@@ -3,7 +3,18 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
-import { Bell, CreditCard, Ellipsis, LayoutDashboard, Moon, Search, Sun, Users } from "lucide-react";
+import {
+  Bell,
+  CreditCard,
+  Ellipsis,
+  LayoutDashboard,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+  Sun,
+  Users,
+} from "lucide-react";
 
 import { setSelectedMollieModeAction } from "@/lib/dashboard-mode-actions";
 import { markAllAlertsReadAction, openAlertAction } from "@/lib/reliability/actions";
@@ -39,16 +50,16 @@ const navigation = [
     match: (pathname: string) => pathname === "/",
   },
   {
-    href: "/payments",
-    icon: CreditCard,
-    label: "Payments",
-    match: (pathname: string) => pathname.startsWith("/payments"),
-  },
-  {
     href: "/customers",
     icon: Users,
     label: "Customers",
     match: (pathname: string) => pathname.startsWith("/customers"),
+  },
+  {
+    href: "/payments",
+    icon: CreditCard,
+    label: "Payments",
+    match: (pathname: string) => pathname.startsWith("/payments"),
   },
   {
     href: "/notifications",
@@ -105,6 +116,29 @@ function setStoredTheme(theme: "light" | "dark") {
   window.dispatchEvent(new Event("themechange"));
 }
 
+function getBrowserSidebarCollapsed() {
+  return window.localStorage.getItem("sidebar-collapsed") === "true";
+}
+
+function getServerSidebarCollapsed() {
+  return false;
+}
+
+function subscribeToSidebarChanges(onStoreChange: () => void) {
+  window.addEventListener("storage", onStoreChange);
+  window.addEventListener("sidebarcollapsechange", onStoreChange);
+
+  return () => {
+    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener("sidebarcollapsechange", onStoreChange);
+  };
+}
+
+function setStoredSidebarCollapsed(collapsed: boolean) {
+  window.localStorage.setItem("sidebar-collapsed", String(collapsed));
+  window.dispatchEvent(new Event("sidebarcollapsechange"));
+}
+
 export function OperationsShell({
   children,
   recentAlerts,
@@ -120,6 +154,11 @@ export function OperationsShell({
     subscribeToThemeChanges,
     getBrowserTheme,
     getServerTheme,
+  );
+  const isSidebarCollapsed = useSyncExternalStore(
+    subscribeToSidebarChanges,
+    getBrowserSidebarCollapsed,
+    getServerSidebarCollapsed,
   );
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isModePending, startModeTransition] = useTransition();
@@ -145,9 +184,21 @@ export function OperationsShell({
 
   return (
     <div className="flex min-h-screen bg-background">
-      <aside className="w-64 border-r bg-card min-h-screen flex flex-col">
-        <div className="flex items-center justify-between p-6">
-          <h1 className="text-2xl font-bold tracking-tighter text-primary">Kify</h1>
+      <aside
+        className={cn(
+          "min-h-screen shrink-0 overflow-hidden border-r bg-card flex flex-col transition-all duration-200",
+          isSidebarCollapsed ? "w-16" : "w-64",
+        )}
+      >
+        <div
+          className={cn(
+            "flex items-center p-6",
+            isSidebarCollapsed ? "flex-col justify-center gap-3 px-0" : "justify-between",
+          )}
+        >
+          <h1 className="text-2xl font-bold tracking-tighter text-primary">
+            {isSidebarCollapsed ? "K" : "Kify"}
+          </h1>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
@@ -183,7 +234,7 @@ export function OperationsShell({
           </DropdownMenu>
         </div>
 
-        <nav className="flex-1 px-4 space-y-2">
+        <nav className={cn("flex-1 space-y-2", isSidebarCollapsed ? "px-2" : "px-4")}>
           {navigation.map((item) => {
             const isActive = item.match(pathname);
 
@@ -192,19 +243,54 @@ export function OperationsShell({
                 key={item.href}
                 asChild
                 variant={isActive ? "secondary" : "ghost"}
-                className={cn("w-full justify-start", item.href === "/notifications" && "relative")}
+                className={cn(
+                  "w-full",
+                  isSidebarCollapsed ? "justify-center px-0" : "justify-start",
+                  item.href === "/notifications" && "relative",
+                )}
+                title={isSidebarCollapsed ? item.label : undefined}
               >
                 <Link href={item.href}>
-                  <item.icon className="mr-2 h-4 w-4" />
-                  {item.label}
+                  <item.icon className={cn(isSidebarCollapsed ? "h-5 w-5" : "mr-2 h-4 w-4")} />
+                  <span className={cn(isSidebarCollapsed && "sr-only")}>{item.label}</span>
                   {item.href === "/notifications" && unreadCount > 0 ? (
-                    <span className="absolute right-3 h-2.5 w-2.5 rounded-full bg-red-600" />
+                    <span
+                      className={cn(
+                        "absolute rounded-full bg-red-600",
+                        isSidebarCollapsed
+                          ? "right-1.5 top-1.5 h-2.5 w-2.5 border-2 border-card"
+                          : "right-3 h-2.5 w-2.5",
+                      )}
+                    />
                   ) : null}
                 </Link>
               </Button>
             );
           })}
         </nav>
+
+        <div className="border-t p-4">
+          <Button
+            type="button"
+            variant="ghost"
+            size={isSidebarCollapsed ? "icon" : "default"}
+            className={cn("w-full", isSidebarCollapsed ? "justify-center" : "justify-start px-2")}
+            title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onClick={() => setStoredSidebarCollapsed(!isSidebarCollapsed)}
+          >
+            {isSidebarCollapsed ? (
+              <PanelLeftOpen className="size-5 text-muted-foreground" />
+            ) : (
+              <>
+                <PanelLeftClose className="mr-2 size-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Collapse</span>
+              </>
+            )}
+            <span className="sr-only">
+              {isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            </span>
+          </Button>
+        </div>
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">

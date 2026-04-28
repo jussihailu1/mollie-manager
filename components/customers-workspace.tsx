@@ -1,12 +1,15 @@
 "use client";
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Archive,
   ChevronRight,
   Plus,
+  RotateCcw,
   Search,
   Unlink,
 } from "lucide-react";
@@ -22,17 +25,24 @@ import {
   getCustomerDisplayName,
   getCustomerStage,
 } from "@/components/customer-flow-dialogs";
+import {
+  archiveCustomerAction,
+  restoreCustomerAction,
+} from "@/lib/onboarding/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -41,19 +51,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, formatLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-type SortField = "businessName" | "contactName" | "status" | "createdAt";
+type CustomerView = "all" | "setup" | "active" | "archived";
+type SortField =
+  | "businessName"
+  | "contactName"
+  | "status"
+  | "createdAt"
+  | "subscriptionAmount"
+  | "subscriptionInterval"
+  | "nextPaymentDate";
 type SortDirection = "asc" | "desc";
-
-const STATUS_OPTIONS = [
-  { label: "All Statuses", value: "all" },
-  { label: "New", value: "new" },
-  { label: "Payment Pending", value: "payment_pending" },
-  { label: "Payment Completed", value: "payment_completed" },
-  { label: "Subscription Active", value: "subscription_active" },
-] as const;
 
 const statusOrder = {
   new: 0,
@@ -61,6 +71,13 @@ const statusOrder = {
   payment_completed: 2,
   subscription_active: 3,
 } as const;
+
+const CUSTOMER_VIEWS = [
+  { label: "All", value: "all" },
+  { label: "Needs setup", value: "setup" },
+  { label: "Active subscriptions", value: "active" },
+  { label: "Archived", value: "archived" },
+] as const;
 
 function getStatusBadge(stage: ReturnType<typeof getCustomerStage>) {
   switch (stage) {
@@ -97,6 +114,120 @@ function getActionKind(customer: CustomerFlowRecord) {
   return "active";
 }
 
+function parseCustomerView(value: string | null | undefined): CustomerView {
+  return value === "setup" || value === "active" || value === "archived"
+    ? value
+    : "all";
+}
+
+function isActiveSubscription(customer: CustomerFlowRecord) {
+  return getCustomerStage(customer) === "subscription_active";
+}
+
+function isSetupCustomer(customer: CustomerFlowRecord) {
+  return !isActiveSubscription(customer);
+}
+
+function formatTableDate(value: string | null | undefined) {
+  return value ? formatDate(value) : "-";
+}
+
+function formatSubscriptionInterval(value: string | null) {
+  switch (value) {
+    case "weekly":
+    case "1 week":
+      return "Weekly";
+    case "monthly":
+    case "1 month":
+      return "Monthly";
+    case "yearly":
+    case "12 months":
+      return "Yearly";
+    default:
+      return value ? formatLabel(value) : "-";
+  }
+}
+
+function formatSubscriptionAmount(customer: CustomerFlowRecord) {
+  return customer.latestSubscriptionAmountValue && customer.latestSubscriptionAmountCurrency
+    ? formatCurrency(
+        customer.latestSubscriptionAmountValue,
+        customer.latestSubscriptionAmountCurrency,
+      )
+    : "-";
+}
+
+function getSubscriptionStatusBadge(customer: CustomerFlowRecord) {
+  const status = customer.latestSubscriptionStatus;
+
+  if (status === "active") {
+    return <Badge variant="default">Active</Badge>;
+  }
+
+  if (status === "payment_action_required" || status === "out_of_sync") {
+    return <Badge variant="destructive">{formatLabel(status)}</Badge>;
+  }
+
+  if (status === "future_charges_stopped") {
+    return <Badge variant="secondary">Stopping</Badge>;
+  }
+
+  return <Badge variant="outline">{formatLabel(status)}</Badge>;
+}
+
+function CustomerArchiveDialog({
+  action,
+  customer,
+  onOpenChange,
+  open,
+  returnTo,
+}: Readonly<{
+  action: "archive" | "restore";
+  customer: CustomerFlowRecord | null;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  returnTo: string;
+}>) {
+  if (!customer) {
+    return null;
+  }
+
+  const isRestore = action === "restore";
+  const formAction = isRestore ? restoreCustomerAction : archiveCustomerAction;
+
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {isRestore ? "Restore customer?" : "Archive customer?"}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {isRestore
+              ? `${getCustomerDisplayName(customer)} will return to the active customer list.`
+              : `${getCustomerDisplayName(customer)} will be hidden from the default customer list. Payment history, Mollie data, and e-Boekhouden data will be left untouched.`}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <form action={formAction}>
+          <input type="hidden" name="customerId" value={customer.id} />
+          <input type="hidden" name="returnTo" value={returnTo} />
+          <AlertDialogFooter>
+            <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
+            <Button type="submit" variant={isRestore ? "default" : "destructive"}>
+              {isRestore ? (
+                <RotateCcw aria-hidden="true" />
+              ) : (
+                <Archive aria-hidden="true" />
+              )}
+              {isRestore ? "Restore" : "Archive"}
+            </Button>
+          </AlertDialogFooter>
+        </form>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function SortIcon({
   field,
   sortDirection,
@@ -118,21 +249,32 @@ function SortIcon({
 }
 
 export function CustomersWorkspace({
+  archivedCustomers,
   customers,
   error,
   initialFocusId,
+  initialView = "all",
   notice,
 }: Readonly<{
+  archivedCustomers: CustomerFlowRecord[];
   customers: CustomerFlowRecord[];
   error?: string | null;
   initialFocusId?: string | null;
+  initialView?: string | null;
   notice?: string | null;
 }>) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.toString()
+    ? `${pathname}?${searchParams.toString()}`
+    : pathname;
+  const activeView = parseCustomerView(searchParams.get("view") ?? initialView);
+  const visibleCustomers = activeView === "archived" ? archivedCustomers : customers;
   const focusedCustomer = initialFocusId
-    ? customers.find((customer) => customer.id === initialFocusId) ?? null
+    ? [...customers, ...archivedCustomers].find((customer) => customer.id === initialFocusId) ?? null
     : null;
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [isCreateCustomerOpen, setIsCreateCustomerOpen] = useState(false);
@@ -140,6 +282,8 @@ export function CustomersWorkspace({
   const [isConfirmPaymentOpen, setIsConfirmPaymentOpen] = useState(false);
   const [isCreateSubscriptionOpen, setIsCreateSubscriptionOpen] = useState(false);
   const [isLinkEboekhoudenOpen, setIsLinkEboekhoudenOpen] = useState(false);
+  const [archiveAction, setArchiveAction] = useState<"archive" | "restore">("archive");
+  const [isArchiveDialogOpen, setIsArchiveDialogOpen] = useState(false);
   const [isCustomerDrawerOpen, setIsCustomerDrawerOpen] = useState(Boolean(focusedCustomer));
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerFlowRecord | null>(focusedCustomer);
 
@@ -153,8 +297,39 @@ export function CustomersWorkspace({
     setSortDirection("asc");
   }
 
+  function handleViewChange(value: string) {
+    const nextView = parseCustomerView(value);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("view", nextView);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  function openArchiveDialog(customer: CustomerFlowRecord, action: "archive" | "restore") {
+    setSelectedCustomer(customer);
+    setArchiveAction(action);
+    setIsArchiveDialogOpen(true);
+  }
+
+  const viewCounts = useMemo(
+    () => ({
+      active: customers.filter(isActiveSubscription).length,
+      all: customers.length,
+      archived: archivedCustomers.length,
+      setup: customers.filter(isSetupCustomer).length,
+    }),
+    [archivedCustomers, customers],
+  );
+
   const filteredAndSorted = useMemo(() => {
-    let result = [...customers];
+    let result = [...visibleCustomers];
+
+    if (activeView === "setup") {
+      result = result.filter(isSetupCustomer);
+    }
+
+    if (activeView === "active") {
+      result = result.filter(isActiveSubscription);
+    }
 
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -165,10 +340,6 @@ export function CustomersWorkspace({
           .toLowerCase()
           .includes(query),
       );
-    }
-
-    if (statusFilter !== "all") {
-      result = result.filter((customer) => getCustomerStage(customer) === statusFilter);
     }
 
     result.sort((left, right) => {
@@ -183,7 +354,26 @@ export function CustomersWorkspace({
           break;
         case "status":
           comparison =
-            statusOrder[getCustomerStage(left)] - statusOrder[getCustomerStage(right)];
+            activeView === "active"
+              ? (left.latestSubscriptionStatus ?? "").localeCompare(
+                  right.latestSubscriptionStatus ?? "",
+                )
+              : statusOrder[getCustomerStage(left)] - statusOrder[getCustomerStage(right)];
+          break;
+        case "subscriptionAmount":
+          comparison =
+            Number(left.latestSubscriptionAmountValue ?? 0) -
+            Number(right.latestSubscriptionAmountValue ?? 0);
+          break;
+        case "subscriptionInterval":
+          comparison = (left.latestSubscriptionInterval ?? "").localeCompare(
+            right.latestSubscriptionInterval ?? "",
+          );
+          break;
+        case "nextPaymentDate":
+          comparison =
+            new Date(left.latestSubscriptionNextPaymentDate ?? 0).getTime() -
+            new Date(right.latestSubscriptionNextPaymentDate ?? 0).getTime();
           break;
         default:
           comparison =
@@ -194,7 +384,7 @@ export function CustomersWorkspace({
     });
 
     return result;
-  }, [customers, searchQuery, statusFilter, sortField, sortDirection]);
+  }, [activeView, searchQuery, sortField, sortDirection, visibleCustomers]);
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-8 p-8">
@@ -225,7 +415,7 @@ export function CustomersWorkspace({
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="relative min-w-[220px] flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -235,86 +425,201 @@ export function CustomersWorkspace({
             className="pl-9"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
+        <Tabs value={activeView} onValueChange={handleViewChange}>
+          <TabsList>
+            {CUSTOMER_VIEWS.map((view) => (
+              <TabsTrigger key={view.value} value={view.value}>
+                {view.label}
+                <span className="ml-2 text-xs text-muted-foreground">
+                  {viewCounts[view.value]}
+                </span>
+              </TabsTrigger>
             ))}
-          </SelectContent>
-        </Select>
+          </TabsList>
+        </Tabs>
       </div>
 
       <div className="overflow-hidden rounded-md border bg-card">
-        <Table className="min-w-[760px] table-fixed">
+        <Table className="w-full min-w-0 table-fixed border-collapse">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[30%]">
-                <button
-                  type="button"
-                  onClick={() => handleSort("businessName")}
-                  className="inline-flex items-center hover:text-foreground transition-colors"
-                >
-                  Business
-                  <SortIcon field="businessName" sortDirection={sortDirection} sortField={sortField} />
-                </button>
-              </TableHead>
-              <TableHead className="w-[30%]">
-                <button
-                  type="button"
-                  onClick={() => handleSort("contactName")}
-                  className="inline-flex items-center hover:text-foreground transition-colors"
-                >
-                  Contact
-                  <SortIcon field="contactName" sortDirection={sortDirection} sortField={sortField} />
-                </button>
-              </TableHead>
-              <TableHead className="w-[18%]">
-                <button
-                  type="button"
-                  onClick={() => handleSort("status")}
-                  className="inline-flex items-center hover:text-foreground transition-colors"
-                >
-                  Status
-                  <SortIcon field="status" sortDirection={sortDirection} sortField={sortField} />
-                </button>
-              </TableHead>
-              <TableHead className="w-[14%]">
-                <button
-                  type="button"
-                  onClick={() => handleSort("createdAt")}
-                  className="inline-flex items-center hover:text-foreground transition-colors"
-                >
-                  Created
-                  <SortIcon field="createdAt" sortDirection={sortDirection} sortField={sortField} />
-                </button>
-              </TableHead>
-              <TableHead className="w-[8%] text-right" />
+              {activeView === "active" ? (
+                <>
+                  <TableHead className="w-[17%]">
+                    <button
+                      type="button"
+                      onClick={() => handleSort("businessName")}
+                      className="inline-flex min-w-0 items-center transition-colors hover:text-foreground"
+                    >
+                      Business
+                      <SortIcon field="businessName" sortDirection={sortDirection} sortField={sortField} />
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-[23%]">
+                    <button
+                      type="button"
+                      onClick={() => handleSort("contactName")}
+                      className="inline-flex min-w-0 items-center transition-colors hover:text-foreground"
+                    >
+                      Contact
+                      <SortIcon field="contactName" sortDirection={sortDirection} sortField={sortField} />
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-[11%] text-right">
+                    <button
+                      type="button"
+                      onClick={() => handleSort("subscriptionAmount")}
+                      className="inline-flex min-w-0 w-full items-center justify-end transition-colors hover:text-foreground"
+                    >
+                      Amount
+                      <SortIcon
+                        field="subscriptionAmount"
+                        sortDirection={sortDirection}
+                        sortField={sortField}
+                      />
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-[10%]">
+                    <button
+                      type="button"
+                      onClick={() => handleSort("subscriptionInterval")}
+                      className="inline-flex min-w-0 items-center transition-colors hover:text-foreground"
+                    >
+                      Period
+                      <SortIcon
+                        field="subscriptionInterval"
+                        sortDirection={sortDirection}
+                        sortField={sortField}
+                      />
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-[14%]">
+                    <button
+                      type="button"
+                      onClick={() => handleSort("nextPaymentDate")}
+                      className="inline-flex min-w-0 items-center transition-colors hover:text-foreground"
+                    >
+                      Next payment
+                      <SortIcon
+                        field="nextPaymentDate"
+                        sortDirection={sortDirection}
+                        sortField={sortField}
+                      />
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-[19%]">
+                    <button
+                      type="button"
+                      onClick={() => handleSort("status")}
+                      className="inline-flex min-w-0 items-center transition-colors hover:text-foreground"
+                    >
+                      Status
+                      <SortIcon field="status" sortDirection={sortDirection} sortField={sortField} />
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-[6%] px-2 text-right" />
+                </>
+              ) : (
+                <>
+                  <TableHead className="w-[17%]">
+                    <button
+                      type="button"
+                      onClick={() => handleSort("businessName")}
+                      className="inline-flex min-w-0 items-center transition-colors hover:text-foreground"
+                    >
+                      Business
+                      <SortIcon field="businessName" sortDirection={sortDirection} sortField={sortField} />
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-[25%]">
+                    <button
+                      type="button"
+                      onClick={() => handleSort("contactName")}
+                      className="inline-flex min-w-0 items-center transition-colors hover:text-foreground"
+                    >
+                      Contact
+                      <SortIcon field="contactName" sortDirection={sortDirection} sortField={sortField} />
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-[10%] text-right">
+                    <button
+                      type="button"
+                      onClick={() => handleSort("subscriptionAmount")}
+                      className="inline-flex min-w-0 w-full items-center justify-end transition-colors hover:text-foreground"
+                    >
+                      Amount
+                      <SortIcon
+                        field="subscriptionAmount"
+                        sortDirection={sortDirection}
+                        sortField={sortField}
+                      />
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-[13%]">
+                    <button
+                      type="button"
+                      onClick={() => handleSort("nextPaymentDate")}
+                      className="inline-flex min-w-0 items-center transition-colors hover:text-foreground"
+                    >
+                      Next payment
+                      <SortIcon
+                        field="nextPaymentDate"
+                        sortDirection={sortDirection}
+                        sortField={sortField}
+                      />
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-[18%]">
+                    <button
+                      type="button"
+                      onClick={() => handleSort("status")}
+                      className="inline-flex min-w-0 items-center transition-colors hover:text-foreground"
+                    >
+                      Status
+                      <SortIcon field="status" sortDirection={sortDirection} sortField={sortField} />
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-[11%]">
+                    <button
+                      type="button"
+                      onClick={() => handleSort("createdAt")}
+                      className="inline-flex min-w-0 items-center transition-colors hover:text-foreground"
+                    >
+                      Created
+                      <SortIcon field="createdAt" sortDirection={sortDirection} sortField={sortField} />
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-[6%] px-2 text-right" />
+                </>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredAndSorted.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                  {customers.length === 0
-                    ? "No customers found. Create one to get started."
-                    : "No customers match your filters."}
+                <TableCell
+                  colSpan={7}
+                  className="py-8 text-center text-muted-foreground"
+                >
+                  {activeView === "archived" && visibleCustomers.length === 0
+                    ? "No archived customers."
+                    : visibleCustomers.length === 0
+                      ? "No customers found. Create one to get started."
+                      : "No customers match your filters."}
                 </TableCell>
               </TableRow>
             ) : (
               filteredAndSorted.map((customer) => {
                 const stage = getCustomerStage(customer);
                 const actionKind = getActionKind(customer);
+                const isArchived = Boolean(customer.archivedAt);
 
                 return (
                   <TableRow
                     key={customer.id}
                     className={cn(
-                      actionKind === "create_subscription" &&
+                      !isArchived &&
+                        actionKind === "create_subscription" &&
                         "bg-primary/[0.03] hover:bg-primary/[0.06]",
                       initialFocusId === customer.id && "bg-accent/40",
                     )}
@@ -322,13 +627,20 @@ export function CustomersWorkspace({
                     <TableCell
                       className={cn(
                         "font-medium",
-                        actionKind === "create_subscription" && "border-l-2 border-l-primary/70",
+                        !isArchived &&
+                          actionKind === "create_subscription" &&
+                          "border-l-2 border-l-primary/70",
                       )}
                     >
                       <div className="flex min-w-0 items-center gap-2">
                         <span className="truncate" title={getCustomerDisplayName(customer)}>
                           {getCustomerDisplayName(customer)}
                         </span>
+                        {isArchived ? (
+                          <Badge variant="secondary" className="shrink-0">
+                            Archived
+                          </Badge>
+                        ) : null}
                         {customer.eboekhoudenLinkStatus === "unlinked" ? (
                           <span
                             className="inline-flex shrink-0 text-muted-foreground/70"
@@ -350,33 +662,55 @@ export function CustomersWorkspace({
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell>{getStatusBadge(stage)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">
-                      {formatDate(customer.createdAt)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className={cn(
-                            "relative",
+                    {activeView === "active" ? (
+                      <>
+                        <TableCell className="text-right font-medium">
+                          {formatSubscriptionAmount(customer)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {formatSubscriptionInterval(customer.latestSubscriptionInterval)}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                          {formatTableDate(customer.latestSubscriptionNextPaymentDate)}
+                        </TableCell>
+                        <TableCell>{getSubscriptionStatusBadge(customer)}</TableCell>
+                      </>
+                    ) : (
+                      <>
+                        <TableCell className="text-right font-medium">
+                          {formatSubscriptionAmount(customer)}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                          {formatTableDate(customer.latestSubscriptionNextPaymentDate)}
+                        </TableCell>
+                        <TableCell>{getStatusBadge(stage)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                          {formatDate(customer.createdAt)}
+                        </TableCell>
+                      </>
+                    )}
+                    <TableCell className="px-2 text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className={cn(
+                          "relative",
+                          !isArchived &&
                             actionKind === "create_subscription" &&
-                              "bg-primary/10 text-primary ring-1 ring-primary/40 hover:bg-primary/15",
-                          )}
-                          onClick={() => {
-                            setSelectedCustomer(customer);
-                            setIsCustomerDrawerOpen(true);
-                          }}
-                        >
-                          <ChevronRight />
-                          <span className="sr-only">
-                            {actionKind === "create_subscription"
-                              ? "View customer details. Ready to create subscription."
-                              : "View customer details"}
-                          </span>
-                        </Button>
-                      </div>
+                            "bg-primary/10 text-primary ring-1 ring-primary/40 hover:bg-primary/15",
+                        )}
+                        onClick={() => {
+                          setSelectedCustomer(customer);
+                          setIsCustomerDrawerOpen(true);
+                        }}
+                      >
+                        <ChevronRight />
+                        <span className="sr-only">
+                          {actionKind === "create_subscription"
+                            ? "View customer details. Ready to create subscription."
+                            : "View customer details"}
+                        </span>
+                      </Button>
                     </TableCell>
                   </TableRow>
                 );
@@ -410,6 +744,22 @@ export function CustomersWorkspace({
           setSelectedCustomer(customer);
           setTimeout(() => setIsCreateSubscriptionOpen(true), 150);
         }}
+        onOpenArchiveCustomer={(customer) => {
+          setIsCustomerDrawerOpen(false);
+          setTimeout(() => openArchiveDialog(customer, "archive"), 150);
+        }}
+        onOpenRestoreCustomer={(customer) => {
+          setIsCustomerDrawerOpen(false);
+          setTimeout(() => openArchiveDialog(customer, "restore"), 150);
+        }}
+      />
+
+      <CustomerArchiveDialog
+        action={archiveAction}
+        customer={selectedCustomer}
+        open={isArchiveDialogOpen}
+        onOpenChange={setIsArchiveDialogOpen}
+        returnTo={returnTo}
       />
 
       <CreateCustomerDialog open={isCreateCustomerOpen} onOpenChange={setIsCreateCustomerOpen} />

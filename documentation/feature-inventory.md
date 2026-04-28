@@ -52,7 +52,8 @@ These features are still present in the app after the transplant.
 - [x] Mark all alerts as read.
 - [x] Open alert targets directly into the active UI surfaces.
 - [x] Legacy `/customers/[customerId]` route now forwards into the customer workspace drawer.
-- [x] Legacy `/alerts`, `/subscriptions`, `/payment-links`, and `/settings` routes now forward into the new active surfaces instead of staying live as separate UI modules.
+- [x] Legacy `/alerts`, `/payment-links`, and `/settings` routes now forward into the new active surfaces instead of staying live as separate UI modules.
+- [x] The former subscriptions dashboard screen has been removed; subscription details now live in customer views and sheets.
 - [x] Client-rendered dates use deterministic app formatters to avoid server/client hydration mismatches.
 
 ## Backend And Domain Still Intact

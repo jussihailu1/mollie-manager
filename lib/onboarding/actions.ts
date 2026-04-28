@@ -67,6 +67,11 @@ const syncCustomerSchema = z.object({
   returnTo: z.string().trim().startsWith("/").default("/customers"),
 });
 
+const customerArchiveSchema = z.object({
+  customerId: z.string().uuid(),
+  returnTo: z.string().trim().startsWith("/").default("/customers"),
+});
+
 const createSubscriptionSchema = z.object({
   amountValue: z.string().trim().min(1),
   customerId: z.string().uuid(),
@@ -81,6 +86,14 @@ const renewableFirstPaymentLinkStatuses = new Set([
   "canceled",
   "expired",
   "failed",
+]);
+
+const archiveBlockedSubscriptionStatuses = new Set([
+  "active",
+  "awaiting_first_payment",
+  "draft",
+  "mandate_pending",
+  "payment_action_required",
 ]);
 
 type LocalPaymentRecord = {
@@ -366,6 +379,157 @@ function findPreferredMandate(mandates: MandateRecord[]) {
   );
 }
 
+export async function archiveCustomerAction(formData: FormData) {
+  const parsed = customerArchiveSchema.safeParse({
+    customerId: formData.get("customerId"),
+    returnTo: formData.get("returnTo") || undefined,
+  });
+
+  if (!parsed.success) {
+    redirectWithMessage("/customers", {
+      error: "Customer id is missing.",
+    });
+  }
+
+  const session = await requireViewerSession();
+  const selectedMode = await getSelectedMollieMode();
+  const detail = await getCustomerDetail(parsed.data.customerId, selectedMode);
+  const returnTo = updatePath(parsed.data.returnTo, {
+    focus: null,
+  });
+
+  if (!detail) {
+    redirectWithMessage(returnTo, {
+      error: "Customer not found in the selected Mollie mode.",
+    });
+  }
+
+  if (detail.customer.archivedAt) {
+    redirectWithMessage(returnTo, {
+      notice: "Customer is already archived.",
+    });
+  }
+
+  const blockingSubscription = detail.subscriptions.find((subscription) =>
+    archiveBlockedSubscriptionStatuses.has(subscription.localStatus),
+  );
+
+  if (blockingSubscription) {
+    redirectWithMessage(returnTo, {
+      error: "Cancel or stop active billing before archiving this customer.",
+    });
+  }
+
+  await transaction(async (client) => {
+    await client.execute(sql`
+        update customers
+        set archived_at = now(), updated_at = now()
+        where id = ${detail.customer.id}
+          and mode = ${selectedMode}
+          and archived_at is null
+      `);
+
+    await writeAuditLog(
+      {
+        action: "customer.archive",
+        details: {
+          localCustomerId: detail.customer.id,
+          mollieCustomerId: detail.customer.mollieCustomerId,
+        },
+        entityId: detail.customer.id,
+        entityType: "customer",
+        mode: selectedMode,
+        outcome: "success",
+        summary: "Archived local customer record.",
+      },
+      client,
+      {
+        email: session.user.email ?? null,
+        kind: "user",
+      },
+    );
+  });
+
+  revalidatePath("/");
+  revalidatePath("/customers");
+  revalidatePath("/payments");
+  revalidatePath("/notifications");
+  redirectWithMessage(returnTo, {
+    notice: "Customer archived.",
+  });
+}
+
+export async function restoreCustomerAction(formData: FormData) {
+  const parsed = customerArchiveSchema.safeParse({
+    customerId: formData.get("customerId"),
+    returnTo: formData.get("returnTo") || undefined,
+  });
+
+  if (!parsed.success) {
+    redirectWithMessage("/customers", {
+      error: "Customer id is missing.",
+    });
+  }
+
+  const session = await requireViewerSession();
+  const selectedMode = await getSelectedMollieMode();
+  const detail = await getCustomerDetail(parsed.data.customerId, selectedMode);
+  const returnTo = updatePath(parsed.data.returnTo, {
+    focus: parsed.data.customerId,
+    view: null,
+  });
+
+  if (!detail) {
+    redirectWithMessage(returnTo, {
+      error: "Customer not found in the selected Mollie mode.",
+    });
+  }
+
+  if (!detail.customer.archivedAt) {
+    redirectWithMessage(returnTo, {
+      notice: "Customer is already active.",
+    });
+  }
+
+  await transaction(async (client) => {
+    await client.execute(sql`
+        update customers
+        set archived_at = null, updated_at = now()
+        where id = ${detail.customer.id}
+          and mode = ${selectedMode}
+          and archived_at is not null
+      `);
+
+    await writeAuditLog(
+      {
+        action: "customer.restore",
+        details: {
+          localCustomerId: detail.customer.id,
+          mollieCustomerId: detail.customer.mollieCustomerId,
+        },
+        entityId: detail.customer.id,
+        entityType: "customer",
+        mode: selectedMode,
+        outcome: "success",
+        summary: "Restored archived local customer record.",
+      },
+      client,
+      {
+        email: session.user.email ?? null,
+        kind: "user",
+      },
+    );
+  });
+
+  revalidatePath("/");
+  revalidatePath("/customers");
+  revalidatePath("/payments");
+  revalidatePath("/notifications");
+  redirectWithMessage(returnTo, {
+    notice: "Customer restored.",
+  });
+}
+
 export async function createCustomerAction(formData: FormData) {
   const parsed = createCustomerSchema.safeParse({
     address: formData.get("address") || undefined,
@@ -537,6 +701,12 @@ export async function linkEboekhoudenRelationAction(formData: FormData) {
     });
   }
 
+  if (customer.archivedAt) {
+    redirectWithMessage(returnTo, {
+      error: "Restore this customer before changing e-Boekhouden links.",
+    });
+  }
+
   try {
     await assertRelationIsAvailable(
       parsed.data.eboekhoudenRelationId,
@@ -636,6 +806,13 @@ export async function createFirstPaymentAction(formData: FormData) {
       error: "Customer not found in the selected Mollie mode or not linked to Mollie.",
     });
   }
+
+  if (customer.archivedAt) {
+    redirectWithMessage(returnTo, {
+      error: "Restore this customer before creating a payment link.",
+    });
+  }
+
   const mollieCustomerId = customer.mollieCustomerId;
 
   const detail = await getCustomerDetail(customer.id, selectedMode);
@@ -799,6 +976,13 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
       error: "Customer not found in the selected Mollie mode or not linked to Mollie.",
     });
   }
+
+  if (customer.archivedAt) {
+    redirectWithMessage(returnTo, {
+      error: "Restore this customer before refreshing billing state.",
+    });
+  }
+
   const mollieCustomerId = customer.mollieCustomerId;
   const customerDetail = await getCustomerDetail(customer.id, selectedMode);
 
@@ -946,6 +1130,13 @@ export async function createSubscriptionAction(formData: FormData) {
       error: "Customer not found in the selected Mollie mode or not linked to Mollie.",
     });
   }
+
+  if (detail.customer.archivedAt) {
+    redirectWithMessage(returnTo, {
+      error: "Restore this customer before creating a subscription.",
+    });
+  }
+
   const mollieCustomerId = detail.customer.mollieCustomerId;
 
   const latestPaidFirstPayment = detail.payments.find(

@@ -13,6 +13,7 @@ export type UiCustomerRecord = {
   businessName: string | null;
   contactName: string | null;
   createdAt: string;
+  archivedAt: string | null;
   eboekhoudenLinkStatus: "linked" | "unlinked" | "needs_review" | "sync_error";
   eboekhoudenRelationCode: string | null;
   eboekhoudenRelationId: number | null;
@@ -26,7 +27,16 @@ export type UiCustomerRecord = {
   latestFirstPaymentPaidAt: string | null;
   latestFirstPaymentStatus: string | null;
   latestMandateStatus: string | null;
+  latestSubscriptionAmountCurrency: string | null;
+  latestSubscriptionAmountValue: string | null;
+  latestSubscriptionDescription: string | null;
+  latestSubscriptionId: string | null;
+  latestSubscriptionInterval: string | null;
+  latestSubscriptionMollieStatus: string | null;
+  latestSubscriptionNextPaymentDate: string | null;
+  latestSubscriptionStartDate: string | null;
   latestSubscriptionStatus: string | null;
+  latestSubscriptionStopAfterCurrentPeriod: boolean | null;
   mode: MollieMode;
   notes: string | null;
   phone: string | null;
@@ -112,6 +122,7 @@ export function toUiCustomerRecord(customer: CustomerOverview): UiCustomerRecord
     businessName: customer.businessName,
     contactName: customer.contactName,
     createdAt: customer.createdAt,
+    archivedAt: customer.archivedAt,
     eboekhoudenLinkStatus: customer.eboekhoudenLinkStatus,
     eboekhoudenRelationCode: customer.eboekhoudenRelationCode,
     eboekhoudenRelationId: customer.eboekhoudenRelationId,
@@ -125,7 +136,16 @@ export function toUiCustomerRecord(customer: CustomerOverview): UiCustomerRecord
     latestFirstPaymentPaidAt: customer.latestFirstPaymentPaidAt,
     latestFirstPaymentStatus: customer.latestFirstPaymentStatus,
     latestMandateStatus: customer.latestMandateStatus,
+    latestSubscriptionAmountCurrency: customer.latestSubscriptionAmountCurrency,
+    latestSubscriptionAmountValue: customer.latestSubscriptionAmountValue,
+    latestSubscriptionDescription: customer.latestSubscriptionDescription,
+    latestSubscriptionId: customer.latestSubscriptionId,
+    latestSubscriptionInterval: customer.latestSubscriptionInterval,
+    latestSubscriptionMollieStatus: customer.latestSubscriptionMollieStatus,
+    latestSubscriptionNextPaymentDate: customer.latestSubscriptionNextPaymentDate,
+    latestSubscriptionStartDate: customer.latestSubscriptionStartDate,
     latestSubscriptionStatus: customer.latestSubscriptionStatus,
+    latestSubscriptionStopAfterCurrentPeriod: customer.latestSubscriptionStopAfterCurrentPeriod,
     mode: customer.mode,
     notes: customer.notes,
     phone: customer.phone,

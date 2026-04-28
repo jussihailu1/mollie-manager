@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  Archive,
   Check,
   CheckCircle,
   Copy,
@@ -17,6 +18,7 @@ import {
   Phone,
   Plus,
   Repeat,
+  RotateCcw,
   Search,
   User,
 } from "lucide-react";
@@ -57,7 +59,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, formatLabel } from "@/lib/format";
 import {
   hasMeaningfulDifference,
   relationFieldLabels,
@@ -72,6 +74,7 @@ export type CustomerFlowRecord = {
   businessName: string | null;
   contactName: string | null;
   createdAt: string;
+  archivedAt: string | null;
   eboekhoudenLinkStatus: "linked" | "unlinked" | "needs_review" | "sync_error";
   eboekhoudenRelationCode: string | null;
   eboekhoudenRelationId: number | null;
@@ -85,7 +88,16 @@ export type CustomerFlowRecord = {
   latestFirstPaymentPaidAt: string | null;
   latestFirstPaymentStatus: string | null;
   latestMandateStatus: string | null;
+  latestSubscriptionAmountCurrency: string | null;
+  latestSubscriptionAmountValue: string | null;
+  latestSubscriptionDescription: string | null;
+  latestSubscriptionId: string | null;
+  latestSubscriptionInterval: string | null;
+  latestSubscriptionMollieStatus: string | null;
+  latestSubscriptionNextPaymentDate: string | null;
+  latestSubscriptionStartDate: string | null;
   latestSubscriptionStatus: string | null;
+  latestSubscriptionStopAfterCurrentPeriod: boolean | null;
   mode: "live" | "test";
   notes: string | null;
   phone: string | null;
@@ -182,6 +194,37 @@ function getCustomerActionKind(customer: CustomerFlowRecord): CustomerActionKind
   }
 
   return "create_payment";
+}
+
+function formatSubscriptionInterval(value: string | null) {
+  switch (value) {
+    case "weekly":
+    case "1 week":
+      return "Weekly";
+    case "monthly":
+    case "1 month":
+      return "Monthly";
+    case "yearly":
+    case "12 months":
+      return "Yearly";
+    default:
+      return formatLabel(value);
+  }
+}
+
+function SubscriptionSummaryRow({
+  label,
+  value,
+}: Readonly<{
+  label: string;
+  value: ReactNode;
+}>) {
+  return (
+    <div className="flex items-center justify-between gap-4 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="truncate text-right font-medium">{value}</span>
+    </div>
+  );
 }
 
 function CopyField({ value }: Readonly<{ value: string }>) {
@@ -1070,6 +1113,8 @@ export function CustomerDrawer({
   onOpenConfirmPayment,
   onOpenLinkEboekhouden,
   onOpenCreateSubscription,
+  onOpenArchiveCustomer,
+  onOpenRestoreCustomer,
 }: Readonly<{
   customer: CustomerFlowRecord | null;
   open: boolean;
@@ -1078,12 +1123,15 @@ export function CustomerDrawer({
   onOpenConfirmPayment: (customer: CustomerFlowRecord) => void;
   onOpenLinkEboekhouden: (customer: CustomerFlowRecord) => void;
   onOpenCreateSubscription: (customer: CustomerFlowRecord) => void;
+  onOpenArchiveCustomer: (customer: CustomerFlowRecord) => void;
+  onOpenRestoreCustomer: (customer: CustomerFlowRecord) => void;
 }>) {
   if (!customer) {
     return null;
   }
 
   const stage = getCustomerStage(customer);
+  const isArchived = Boolean(customer.archivedAt);
   const currentStepIndex = [
     "new",
     "payment_pending",
@@ -1097,11 +1145,13 @@ export function CustomerDrawer({
         <SheetHeader className="pb-6">
           <div className="flex items-center gap-2">
             <SheetTitle className="text-2xl">{customer.businessName}</SheetTitle>
-            {getStatusBadge(stage)}
+            {isArchived ? <Badge variant="secondary">Archived</Badge> : getStatusBadge(stage)}
             {getEboekhoudenStatusBadge(customer)}
           </div>
           <SheetDescription>
-            Customer since {formatDate(customer.createdAt)}
+            {isArchived
+              ? `Archived on ${formatDate(customer.archivedAt ?? customer.createdAt)}`
+              : `Customer since ${formatDate(customer.createdAt)}`}
           </SheetDescription>
         </SheetHeader>
 
@@ -1155,7 +1205,7 @@ export function CustomerDrawer({
                     : "No e-Boekhouden relation linked."}
                 </p>
               </div>
-              {customer.eboekhoudenLinkStatus === "unlinked" ? (
+              {!isArchived && customer.eboekhoudenLinkStatus === "unlinked" ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -1223,6 +1273,61 @@ export function CustomerDrawer({
             </div>
           </div>
 
+          {customer.latestSubscriptionId ? (
+            <>
+              <Separator />
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Subscription
+                </h3>
+                <div className="rounded-md border p-3">
+                  <div className="flex flex-col gap-3">
+                    <SubscriptionSummaryRow
+                      label="Amount"
+                      value={
+                        customer.latestSubscriptionAmountValue &&
+                        customer.latestSubscriptionAmountCurrency
+                          ? formatCurrency(
+                              customer.latestSubscriptionAmountValue,
+                              customer.latestSubscriptionAmountCurrency,
+                            )
+                          : "Not available"
+                      }
+                    />
+                    <SubscriptionSummaryRow
+                      label="Period"
+                      value={formatSubscriptionInterval(customer.latestSubscriptionInterval)}
+                    />
+                    <SubscriptionSummaryRow
+                      label="Start date"
+                      value={formatDate(customer.latestSubscriptionStartDate)}
+                    />
+                    <SubscriptionSummaryRow
+                      label="Next payment"
+                      value={formatDate(customer.latestSubscriptionNextPaymentDate)}
+                    />
+                    <SubscriptionSummaryRow
+                      label="Status"
+                      value={
+                        <Badge variant="outline">
+                          {formatLabel(customer.latestSubscriptionStatus)}
+                        </Badge>
+                      }
+                    />
+                    <SubscriptionSummaryRow
+                      label="Future charges"
+                      value={
+                        customer.latestSubscriptionStopAfterCurrentPeriod
+                          ? "Stop after current period"
+                          : "Continue"
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : null}
+
           {customer.latestFirstPaymentLinkUrl || customer.latestFirstPaymentPaidAt ? (
             <>
               <Separator />
@@ -1245,31 +1350,49 @@ export function CustomerDrawer({
             </>
           ) : null}
 
-          <div className="pt-4">
-            {getCustomerActionKind(customer) === "create_payment" ? (
+          <div className="flex flex-col gap-2 pt-4">
+            {isArchived ? (
+              <Button className="w-full" onClick={() => onOpenRestoreCustomer(customer)}>
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Restore Customer
+              </Button>
+            ) : null}
+
+            {!isArchived && getCustomerActionKind(customer) === "create_payment" ? (
               <Button className="w-full" onClick={() => onOpenCreatePayment(customer)}>
                 <LinkIcon className="mr-2 h-4 w-4" />
                 Create Payment Link
               </Button>
             ) : null}
 
-            {getCustomerActionKind(customer) === "confirm_payment" ? (
+            {!isArchived && getCustomerActionKind(customer) === "confirm_payment" ? (
               <Button className="w-full" onClick={() => onOpenConfirmPayment(customer)}>
                 <CheckCircle className="mr-2 h-4 w-4" />
                 Refresh Payment
               </Button>
             ) : null}
 
-            {getCustomerActionKind(customer) === "create_subscription" ? (
+            {!isArchived && getCustomerActionKind(customer) === "create_subscription" ? (
               <Button className="w-full" onClick={() => onOpenCreateSubscription(customer)}>
                 <Repeat className="mr-2 h-4 w-4" />
                 Create Subscription
               </Button>
             ) : null}
 
-            {getCustomerActionKind(customer) === "active" ? (
+            {!isArchived && getCustomerActionKind(customer) === "active" ? (
               <Button className="w-full" variant="outline" disabled>
                 Subscription is Active
+              </Button>
+            ) : null}
+
+            {!isArchived ? (
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={() => onOpenArchiveCustomer(customer)}
+              >
+                <Archive className="mr-2 h-4 w-4" />
+                Archive Customer
               </Button>
             ) : null}
           </div>
