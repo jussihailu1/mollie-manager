@@ -8,6 +8,7 @@ import {
   CheckCircle,
   ChevronRight,
   Link as LinkIcon,
+  MoreHorizontal,
   Plus,
   Repeat,
   Search,
@@ -28,6 +29,13 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -45,12 +53,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 type SortField = "businessName" | "contactName" | "email" | "status" | "createdAt";
 type SortDirection = "asc" | "desc";
 
 const STATUS_OPTIONS = [
-  { label: "all", value: "all" },
+  { label: "All Statuses", value: "all" },
   { label: "New", value: "new" },
   { label: "Payment Pending", value: "payment_pending" },
   { label: "Payment Completed", value: "payment_completed" },
@@ -68,14 +77,14 @@ function getStatusBadge(stage: ReturnType<typeof getCustomerStage>) {
   switch (stage) {
     case "payment_pending":
       return (
-        <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100/80">
+        <Badge className="whitespace-nowrap bg-yellow-100 text-yellow-800 hover:bg-yellow-100/80">
           Payment Pending
         </Badge>
       );
     case "payment_completed":
-      return <Badge variant="secondary">Payment Completed</Badge>;
+      return <Badge variant="secondary" className="whitespace-nowrap">Payment Completed</Badge>;
     case "subscription_active":
-      return <Badge variant="default">Subscription Active</Badge>;
+      return <Badge variant="default" className="whitespace-nowrap">Subscription Active</Badge>;
     default:
       return <Badge variant="outline">New</Badge>;
   }
@@ -202,7 +211,7 @@ export function CustomersWorkspace({
   }, [customers, searchQuery, statusFilter, sortField, sortDirection]);
 
   return (
-    <div className="p-8 space-y-6 max-w-6xl mx-auto">
+    <div className="mx-auto flex max-w-6xl flex-col gap-8 p-8">
       {error ? (
         <Alert variant="destructive">
           <AlertTitle>Action failed</AlertTitle>
@@ -217,7 +226,7 @@ export function CustomersWorkspace({
         </Alert>
       ) : null}
 
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Customers</h2>
           <p className="text-muted-foreground mt-2">
@@ -225,13 +234,13 @@ export function CustomersWorkspace({
           </p>
         </div>
         <Button onClick={() => setIsCreateCustomerOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
+          <Plus />
           Add Customer
         </Button>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[220px] flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search customers..."
@@ -254,11 +263,11 @@ export function CustomersWorkspace({
         </Select>
       </div>
 
-      <div className="border rounded-md bg-card">
-        <Table>
+      <div className="overflow-hidden rounded-md border bg-card">
+        <Table className="min-w-[920px] table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead>
+              <TableHead className="w-[26%]">
                 <button
                   type="button"
                   onClick={() => handleSort("businessName")}
@@ -268,7 +277,7 @@ export function CustomersWorkspace({
                   <SortIcon field="businessName" sortDirection={sortDirection} sortField={sortField} />
                 </button>
               </TableHead>
-              <TableHead>
+              <TableHead className="w-[24%]">
                 <button
                   type="button"
                   onClick={() => handleSort("contactName")}
@@ -278,17 +287,7 @@ export function CustomersWorkspace({
                   <SortIcon field="contactName" sortDirection={sortDirection} sortField={sortField} />
                 </button>
               </TableHead>
-              <TableHead>
-                <button
-                  type="button"
-                  onClick={() => handleSort("email")}
-                  className="inline-flex items-center hover:text-foreground transition-colors"
-                >
-                  Email
-                  <SortIcon field="email" sortDirection={sortDirection} sortField={sortField} />
-                </button>
-              </TableHead>
-              <TableHead>
+              <TableHead className="w-[14%]">
                 <button
                   type="button"
                   onClick={() => handleSort("status")}
@@ -298,7 +297,7 @@ export function CustomersWorkspace({
                   <SortIcon field="status" sortDirection={sortDirection} sortField={sortField} />
                 </button>
               </TableHead>
-              <TableHead>
+              <TableHead className="w-[12%]">
                 <button
                   type="button"
                   onClick={() => handleSort("createdAt")}
@@ -308,13 +307,13 @@ export function CustomersWorkspace({
                   <SortIcon field="createdAt" sortDirection={sortDirection} sortField={sortField} />
                 </button>
               </TableHead>
-              <TableHead className="text-right" />
+              <TableHead className="w-[24%] text-right" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredAndSorted.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                   {customers.length === 0
                     ? "No customers found. Create one to get started."
                     : "No customers match your filters."}
@@ -326,46 +325,48 @@ export function CustomersWorkspace({
                 const actionKind = getActionKind(customer);
 
                 return (
-                  <TableRow key={customer.id}>
+                  <TableRow
+                    key={customer.id}
+                    className={cn(initialFocusId === customer.id && "bg-accent/40")}
+                  >
                     <TableCell className="font-medium">
-                      <div className="flex flex-col gap-1">
-                        <span>{getCustomerDisplayName(customer)}</span>
-                        <span>{getEboekhoudenStatusBadge(customer)}</span>
+                      <div className="flex min-w-0 flex-col gap-2">
+                        <span className="truncate" title={getCustomerDisplayName(customer)}>
+                          {getCustomerDisplayName(customer)}
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {getEboekhoudenStatusBadge(customer)}
+                        </div>
                       </div>
                     </TableCell>
-                    <TableCell>{customer.contactName ?? "-"}</TableCell>
-                    <TableCell>{customer.email}</TableCell>
-                    <TableCell>{getStatusBadge(stage)}</TableCell>
                     <TableCell>
+                      <div className="flex min-w-0 flex-col gap-1">
+                        <span className="truncate" title={customer.contactName ?? undefined}>
+                          {customer.contactName ?? "-"}
+                        </span>
+                        <span className="truncate text-sm text-muted-foreground" title={customer.email}>
+                          {customer.email}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>{getStatusBadge(stage)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
                       {formatDate(customer.createdAt)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1.5">
                         {actionKind === "create_payment" ? (
                           <Button
                             variant="outline"
                             size="sm"
+                            className="whitespace-nowrap"
                             onClick={() => {
                               setSelectedCustomer(customer);
                               setIsCreatePaymentOpen(true);
                             }}
                           >
-                            <LinkIcon className="mr-2 h-4 w-4" />
-                            Create Payment Link
-                          </Button>
-                        ) : null}
-
-                        {customer.eboekhoudenLinkStatus === "unlinked" ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedCustomer(customer);
-                              setIsLinkEboekhoudenOpen(true);
-                            }}
-                          >
-                            <LinkIcon className="mr-2 h-4 w-4" />
-                            Link e-Boekhouden
+                            <LinkIcon />
+                            Create Link
                           </Button>
                         ) : null}
 
@@ -373,45 +374,79 @@ export function CustomersWorkspace({
                           <Button
                             variant="outline"
                             size="sm"
+                            className="whitespace-nowrap"
                             onClick={() => {
                               setSelectedCustomer(customer);
                               setIsConfirmPaymentOpen(true);
                             }}
                           >
-                            <CheckCircle className="mr-2 h-4 w-4" />
-                            Refresh Payment
+                            <CheckCircle />
+                            Refresh
                           </Button>
                         ) : null}
 
                         {actionKind === "create_subscription" ? (
                           <Button
                             size="sm"
+                            className="whitespace-nowrap"
                             onClick={() => {
                               setSelectedCustomer(customer);
                               setIsCreateSubscriptionOpen(true);
                             }}
                           >
-                            <Repeat className="mr-2 h-4 w-4" />
-                            Create Subscription
+                            <Repeat />
+                            Subscribe
                           </Button>
                         ) : null}
 
                         {actionKind === "active" ? (
-                          <span className="mr-2 text-sm italic text-muted-foreground">Active</span>
+                          <Badge variant="outline" className="whitespace-nowrap">
+                            Active
+                          </Badge>
                         ) : null}
 
                         <Button
                           variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
+                          size="icon-sm"
                           onClick={() => {
                             setSelectedCustomer(customer);
                             setIsCustomerDrawerOpen(true);
                           }}
                         >
-                          <ChevronRight className="h-4 w-4" />
+                          <ChevronRight />
                           <span className="sr-only">View customer details</span>
                         </Button>
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon-sm">
+                              <MoreHorizontal />
+                              <span className="sr-only">Open customer actions</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuGroup>
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  setSelectedCustomer(customer);
+                                  setIsCustomerDrawerOpen(true);
+                                }}
+                              >
+                                View details
+                              </DropdownMenuItem>
+                              {customer.eboekhoudenLinkStatus === "unlinked" ? (
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    setSelectedCustomer(customer);
+                                    setIsLinkEboekhoudenOpen(true);
+                                  }}
+                                >
+                                  Link e-Boekhouden
+                                </DropdownMenuItem>
+                              ) : null}
+                            </DropdownMenuGroup>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </TableCell>
                   </TableRow>
