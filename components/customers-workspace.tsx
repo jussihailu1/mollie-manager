@@ -5,13 +5,10 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
-  CheckCircle,
   ChevronRight,
-  Link as LinkIcon,
-  MoreHorizontal,
   Plus,
-  Repeat,
   Search,
+  Unlink,
 } from "lucide-react";
 
 import {
@@ -22,20 +19,12 @@ import {
   CustomerDrawer,
   LinkEboekhoudenRelationDialog,
   type CustomerFlowRecord,
-  getEboekhoudenStatusBadge,
   getCustomerDisplayName,
   getCustomerStage,
 } from "@/components/customer-flow-dialogs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -55,7 +44,7 @@ import {
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-type SortField = "businessName" | "contactName" | "email" | "status" | "createdAt";
+type SortField = "businessName" | "contactName" | "status" | "createdAt";
 type SortDirection = "asc" | "desc";
 
 const STATUS_OPTIONS = [
@@ -192,9 +181,6 @@ export function CustomersWorkspace({
         case "contactName":
           comparison = (left.contactName ?? "").localeCompare(right.contactName ?? "");
           break;
-        case "email":
-          comparison = left.email.localeCompare(right.email);
-          break;
         case "status":
           comparison =
             statusOrder[getCustomerStage(left)] - statusOrder[getCustomerStage(right)];
@@ -264,10 +250,10 @@ export function CustomersWorkspace({
       </div>
 
       <div className="overflow-hidden rounded-md border bg-card">
-        <Table className="min-w-[920px] table-fixed">
+        <Table className="min-w-[760px] table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[26%]">
+              <TableHead className="w-[30%]">
                 <button
                   type="button"
                   onClick={() => handleSort("businessName")}
@@ -277,7 +263,7 @@ export function CustomersWorkspace({
                   <SortIcon field="businessName" sortDirection={sortDirection} sortField={sortField} />
                 </button>
               </TableHead>
-              <TableHead className="w-[24%]">
+              <TableHead className="w-[30%]">
                 <button
                   type="button"
                   onClick={() => handleSort("contactName")}
@@ -287,7 +273,7 @@ export function CustomersWorkspace({
                   <SortIcon field="contactName" sortDirection={sortDirection} sortField={sortField} />
                 </button>
               </TableHead>
-              <TableHead className="w-[14%]">
+              <TableHead className="w-[18%]">
                 <button
                   type="button"
                   onClick={() => handleSort("status")}
@@ -297,7 +283,7 @@ export function CustomersWorkspace({
                   <SortIcon field="status" sortDirection={sortDirection} sortField={sortField} />
                 </button>
               </TableHead>
-              <TableHead className="w-[12%]">
+              <TableHead className="w-[14%]">
                 <button
                   type="button"
                   onClick={() => handleSort("createdAt")}
@@ -307,7 +293,7 @@ export function CustomersWorkspace({
                   <SortIcon field="createdAt" sortDirection={sortDirection} sortField={sortField} />
                 </button>
               </TableHead>
-              <TableHead className="w-[24%] text-right" />
+              <TableHead className="w-[8%] text-right" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -327,16 +313,31 @@ export function CustomersWorkspace({
                 return (
                   <TableRow
                     key={customer.id}
-                    className={cn(initialFocusId === customer.id && "bg-accent/40")}
+                    className={cn(
+                      actionKind === "create_subscription" &&
+                        "bg-primary/[0.03] hover:bg-primary/[0.06]",
+                      initialFocusId === customer.id && "bg-accent/40",
+                    )}
                   >
-                    <TableCell className="font-medium">
-                      <div className="flex min-w-0 flex-col gap-2">
+                    <TableCell
+                      className={cn(
+                        "font-medium",
+                        actionKind === "create_subscription" && "border-l-2 border-l-primary/70",
+                      )}
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
                         <span className="truncate" title={getCustomerDisplayName(customer)}>
                           {getCustomerDisplayName(customer)}
                         </span>
-                        <div className="flex flex-wrap gap-2">
-                          {getEboekhoudenStatusBadge(customer)}
-                        </div>
+                        {customer.eboekhoudenLinkStatus === "unlinked" ? (
+                          <span
+                            className="inline-flex shrink-0 text-muted-foreground/70"
+                            title="Not linked to e-Boekhouden"
+                          >
+                            <Unlink className="size-3.5" aria-hidden="true" />
+                            <span className="sr-only">Not linked to e-Boekhouden</span>
+                          </span>
+                        ) : null}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -354,99 +355,27 @@ export function CustomersWorkspace({
                       {formatDate(customer.createdAt)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {actionKind === "create_payment" ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="whitespace-nowrap"
-                            onClick={() => {
-                              setSelectedCustomer(customer);
-                              setIsCreatePaymentOpen(true);
-                            }}
-                          >
-                            <LinkIcon />
-                            Create Link
-                          </Button>
-                        ) : null}
-
-                        {actionKind === "confirm_payment" ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="whitespace-nowrap"
-                            onClick={() => {
-                              setSelectedCustomer(customer);
-                              setIsConfirmPaymentOpen(true);
-                            }}
-                          >
-                            <CheckCircle />
-                            Refresh
-                          </Button>
-                        ) : null}
-
-                        {actionKind === "create_subscription" ? (
-                          <Button
-                            size="sm"
-                            className="whitespace-nowrap"
-                            onClick={() => {
-                              setSelectedCustomer(customer);
-                              setIsCreateSubscriptionOpen(true);
-                            }}
-                          >
-                            <Repeat />
-                            Subscribe
-                          </Button>
-                        ) : null}
-
-                        {actionKind === "active" ? (
-                          <Badge variant="outline" className="whitespace-nowrap">
-                            Active
-                          </Badge>
-                        ) : null}
-
+                      <div className="flex items-center justify-end">
                         <Button
                           variant="ghost"
                           size="icon-sm"
+                          className={cn(
+                            "relative",
+                            actionKind === "create_subscription" &&
+                              "bg-primary/10 text-primary ring-1 ring-primary/40 hover:bg-primary/15",
+                          )}
                           onClick={() => {
                             setSelectedCustomer(customer);
                             setIsCustomerDrawerOpen(true);
                           }}
                         >
                           <ChevronRight />
-                          <span className="sr-only">View customer details</span>
+                          <span className="sr-only">
+                            {actionKind === "create_subscription"
+                              ? "View customer details. Ready to create subscription."
+                              : "View customer details"}
+                          </span>
                         </Button>
-
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon-sm">
-                              <MoreHorizontal />
-                              <span className="sr-only">Open customer actions</span>
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuGroup>
-                              <DropdownMenuItem
-                                onSelect={() => {
-                                  setSelectedCustomer(customer);
-                                  setIsCustomerDrawerOpen(true);
-                                }}
-                              >
-                                View details
-                              </DropdownMenuItem>
-                              {customer.eboekhoudenLinkStatus === "unlinked" ? (
-                                <DropdownMenuItem
-                                  onSelect={() => {
-                                    setSelectedCustomer(customer);
-                                    setIsLinkEboekhoudenOpen(true);
-                                  }}
-                                >
-                                  Link e-Boekhouden
-                                </DropdownMenuItem>
-                              ) : null}
-                            </DropdownMenuGroup>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
                       </div>
                     </TableCell>
                   </TableRow>
