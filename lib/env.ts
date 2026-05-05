@@ -46,6 +46,11 @@ const rawServerEnvSchema = z.object({
   AUTH_ALLOWED_EMAIL: optionalEmail,
   AUTH_GOOGLE_ID: optionalString,
   AUTH_GOOGLE_SECRET: optionalString,
+  AUTH_TEST_BYPASS_ENABLED: optionalBoolean.default(false),
+  AUTH_TEST_USER_EMAIL: optionalEmail.default("codex-test@example.local"),
+  AUTH_TEST_USER_NAME: z
+    .preprocess(emptyToUndefined, z.string().min(1).optional())
+    .default("Codex Test User"),
   DATABASE_URL: optionalString,
   DATABASE_SSL: optionalBoolean.default(false),
   MOLLIE_DEFAULT_MODE: z.enum(["test", "live"]).default("test"),
@@ -212,7 +217,15 @@ export function getMollieApiKey(mode: MollieMode) {
     return mollieTestConfigSchema.parse(env).MOLLIE_TEST_API_KEY;
   }
 
+  if (env.APP_ENV === "test") {
+    throw new Error("Live Mollie credentials are disabled when APP_ENV=test.");
+  }
+
   return mollieLiveConfigSchema.parse(env).MOLLIE_LIVE_API_KEY;
+}
+
+export function isTestAuthBypassEnabled() {
+  return env.APP_ENV === "test" && env.AUTH_TEST_BYPASS_ENABLED;
 }
 
 export function getMollieWebhookConfig() {

@@ -27,9 +27,11 @@ async function updateSelectedMode(mode: MollieMode, returnTo: string) {
 }
 
 export function DashboardModeToggle({
+  liveModeDisabled = false,
   selectedMode,
   className,
 }: Readonly<{
+  liveModeDisabled?: boolean;
   selectedMode: MollieMode;
   className?: string;
 }>) {
@@ -45,38 +47,42 @@ export function DashboardModeToggle({
         className,
       )}
     >
-      {(["test", "live"] as const).map((mode) => {
-        const isActive = selectedMode === mode;
+      {(["test", "live"] as const)
+        .filter((mode) => !liveModeDisabled || mode !== "live")
+        .map((mode) => {
+          const isActive = selectedMode === mode;
 
-        return (
-          <Button
-            key={mode}
-            type="button"
-            size="sm"
-            variant={isActive ? "default" : "ghost"}
-            disabled={isPending || isActive}
-            onClick={() => {
-              startTransition(async () => {
-                await updateSelectedMode(mode, returnTo);
-              });
-            }}
-            className={cn(
-              "h-8 rounded-md px-3 text-sm",
-              !isActive && "text-muted-foreground",
-            )}
-          >
-            {mode === "live" ? "Live" : "Test"}
-          </Button>
-        );
-      })}
+          return (
+            <Button
+              key={mode}
+              type="button"
+              size="sm"
+              variant={isActive ? "default" : "ghost"}
+              disabled={isPending || isActive}
+              onClick={() => {
+                startTransition(async () => {
+                  await updateSelectedMode(mode, returnTo);
+                });
+              }}
+              className={cn(
+                "h-8 rounded-md px-3 text-sm",
+                !isActive && "text-muted-foreground",
+              )}
+            >
+              {mode === "live" ? "Live" : "Test"}
+            </Button>
+          );
+        })}
     </div>
   );
 }
 
 export function TestModeBanner({
+  liveModeDisabled = false,
   selectedMode,
   className,
 }: Readonly<{
+  liveModeDisabled?: boolean;
   selectedMode: MollieMode;
   className?: string;
 }>) {
@@ -102,20 +108,22 @@ export function TestModeBanner({
           New work uses test credentials until you switch back.
         </span>
       </div>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        disabled={isPending}
-        onClick={() => {
-          startTransition(async () => {
-            await updateSelectedMode("live", returnTo);
-          });
-        }}
-        className="h-8 border-amber-200 bg-white text-amber-950 hover:bg-amber-100"
-      >
-        Switch to live
-      </Button>
+      {liveModeDisabled ? null : (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={isPending}
+          onClick={() => {
+            startTransition(async () => {
+              await updateSelectedMode("live", returnTo);
+            });
+          }}
+          className="h-8 border-amber-200 bg-white text-amber-950 hover:bg-amber-100"
+        >
+          Switch to live
+        </Button>
+      )}
     </div>
   );
 }

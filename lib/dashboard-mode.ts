@@ -13,6 +13,10 @@ function isMollieMode(value: string | null | undefined): value is MollieMode {
 }
 
 export async function getSelectedMollieMode(): Promise<MollieMode> {
+  if (env.APP_ENV === "test") {
+    return "test";
+  }
+
   const cookieStore = await cookies();
   const selectedMode = cookieStore.get(dashboardModeCookieName)?.value;
 
@@ -22,6 +26,10 @@ export async function getSelectedMollieMode(): Promise<MollieMode> {
 export async function resolveDashboardModeFilter(
   searchParam: string | null | undefined,
 ): Promise<DashboardModeFilter> {
+  if (env.APP_ENV === "test") {
+    return "test";
+  }
+
   if (searchParam === "all") {
     return "all";
   }

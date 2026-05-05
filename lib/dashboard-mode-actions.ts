@@ -26,9 +26,10 @@ export async function setSelectedMollieModeAction(formData: FormData) {
 
   await requireViewerSession();
 
+  const selectedMode = env.APP_ENV === "test" ? "test" : parsed.data.mode;
   const cookieStore = await cookies();
 
-  cookieStore.set(dashboardModeCookieName, parsed.data.mode, {
+  cookieStore.set(dashboardModeCookieName, selectedMode, {
     httpOnly: true,
     maxAge: 31_536_000,
     path: "/",

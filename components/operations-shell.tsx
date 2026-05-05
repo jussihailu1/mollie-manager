@@ -141,10 +141,12 @@ function setStoredSidebarCollapsed(collapsed: boolean) {
 
 export function OperationsShell({
   children,
+  isLiveModeDisabled = false,
   recentAlerts,
   selectedMode,
 }: Readonly<{
   children: ReactNode;
+  isLiveModeDisabled?: boolean;
   recentAlerts: ShellAlert[];
   selectedMode: "test" | "live";
 }>) {
@@ -215,15 +217,23 @@ export function OperationsShell({
                     {selectedMode === "live" ? "Live mode" : "Test mode"}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {selectedMode === "live" ? "Real Mollie data" : "Sandbox Mollie data"}
+                    {isLiveModeDisabled
+                      ? "Live mode disabled in test environment"
+                      : selectedMode === "live"
+                        ? "Real Mollie data"
+                        : "Sandbox Mollie data"}
                   </p>
                 </div>
                 <Switch
                   aria-label="Toggle Mollie live mode"
                   checked={selectedMode === "live"}
-                  disabled={isModePending}
+                  disabled={isModePending || isLiveModeDisabled}
                   size="sm"
                   onCheckedChange={(checked) => {
+                    if (isLiveModeDisabled) {
+                      return;
+                    }
+
                     startModeTransition(async () => {
                       await updateSelectedMode(checked ? "live" : "test", returnTo);
                     });

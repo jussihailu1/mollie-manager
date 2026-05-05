@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
 import { StatusPill } from "@/components/status-pill";
 import { getSetupStatus } from "@/lib/env";
 import { signInWithGoogle } from "@/lib/auth/actions";
+import { getViewerSession } from "@/lib/auth/session";
 import { appName } from "@/lib/app-config";
 
 type LoginPageProps = {
@@ -17,7 +17,7 @@ const authErrorMessages: Record<string, string> = {
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const session = await auth();
+  const session = await getViewerSession();
 
   if (session?.user?.email) {
     redirect("/");
