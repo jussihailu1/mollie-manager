@@ -2,6 +2,11 @@
 
 This document tracks the current state after the Magic Patterns UI transplant.
 
+Policy source docs for the next subscription feature pass:
+
+- Current-state policy: `documentation/subscription-policy.md`
+- Future-state roadmap: `documentation/subscription-roadmap.md`
+
 ## Remaining After MP Transplant
 
 These items are still in the backend or planned scope, but they are not fully represented in the active UI right now.
@@ -15,6 +20,10 @@ These items are still in the backend or planned scope, but they are not fully re
 - [ ] Detailed customer history tables for payments, mandates, and subscriptions are no longer a first-class screen.
 - [ ] Platform readiness / integration diagnostics are no longer a dedicated screen.
 - [ ] Reconciliation and test-alert controls are no longer exposed in the active UI.
+- [ ] Fixed-term subscription support is not implemented yet.
+- [ ] The recurring onboarding flow does not yet show an explicit consent screen before the mandate-establishing first payment.
+- [ ] The recurring onboarding flow does not yet disclose cancellation-by-email terms to the customer.
+- [ ] Tenant-default subscription policy modeling is not implemented yet.
 
 ## Retained In Current UI
 
@@ -77,4 +86,5 @@ These are still part of the product behavior even if the new UI is narrower than
 - The active dashboard, customers, payments, notifications, and shell surfaces are wired back to real data and server actions.
 - The richer customer fields are still stored in `customers.metadata`; e-Boekhouden link state now has first-class customer columns and a Drizzle migration in `db/drizzle`.
 - e-Boekhouden import/linking requires `EBOEKHOUDEN_API_TOKEN` in the server environment. `EBOEKHOUDEN_API_SOURCE` defaults to `Kify`.
-- The next implementation pass should target the unchecked items in the first section, starting with whichever missing UI surface matters most.
+- The next subscription feature pass should follow `documentation/subscription-policy.md`.
+- Longer-term subscription-platform work should accumulate in `documentation/subscription-roadmap.md`.

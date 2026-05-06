@@ -19,9 +19,9 @@ The core workflow is:
 1. Create a customer.
 2. Create a customer-linked first payment in Mollie with `sequenceType=first`.
 3. Restrict that first payment to `iDEAL` so it can establish the later direct debit mandate.
-4. Manually share the returned Mollie checkout URL with the customer, usually via WhatsApp.
+4. Current implementation manually shares the returned Mollie checkout URL with the customer, usually via WhatsApp. Upcoming onboarding work should route the customer through an app-hosted consent step before Mollie checkout.
 5. After the first payment succeeds, sync the customer and mandate state from Mollie.
-6. Create the monthly subscription using the verified mandate.
+6. Create the recurring subscription using the verified mandate.
 7. Monitor recurring payments, failures, disputes, stopped subscriptions, and sync drift.
 
 This is not meant to be a generic payment dashboard. The product is centered on safe subscription creation and management.
@@ -34,17 +34,37 @@ These decisions were explicitly made in the old chat and should be treated as th
 - The only staff user is the owner.
 - Login should be Google sign-in with a single allowlisted email address.
 - Use Mollie API keys on the server, not Mollie OAuth/app access tokens.
-- NL first, EUR first, monthly fixed-price subscriptions first.
+- NL first and EUR first.
 - The first payment should charge the real first installment, not a symbolic setup amount.
 - The first payment should be a customer-linked payment, not a Mollie payment-link object.
-- The first checkout link is shared manually by the operator.
-- Billing date follows the date of the first successful payment.
+- Current implementation shares the returned Mollie checkout URL manually. Upcoming onboarding work should insert an app-hosted consent step before checkout.
+- Current implementation derives the billing date from the first successful payment. Upcoming term-model work must not assume monthly-only billing forever.
 - Default cancellation behavior is "stop future charges after the current paid period."
 - Alerts go to the owner only.
 - Payment links are still needed as a separate module for one-off use cases, but they are not the main recurring onboarding primitive.
 - PostgreSQL is part of the intended architecture.
 - Mollie remains the financial source of truth.
 - The local database is the operational and safety layer.
+
+## Subscription Policy Direction
+
+Canonical docs:
+
+- Current-state policy: `documentation/subscription-policy.md`
+- Future-state roadmap: `documentation/subscription-roadmap.md`
+
+Locked direction for the next subscription feature pass:
+
+- Use `subscription_term_mode: open_ended | fixed_term`.
+- For fixed-term subscriptions, use `total_payments` as billing source of truth.
+- Treat `last_charge_date` as derived or validated display/audit data.
+- Treat `service_end_at` as distinct from the final billing date.
+- Use `cancellation_effect: immediate | end_of_paid_period` for entitlement behavior.
+- Do not add overlapping top-level fields that restate the same policy meaning.
+- V1 consent must happen before Mollie checkout.
+- V1 consent must disclose billing terms, service-end behavior, cancellation method, and cancellation email.
+- V1 cancellation channel for the customer is email, not self-serve UI.
+- Tenant default policy is the direction. Per-subscription overrides are explicitly later work.
 
 ## Why The Database Exists
 
@@ -298,6 +318,8 @@ The subscription setup flow uses a customer payment created through Mollie with 
 
 That distinction matters because the separate `payment_links` module is for one-off payment-link objects, not for the recurring setup flow.
 
+This remains true even after the consent-flow work. The future consent screen should wrap the first-payment flow, not replace it with Mollie payment-link objects.
+
 ### 5. Webhooks are signals, not trusted truth
 
 The codebase follows the rule that webhook arrivals should trigger a re-fetch from Mollie. This pattern already exists in `lib/reliability/sync.ts` and should be preserved.
@@ -369,36 +391,16 @@ Also note that `package.json` currently does not include shadcn/Radix-style comp
 
 ## What We Are Doing Now
 
-The latest user request in the old chat was a second UI pass. That request appears to be the current active work item, and it does not appear implemented yet in the inspected code.
+The active product direction is the next subscription-policy and consent-flow pass.
 
-The requested next work is:
+Immediate documentation-backed implementation targets:
 
-- minimize custom components and use shadcn wherever practical
-- make the app use the full page width
-- remove all-caps / spaced-letter label styles
-- improve information hierarchy so the important parts are easier to read
-- move the bottom-sidebar content into a small modal/popover that opens from the sidebar logo
-- add an external link in that logo menu to `https://my.mollie.com/dashboard/org_19456510`
-- hide developer-facing labels like auth/db readiness and generic ready/test badges
-- add a settings feature to toggle between live and test mode
-- show a top-center test-mode indicator/banner with a quick switch back
-- use shadcn labels instead of custom ones
-- move the "send test alert" action from `/settings` to `/alerts`
-- simplify `/settings` by removing operator context and operational notes
-- reduce integrations display to a simple status list
+- fixed-term subscription support
+- explicit consent screen before the mandate-establishing first payment
+- cancellation-by-email disclosure in the onboarding terms
+- tenant-default subscription policy model
 
-## Suggested Next Implementation Order
-
-If a future AI is asked to continue from here, this is the most sensible order:
-
-1. Introduce the shadcn foundation first.
-2. Replace high-frequency primitives first: badge/label, button, dialog/sheet, table, form inputs.
-3. Remove the dashboard width cap and simplify the top shell.
-4. Move sidebar footer content into a logo-triggered menu/popover.
-5. Redesign mode handling before adding the toggle UI, because the current mode is env-driven.
-6. Move the test-alert action to `/alerts`.
-7. Simplify `/settings`.
-8. Re-run `npm run lint`, `npx tsc --noEmit`, and `npm run build`.
+Use `documentation/subscription-policy.md` as the current implementation spec and `documentation/subscription-roadmap.md` for later subscription-platform work.
 
 ## Mode-Toggle Design Note
 
@@ -447,4 +449,4 @@ Done:
 
 Now:
 
-- the next active task is a second UI pass focused on shadcn, full-width layout, less developer-facing chrome, and a better operator-centered information hierarchy
+- the next active task is the subscription-policy, consent-flow, and future-safe term-model pass documented in `documentation/subscription-policy.md`
