@@ -19,7 +19,7 @@ The core workflow is:
 1. Create a customer.
 2. Create a customer-linked first payment in Mollie with `sequenceType=first`.
 3. Restrict that first payment to `iDEAL` so it can establish the later direct debit mandate.
-4. Current implementation manually shares the returned Mollie checkout URL with the customer, usually via WhatsApp. Upcoming onboarding work should route the customer through an app-hosted consent step before Mollie checkout.
+4. Current implementation shares an app-hosted consent URL with the customer. The customer accepts terms in-app before being redirected to Mollie checkout for the mandate-establishing first payment.
 5. After the first payment succeeds, sync the customer and mandate state from Mollie.
 6. Create the recurring subscription using the verified mandate.
 7. Monitor recurring payments, failures, disputes, stopped subscriptions, and sync drift.
@@ -35,9 +35,9 @@ These decisions were explicitly made in the old chat and should be treated as th
 - Login should be Google sign-in with a single allowlisted email address.
 - Use Mollie API keys on the server, not Mollie OAuth/app access tokens.
 - NL first and EUR first.
-- The first payment should charge the real first installment, not a symbolic setup amount.
-- The first payment should be a customer-linked payment, not a Mollie payment-link object.
-- Current implementation shares the returned Mollie checkout URL manually. Upcoming onboarding work should insert an app-hosted consent step before checkout.
+- The first payment mode defaults to charging the real first installment, with optional `mandate_only` (`€0.01`) when mandate setup should be decoupled from the first recurring installment.
+- The recurring onboarding entrypoint is an app-hosted consent URL, not a raw Mollie checkout URL.
+- Consent acceptance is required and is bound to an exact plan snapshot before recurring subscription creation.
 - Current implementation derives the billing date from the first successful payment. Upcoming term-model work must not assume monthly-only billing forever.
 - Default cancellation behavior is "stop future charges after the current paid period."
 - Alerts go to the owner only.
@@ -131,8 +131,8 @@ Relevant files:
 Implemented:
 
 - customer creation
-- first payment creation
-- checkout URL sharing path
+- first payment link creation
+- app-hosted consent URL generation and consent evidence capture
 - customer sync from Mollie
 - mandate syncing
 - subscription creation
@@ -312,13 +312,11 @@ Current behavior:
 
 This means a future UI toggle is not just a visual toggle. It needs a real design for how the operator selects the mode for new work.
 
-### 4. The first payment flow is intentionally not a Mollie payment link
+### 4. The first payment flow now runs through hosted consent before Mollie checkout
 
-The subscription setup flow uses a customer payment created through Mollie with `sequenceType=first`, then manually shares the checkout URL returned by Mollie.
+The recurring onboarding flow now creates a first-payment Mollie link for `sequenceType=first`, but the customer-facing entrypoint is the app-hosted consent page (`/subscribe/[token]`), not the raw Mollie URL.
 
-That distinction matters because the separate `payment_links` module is for one-off payment-link objects, not for the recurring setup flow.
-
-This remains true even after the consent-flow work. The future consent screen should wrap the first-payment flow, not replace it with Mollie payment-link objects.
+Consent evidence is stored with a plan snapshot and required-checkbox acknowledgements. Subscription creation is bound to that accepted snapshot.
 
 ### 5. Webhooks are signals, not trusted truth
 
@@ -396,7 +394,7 @@ The active product direction is the next subscription-policy and consent-flow pa
 Immediate documentation-backed implementation targets:
 
 - fixed-term subscription support
-- explicit consent screen before the mandate-establishing first payment
+- explicit consent screen before the mandate-establishing first payment (implemented)
 - cancellation-by-email disclosure in the onboarding terms
 - tenant-default subscription policy model
 

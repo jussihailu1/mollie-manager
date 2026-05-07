@@ -29,7 +29,14 @@ import {
 import { getMollieClient, getMollieWebhookUrl } from "@/lib/mollie/client";
 import { getCustomerDetail, type MandateRecord } from "@/lib/onboarding/data";
 import { syncPaymentLinkByMollieId } from "@/lib/reliability/sync";
+import { ensureTenantSubscriptionPolicyDefaults } from "@/lib/subscription-policy-defaults";
+import {
+  buildConsentPlanSnapshot,
+  toMollieInterval,
+  type BillingInterval,
+} from "@/lib/subscription-policy";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
+import { env } from "@/lib/env";
 
 const createCustomerSchema = z.object({
   address: z.string().trim().max(240).optional(),
@@ -56,10 +63,27 @@ const linkEboekhoudenRelationSchema = z.object({
 });
 
 const createFirstPaymentSchema = z.object({
-  amountValue: z.string().trim().min(1),
   customerId: z.string().uuid(),
-  description: z.string().trim().min(2).max(140),
+  firstPaymentMode: z
+    .enum(["real_installment", "mandate_only"])
+    .default("real_installment"),
   returnTo: z.string().trim().startsWith("/").default("/customers"),
+  serviceEndAt: z.string().trim().optional(),
+  subscriptionAmountValue: z.string().trim().min(1),
+  subscriptionDescription: z.string().trim().min(2).max(140),
+  subscriptionInterval: z.enum(["weekly", "monthly", "yearly"]).default("monthly"),
+  subscriptionStartDate: z.string().trim().min(1),
+  subscriptionTermMode: z.enum(["open_ended", "fixed_term"]).default("open_ended"),
+  totalPayments: z
+    .union([z.string().trim().length(0), z.coerce.number().int().positive()])
+    .optional()
+    .transform((value) => {
+      if (value === undefined || value === "") {
+        return null;
+      }
+
+      return Number(value);
+    }),
 });
 
 const syncCustomerSchema = z.object({
@@ -73,12 +97,8 @@ const customerArchiveSchema = z.object({
 });
 
 const createSubscriptionSchema = z.object({
-  amountValue: z.string().trim().min(1),
   customerId: z.string().uuid(),
-  description: z.string().trim().min(2).max(140),
-  interval: z.enum(["weekly", "monthly", "yearly"]).default("monthly"),
   returnTo: z.string().trim().startsWith("/").default("/customers"),
-  startDate: z.string().trim().optional(),
 });
 
 const renewableFirstPaymentLinkStatuses = new Set([
@@ -105,6 +125,37 @@ type LocalPaymentRecord = {
 type LocalSubscriptionRecord = {
   id: string;
   mollieSubscriptionId: string;
+};
+
+const consentPlanSnapshotSchema = z.object({
+  amountCurrency: z.literal("EUR"),
+  billingInterval: z.enum(["weekly", "monthly", "yearly"]),
+  cancellationEffect: z.enum(["immediate", "end_of_paid_period"]),
+  cancellationEmail: z.string().email(),
+  cancellationMethod: z.literal("email"),
+  description: z.string().min(2),
+  finalChargeDate: z.string().nullable(),
+  firstPaymentAmountValue: z.string(),
+  firstPaymentMode: z.enum(["real_installment", "mandate_only"]),
+  recurringChargeCount: z.number().int().nullable(),
+  serviceEndAt: z.string().nullable(),
+  startDate: z.string(),
+  subscriptionAmountValue: z.string(),
+  subscriptionTermMode: z.enum(["open_ended", "fixed_term"]),
+  termsPrivacy: z.object({
+    privacyUrl: z.string().url(),
+    termsUrl: z.string().url(),
+    termsVersion: z.string().min(1),
+  }),
+  totalPayments: z.number().int().nullable(),
+});
+
+type AcceptedConsentRecord = {
+  acceptedAt: string;
+  consentId: string;
+  firstPaymentMode: "real_installment" | "mandate_only";
+  paymentLinkId: string;
+  planSnapshot: z.infer<typeof consentPlanSnapshotSchema>;
 };
 
 function buildPath(pathname: string, params?: URLSearchParams) {
@@ -151,6 +202,61 @@ function normalizeAmountValue(value: string) {
   }
 
   return Number(normalized).toFixed(2);
+}
+
+function normalizeDateInput(value: string, label: string) {
+  const normalized = value.trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    throw new Error(`${label} must use YYYY-MM-DD.`);
+  }
+
+  const parsed = new Date(`${normalized}T00:00:00Z`);
+
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`${label} is not a valid date.`);
+  }
+
+  return normalized;
+}
+
+function normalizeOptionalDateInput(value: string | undefined) {
+  if (!value || value.trim().length === 0) {
+    return null;
+  }
+
+  return normalizeDateInput(value, "Service end date");
+}
+
+function buildConsentUrl(token: string) {
+  const url = new URL(`/subscribe/${token}`, env.APP_URL);
+  return url.toString();
+}
+
+function validateFixedTermInput(input: {
+  firstPaymentMode: "real_installment" | "mandate_only";
+  subscriptionTermMode: "open_ended" | "fixed_term";
+  totalPayments: number | null;
+}) {
+  if (input.subscriptionTermMode === "open_ended") {
+    if (input.totalPayments !== null) {
+      throw new Error("Total payments must be empty for open-ended subscriptions.");
+    }
+
+    return;
+  }
+
+  if (input.totalPayments === null) {
+    throw new Error("Total payments is required for fixed-term subscriptions.");
+  }
+
+  if (input.firstPaymentMode === "real_installment" && input.totalPayments < 2) {
+    throw new Error("Fixed-term subscriptions with a real first installment require at least 2 total payments.");
+  }
+
+  if (input.firstPaymentMode === "mandate_only" && input.totalPayments < 1) {
+    throw new Error("Fixed-term subscriptions with a mandate-only first payment require at least 1 total payment.");
+  }
 }
 
 function serializeError(error: unknown) {
@@ -282,6 +388,57 @@ async function getLocalSubscriptions(customerId: string, client: DbTransaction) 
   return result.rows;
 }
 
+async function getLatestAcceptedConsentForCustomer(
+  customerId: string,
+  mode: "live" | "test",
+) {
+  const result = await transaction(async (client) =>
+    client.execute<{
+      acceptedAt: string;
+      consentId: string;
+      firstPaymentMode: "real_installment" | "mandate_only";
+      paymentLinkId: string;
+      planSnapshot: Record<string, unknown>;
+    }>(sql`
+      select
+        soc.id as "consentId",
+        soc.payment_link_id as "paymentLinkId",
+        soc.first_payment_mode as "firstPaymentMode",
+        soc.plan_snapshot as "planSnapshot",
+        soc.accepted_at as "acceptedAt"
+      from subscription_onboarding_consents soc
+      inner join payment_links pl on pl.id = soc.payment_link_id and pl.mode = soc.mode
+      where
+        soc.customer_id = ${customerId}
+        and soc.mode = ${mode}
+        and soc.accepted_at is not null
+        and pl.mollie_status = 'paid'
+      order by soc.accepted_at desc
+      limit 1
+    `),
+  );
+
+  const consent = result.rows[0];
+
+  if (!consent) {
+    return null;
+  }
+
+  const parsedSnapshot = consentPlanSnapshotSchema.safeParse(consent.planSnapshot);
+
+  if (!parsedSnapshot.success) {
+    throw new Error("Accepted consent snapshot is invalid. Create a new first payment link.");
+  }
+
+  return {
+    acceptedAt: consent.acceptedAt,
+    consentId: consent.consentId,
+    firstPaymentMode: consent.firstPaymentMode,
+    paymentLinkId: consent.paymentLinkId,
+    planSnapshot: parsedSnapshot.data,
+  } satisfies AcceptedConsentRecord;
+}
+
 async function upsertMandate(
   client: DbTransaction,
   customerId: string,
@@ -345,28 +502,6 @@ async function upsertMandate(
     `);
 
   return localMandateId;
-}
-
-function toNextMonthlyStartDate(source: string) {
-  const current = new Date(source);
-
-  if (Number.isNaN(current.getTime())) {
-    throw new Error("The first payment does not have a valid paid date.");
-  }
-
-  const year = current.getUTCFullYear();
-  const month = current.getUTCMonth();
-  const day = current.getUTCDate();
-  const nextMonthStart = new Date(Date.UTC(year, month + 1, 1));
-  const lastDayOfNextMonth = new Date(
-    Date.UTC(nextMonthStart.getUTCFullYear(), nextMonthStart.getUTCMonth() + 1, 0),
-  ).getUTCDate();
-  const targetDay = Math.min(day, lastDayOfNextMonth);
-  const result = new Date(
-    Date.UTC(nextMonthStart.getUTCFullYear(), nextMonthStart.getUTCMonth(), targetDay),
-  );
-
-  return result.toISOString().slice(0, 10);
 }
 
 function findPreferredMandate(mandates: MandateRecord[]) {
@@ -781,10 +916,16 @@ export async function linkEboekhoudenRelationAction(formData: FormData) {
 
 export async function createFirstPaymentAction(formData: FormData) {
   const parsed = createFirstPaymentSchema.safeParse({
-    amountValue: formData.get("amountValue"),
     customerId: formData.get("customerId"),
-    description: formData.get("description"),
+    firstPaymentMode: formData.get("firstPaymentMode") || undefined,
     returnTo: formData.get("returnTo") || undefined,
+    serviceEndAt: formData.get("serviceEndAt") || undefined,
+    subscriptionAmountValue: formData.get("subscriptionAmountValue"),
+    subscriptionDescription: formData.get("subscriptionDescription"),
+    subscriptionInterval: formData.get("subscriptionInterval") || undefined,
+    subscriptionStartDate: formData.get("subscriptionStartDate"),
+    subscriptionTermMode: formData.get("subscriptionTermMode") || undefined,
+    totalPayments: formData.get("totalPayments") || undefined,
   });
 
   if (!parsed.success) {
@@ -847,9 +988,51 @@ export async function createFirstPaymentAction(formData: FormData) {
   }
 
   try {
-    const amountValue = normalizeAmountValue(parsed.data.amountValue);
+    const tenantPolicy = await ensureTenantSubscriptionPolicyDefaults();
+    const subscriptionAmountValue = normalizeAmountValue(
+      parsed.data.subscriptionAmountValue,
+    );
+    const subscriptionStartDate = normalizeDateInput(
+      parsed.data.subscriptionStartDate,
+      "Subscription start date",
+    );
+    const serviceEndAt = normalizeOptionalDateInput(parsed.data.serviceEndAt);
+    const subscriptionTermMode = parsed.data.subscriptionTermMode;
+    const totalPayments =
+      subscriptionTermMode === "fixed_term" ? parsed.data.totalPayments : null;
+    validateFixedTermInput({
+      firstPaymentMode: parsed.data.firstPaymentMode,
+      subscriptionTermMode,
+      totalPayments,
+    });
+    const planSnapshot = buildConsentPlanSnapshot({
+      billingInterval: parsed.data.subscriptionInterval as BillingInterval,
+      cancellationEffect: tenantPolicy.defaultCancellationEffect,
+      cancellationEmail: tenantPolicy.cancellationEmail,
+      description: parsed.data.subscriptionDescription,
+      explicitServiceEndAt: serviceEndAt,
+      firstPaymentMode: parsed.data.firstPaymentMode,
+      startDate: subscriptionStartDate,
+      subscriptionAmountValue,
+      subscriptionTermMode,
+      tenantPolicy: {
+        cancellationEmail: tenantPolicy.cancellationEmail,
+        defaultCancellationEffect: tenantPolicy.defaultCancellationEffect,
+        privacyUrl: tenantPolicy.privacyUrl,
+        termsUrl: tenantPolicy.termsUrl,
+        termsVersion: tenantPolicy.termsVersion,
+      },
+      totalPayments,
+    });
+    const amountValue = planSnapshot.firstPaymentAmountValue;
+    const paymentDescription =
+      parsed.data.firstPaymentMode === "mandate_only"
+        ? "Mandate setup payment"
+        : parsed.data.subscriptionDescription;
     const mollie = getMollieClient(selectedMode);
     const localPaymentLinkId = crypto.randomUUID();
+    const localConsentId = crypto.randomUUID();
+    const consentToken = crypto.randomUUID().replaceAll("-", "");
     const webhookUrl = getMollieWebhookUrl();
     const paymentLink = await mollie.paymentLinks.create({
       allowedMethods: [PaymentMethod.ideal],
@@ -858,7 +1041,7 @@ export async function createFirstPaymentAction(formData: FormData) {
         value: amountValue,
       },
       customerId: mollieCustomerId,
-      description: parsed.data.description,
+      description: paymentDescription,
       idempotencyKey: crypto.randomUUID(),
       reusable: false,
       sequenceType: SequenceType.first,
@@ -904,6 +1087,7 @@ export async function createFirstPaymentAction(formData: FormData) {
             ${paymentLink.expiresAt ?? null}::timestamptz,
             ${JSON.stringify({
               allowedMethods: paymentLink.allowedMethods ?? [PaymentMethod.ideal],
+              consentToken,
               latestPaymentId: null,
               latestPaymentStatus: null,
               mollieCustomerId,
@@ -918,11 +1102,47 @@ export async function createFirstPaymentAction(formData: FormData) {
             now()
           )
         `);
+      await client.execute(sql`
+          insert into subscription_onboarding_consents (
+            id,
+            mode,
+            customer_id,
+            payment_link_id,
+            consent_token,
+            first_payment_mode,
+            terms_version,
+            required_checkbox_keys,
+            accepted_checkbox_keys,
+            plan_snapshot,
+            accepted_at,
+            accepted_ip,
+            accepted_user_agent,
+            created_at,
+            updated_at
+          ) values (
+            ${localConsentId},
+            ${selectedMode},
+            ${customer.id},
+            ${localPaymentLinkId},
+            ${consentToken},
+            ${parsed.data.firstPaymentMode},
+            ${tenantPolicy.termsVersion},
+            ${JSON.stringify(["recurring_terms_ack", "cancellation_policy_ack"])}::jsonb,
+            '[]'::jsonb,
+            ${JSON.stringify(planSnapshot)}::jsonb,
+            null,
+            null,
+            null,
+            now(),
+            now()
+          )
+        `);
 
       await writeAuditLog(
         {
           action: "payment_link.first.create",
           details: {
+            consentToken,
             localPaymentLinkId,
             molliePaymentLinkId: paymentLink.id,
           },
@@ -940,8 +1160,7 @@ export async function createFirstPaymentAction(formData: FormData) {
     revalidatePath("/customers");
     revalidatePath("/payments");
     redirectWithMessage(returnTo, {
-      notice:
-        "First payment link created. Share the durable Mollie Payment Link URL with the customer.",
+      notice: `First payment consent link created. Share ${buildConsentUrl(consentToken)} with the customer.`,
     });
   } catch (error) {
     unstable_rethrow(error);
@@ -1103,12 +1322,8 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
 
 export async function createSubscriptionAction(formData: FormData) {
   const parsed = createSubscriptionSchema.safeParse({
-    amountValue: formData.get("amountValue"),
     customerId: formData.get("customerId"),
-    description: formData.get("description"),
-    interval: formData.get("interval") || undefined,
     returnTo: formData.get("returnTo") || undefined,
-    startDate: formData.get("startDate") || undefined,
   });
 
   if (!parsed.success) {
@@ -1171,33 +1386,43 @@ export async function createSubscriptionAction(formData: FormData) {
   }
 
   try {
-    const amountValue = normalizeAmountValue(parsed.data.amountValue);
-    const startDate = parsed.data.startDate?.length
-      ? parsed.data.startDate
-      : toNextMonthlyStartDate(latestPaidFirstPayment.paidAt!);
-    const intervalMap = {
-      monthly: "1 month",
-      weekly: "1 week",
-      yearly: "12 months",
-    } as const;
-    const mollieInterval = intervalMap[parsed.data.interval];
+    const acceptedConsent = await getLatestAcceptedConsentForCustomer(
+      detail.customer.id,
+      selectedMode,
+    );
+
+    if (!acceptedConsent) {
+      redirectWithMessage(returnTo, {
+        error:
+          "No accepted consent was found for a paid first payment. Create a new first payment link and complete consent first.",
+      });
+    }
+
+    const plan = acceptedConsent.planSnapshot;
+    const recurringChargeCount = plan.recurringChargeCount;
+    const mollieInterval = toMollieInterval(plan.billingInterval);
     const mollie = getMollieClient(selectedMode);
     const localSubscriptionId = crypto.randomUUID();
     const subscription = await mollie.customerSubscriptions.create({
       amount: {
         currency: "EUR",
-        value: amountValue,
+        value: plan.subscriptionAmountValue,
       },
       customerId: mollieCustomerId,
-      description: parsed.data.description,
+      description: plan.description,
       idempotencyKey: crypto.randomUUID(),
       interval: mollieInterval,
       mandateId: preferredMandate.mollieMandateId,
       metadata: {
+        consentId: acceptedConsent.consentId,
         customerId: detail.customer.id,
+        firstPaymentMode: acceptedConsent.firstPaymentMode,
         localSubscriptionId,
       },
-      startDate,
+      startDate: plan.startDate,
+      ...(plan.subscriptionTermMode === "fixed_term" && recurringChargeCount !== null
+        ? { times: recurringChargeCount }
+        : {}),
       webhookUrl: getMollieWebhookUrl(),
     });
 
@@ -1215,6 +1440,11 @@ export async function createSubscriptionAction(formData: FormData) {
             interval,
             amount_value,
             amount_currency,
+            subscription_term_mode,
+            total_payments,
+            last_charge_date,
+            service_end_at,
+            cancellation_effect,
             billing_day,
             start_date,
             stop_after_current_period,
@@ -1234,10 +1464,17 @@ export async function createSubscriptionAction(formData: FormData) {
             ${subscription.interval},
             ${subscription.amount.value},
             ${subscription.amount.currency},
-            ${new Date(startDate).getUTCDate()},
+            ${plan.subscriptionTermMode},
+            ${plan.totalPayments},
+            ${plan.finalChargeDate}::date,
+            ${plan.serviceEndAt}::timestamptz,
+            ${plan.cancellationEffect},
+            ${new Date(plan.startDate).getUTCDate()},
             ${subscription.startDate}::date,
             ${false},
             ${JSON.stringify({
+              consentId: acceptedConsent.consentId,
+              firstPaymentMode: acceptedConsent.firstPaymentMode,
               nextPaymentDate: subscription.nextPaymentDate ?? null,
             })}::jsonb,
             now(),
@@ -1250,6 +1487,7 @@ export async function createSubscriptionAction(formData: FormData) {
         {
           action: "subscription.create",
           details: {
+            consentId: acceptedConsent.consentId,
             localSubscriptionId,
             mollieSubscriptionId: subscription.id,
             startDate: subscription.startDate,
@@ -1258,7 +1496,7 @@ export async function createSubscriptionAction(formData: FormData) {
           entityType: "subscription",
           mode: selectedMode,
           outcome: "success",
-          summary: "Created a monthly subscription from a verified first payment.",
+          summary: "Created a subscription from accepted consent and a verified first payment.",
         },
         client,
       );

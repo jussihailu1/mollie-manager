@@ -71,6 +71,21 @@ export const webhookProcessingStatusEnum = pgEnum(
   ["pending", "processed", "failed", "ignored"],
 );
 
+export const subscriptionTermModeEnum = pgEnum("subscription_term_mode", [
+  "open_ended",
+  "fixed_term",
+]);
+
+export const cancellationEffectEnum = pgEnum("cancellation_effect", [
+  "immediate",
+  "end_of_paid_period",
+]);
+
+export const firstPaymentModeEnum = pgEnum("first_payment_mode", [
+  "real_installment",
+  "mandate_only",
+]);
+
 export const customers = pgTable(
   "customers",
   {
@@ -202,6 +217,18 @@ export const subscriptions = pgTable(
       scale: 2,
     }).notNull(),
     amountCurrency: char("amount_currency", { length: 3 }).notNull(),
+    subscriptionTermMode: subscriptionTermModeEnum("subscription_term_mode")
+      .notNull()
+      .default("open_ended"),
+    totalPayments: integer("total_payments"),
+    lastChargeDate: date("last_charge_date", { mode: "string" }),
+    serviceEndAt: timestamp("service_end_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    cancellationEffect: cancellationEffectEnum("cancellation_effect")
+      .notNull()
+      .default("end_of_paid_period"),
     billingDay: integer("billing_day"),
     startDate: date("start_date", { mode: "string" }),
     stopAfterCurrentPeriod: boolean("stop_after_current_period")
@@ -248,8 +275,48 @@ export const subscriptions = pgTable(
       table.mollieSubscriptionId,
     ),
     check("subscriptions_amount_value_check", sql`${table.amountValue} >= 0`),
+    check("subscriptions_total_payments_positive_check", sql`
+      ${table.totalPayments} is null or ${table.totalPayments} > 0
+    `),
+    check("subscriptions_term_mode_total_payments_check", sql`
+      (
+        ${table.subscriptionTermMode} = 'fixed_term'
+        and ${table.totalPayments} is not null
+      ) or (
+        ${table.subscriptionTermMode} = 'open_ended'
+        and ${table.totalPayments} is null
+      )
+    `),
     index("subscriptions_customer_idx").on(table.customerId, table.localStatus),
   ],
+);
+
+export const tenantSubscriptionPolicyDefaults = pgTable(
+  "tenant_subscription_policy_defaults",
+  {
+    id: text("id").primaryKey(),
+    cancellationEmail: text("cancellation_email").notNull(),
+    termsUrl: text("terms_url").notNull(),
+    privacyUrl: text("privacy_url").notNull(),
+    termsVersion: text("terms_version").notNull(),
+    defaultCancellationEffect: cancellationEffectEnum(
+      "default_cancellation_effect",
+    )
+      .notNull()
+      .default("end_of_paid_period"),
+    createdAt: timestamp("created_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
 );
 
 export const payments = pgTable(
@@ -388,6 +455,72 @@ export const paymentLinks = pgTable(
     ),
     check("payment_links_amount_value_check", sql`${table.amountValue} >= 0`),
     index("payment_links_customer_idx").on(table.customerId),
+  ],
+);
+
+export const subscriptionOnboardingConsents = pgTable(
+  "subscription_onboarding_consents",
+  {
+    id: text("id").primaryKey(),
+    mode: mollieModeEnum("mode").notNull(),
+    customerId: text("customer_id").notNull(),
+    paymentLinkId: text("payment_link_id").notNull(),
+    consentToken: text("consent_token").notNull(),
+    firstPaymentMode: firstPaymentModeEnum("first_payment_mode").notNull(),
+    termsVersion: text("terms_version").notNull(),
+    requiredCheckboxKeys: jsonb("required_checkbox_keys")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    acceptedCheckboxKeys: jsonb("accepted_checkbox_keys")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    planSnapshot: jsonb("plan_snapshot")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    acceptedAt: timestamp("accepted_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    acceptedIp: text("accepted_ip"),
+    acceptedUserAgent: text("accepted_user_agent"),
+    createdAt: timestamp("created_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.customerId],
+      foreignColumns: [customers.id],
+      name: "subscription_onboarding_consents_customer_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.paymentLinkId],
+      foreignColumns: [paymentLinks.id],
+      name: "subscription_onboarding_consents_payment_link_id_fkey",
+    }).onDelete("cascade"),
+    unique("subscription_onboarding_consents_consent_token_key").on(
+      table.consentToken,
+    ),
+    unique("subscription_onboarding_consents_mode_payment_link_id_key").on(
+      table.mode,
+      table.paymentLinkId,
+    ),
+    index("subscription_onboarding_consents_customer_idx").on(
+      table.customerId,
+      table.createdAt.desc(),
+    ),
   ],
 );
 

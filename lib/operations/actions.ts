@@ -144,7 +144,7 @@ export async function cancelSubscriptionAction(formData: FormData) {
             mollie_status = ${canceledSubscription.status},
             stop_after_current_period = true,
             canceled_at = coalesce(${canceledSubscription.canceledAt ?? null}::timestamptz, now()),
-            metadata = ${JSON.stringify({
+            metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
               nextPaymentDate: canceledSubscription.nextPaymentDate ?? null,
             })}::jsonb,
             updated_at = now(),

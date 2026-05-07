@@ -952,7 +952,7 @@ export async function syncSubscriptionByLocalId(
           start_date = ${subscription.startDate}::date,
           stop_after_current_period = ${subscription.status === "canceled" || subscription.status === "completed"},
           canceled_at = ${subscription.canceledAt ?? null}::timestamptz,
-          metadata = ${JSON.stringify({
+          metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
             nextPaymentDate: subscription.nextPaymentDate ?? null,
           })}::jsonb,
           updated_at = now(),

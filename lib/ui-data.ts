@@ -1,5 +1,6 @@
 import "server-only";
 
+import { env } from "@/lib/env";
 import type { MollieMode } from "@/lib/env";
 import type {
   CustomerOverview,
@@ -24,6 +25,8 @@ export type UiCustomerRecord = {
   latestFirstPaymentCheckoutUrl: string | null;
   latestFirstPaymentLinkStatus: string | null;
   latestFirstPaymentLinkUrl: string | null;
+  latestConsentAcceptedAt: string | null;
+  latestConsentUrl: string | null;
   latestFirstPaymentPaidAt: string | null;
   latestFirstPaymentStatus: string | null;
   latestMandateStatus: string | null;
@@ -32,11 +35,16 @@ export type UiCustomerRecord = {
   latestSubscriptionDescription: string | null;
   latestSubscriptionId: string | null;
   latestSubscriptionInterval: string | null;
+  latestSubscriptionCancellationEffect: "immediate" | "end_of_paid_period" | null;
+  latestSubscriptionLastChargeDate: string | null;
   latestSubscriptionMollieStatus: string | null;
   latestSubscriptionNextPaymentDate: string | null;
+  latestSubscriptionServiceEndAt: string | null;
   latestSubscriptionStartDate: string | null;
   latestSubscriptionStatus: string | null;
   latestSubscriptionStopAfterCurrentPeriod: boolean | null;
+  latestSubscriptionTermMode: "open_ended" | "fixed_term" | null;
+  latestSubscriptionTotalPayments: number | null;
   mode: MollieMode;
   notes: string | null;
   phone: string | null;
@@ -117,6 +125,10 @@ function mapAlertType(alert: AlertInboxItem): UiNotificationRecord["type"] {
 }
 
 export function toUiCustomerRecord(customer: CustomerOverview): UiCustomerRecord {
+  const latestConsentUrl = customer.latestConsentToken
+    ? new URL(`/subscribe/${customer.latestConsentToken}`, env.APP_URL).toString()
+    : null;
+
   return {
     address: customer.address,
     businessName: customer.businessName,
@@ -133,6 +145,8 @@ export function toUiCustomerRecord(customer: CustomerOverview): UiCustomerRecord
     latestFirstPaymentCheckoutUrl: customer.latestFirstPaymentCheckoutUrl,
     latestFirstPaymentLinkStatus: customer.latestFirstPaymentLinkStatus,
     latestFirstPaymentLinkUrl: customer.latestFirstPaymentLinkUrl,
+    latestConsentAcceptedAt: customer.latestConsentAcceptedAt,
+    latestConsentUrl,
     latestFirstPaymentPaidAt: customer.latestFirstPaymentPaidAt,
     latestFirstPaymentStatus: customer.latestFirstPaymentStatus,
     latestMandateStatus: customer.latestMandateStatus,
@@ -141,11 +155,16 @@ export function toUiCustomerRecord(customer: CustomerOverview): UiCustomerRecord
     latestSubscriptionDescription: customer.latestSubscriptionDescription,
     latestSubscriptionId: customer.latestSubscriptionId,
     latestSubscriptionInterval: customer.latestSubscriptionInterval,
+    latestSubscriptionCancellationEffect: customer.latestSubscriptionCancellationEffect,
+    latestSubscriptionLastChargeDate: customer.latestSubscriptionLastChargeDate,
     latestSubscriptionMollieStatus: customer.latestSubscriptionMollieStatus,
     latestSubscriptionNextPaymentDate: customer.latestSubscriptionNextPaymentDate,
+    latestSubscriptionServiceEndAt: customer.latestSubscriptionServiceEndAt,
     latestSubscriptionStartDate: customer.latestSubscriptionStartDate,
     latestSubscriptionStatus: customer.latestSubscriptionStatus,
     latestSubscriptionStopAfterCurrentPeriod: customer.latestSubscriptionStopAfterCurrentPeriod,
+    latestSubscriptionTermMode: customer.latestSubscriptionTermMode,
+    latestSubscriptionTotalPayments: customer.latestSubscriptionTotalPayments,
     mode: customer.mode,
     notes: customer.notes,
     phone: customer.phone,

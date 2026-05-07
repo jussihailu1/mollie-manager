@@ -25,6 +25,8 @@ export type CustomerOverview = {
   latestFirstPaymentLinkId: string | null;
   latestFirstPaymentLinkStatus: string | null;
   latestFirstPaymentLinkUrl: string | null;
+  latestConsentAcceptedAt: string | null;
+  latestConsentToken: string | null;
   latestFirstPaymentPaidAt: string | null;
   latestFirstPaymentStatus: string | null;
   latestMandateId: string | null;
@@ -34,11 +36,16 @@ export type CustomerOverview = {
   latestSubscriptionAmountValue: string | null;
   latestSubscriptionDescription: string | null;
   latestSubscriptionInterval: string | null;
+  latestSubscriptionCancellationEffect: "immediate" | "end_of_paid_period" | null;
+  latestSubscriptionLastChargeDate: string | null;
   latestSubscriptionMollieStatus: string | null;
   latestSubscriptionNextPaymentDate: string | null;
+  latestSubscriptionServiceEndAt: string | null;
   latestSubscriptionStartDate: string | null;
   latestSubscriptionStatus: string | null;
   latestSubscriptionStopAfterCurrentPeriod: boolean | null;
+  latestSubscriptionTermMode: "open_ended" | "fixed_term" | null;
+  latestSubscriptionTotalPayments: number | null;
   mode: "live" | "test";
   mollieCustomerId: string | null;
   notes: string | null;
@@ -91,16 +98,21 @@ export type SubscriptionRecord = {
   amountValue: string;
   billingDay: number | null;
   canceledAt: string | null;
+  cancellationEffect: "immediate" | "end_of_paid_period";
   createdAt: string;
   description: string;
   id: string;
   interval: string;
+  lastChargeDate: string | null;
   localStatus: string;
   mandateId: string | null;
   mollieStatus: string | null;
   nextPaymentDate: string | null;
+  serviceEndAt: string | null;
   startDate: string | null;
   stopAfterCurrentPeriod: boolean;
+  subscriptionTermMode: "open_ended" | "fixed_term";
+  totalPayments: number | null;
 };
 
 export type CustomerDetail = {
@@ -115,6 +127,7 @@ export type SubscriptionOverview = {
   amountCurrency: string;
   amountValue: string;
   canceledAt: string | null;
+  cancellationEffect: "immediate" | "end_of_paid_period";
   createdAt: string;
   customerEmail: string;
   customerId: string;
@@ -122,14 +135,18 @@ export type SubscriptionOverview = {
   description: string;
   id: string;
   interval: string;
+  lastChargeDate: string | null;
   localStatus: string;
   mandateId: string | null;
   mode: "live" | "test";
   mollieSubscriptionId: string | null;
   mollieStatus: string | null;
   nextPaymentDate: string | null;
+  serviceEndAt: string | null;
   startDate: string | null;
   stopAfterCurrentPeriod: boolean;
+  subscriptionTermMode: "open_ended" | "fixed_term";
+  totalPayments: number | null;
 };
 
 export type PaymentOverview = {
@@ -209,6 +226,8 @@ const listCustomersByMode = cache(async (
         latest_payment_link.id as "latestFirstPaymentLinkId",
         latest_payment_link.checkout_url as "latestFirstPaymentLinkUrl",
         latest_payment_link.mollie_status as "latestFirstPaymentLinkStatus",
+        latest_consent.consent_token as "latestConsentToken",
+        latest_consent.accepted_at as "latestConsentAcceptedAt",
         latest_mandate.id as "latestMandateId",
         latest_mandate.mollie_status as "latestMandateStatus",
         coalesce(latest_mandate.is_valid, false) as "hasValidMandate",
@@ -217,6 +236,11 @@ const listCustomersByMode = cache(async (
         latest_subscription.amount_value::text as "latestSubscriptionAmountValue",
         latest_subscription.description as "latestSubscriptionDescription",
         latest_subscription.interval as "latestSubscriptionInterval",
+        latest_subscription.subscription_term_mode as "latestSubscriptionTermMode",
+        latest_subscription.total_payments as "latestSubscriptionTotalPayments",
+        latest_subscription.last_charge_date::text as "latestSubscriptionLastChargeDate",
+        latest_subscription.service_end_at as "latestSubscriptionServiceEndAt",
+        latest_subscription.cancellation_effect as "latestSubscriptionCancellationEffect",
         latest_subscription.mollie_status as "latestSubscriptionMollieStatus",
         latest_subscription.metadata ->> 'nextPaymentDate' as "latestSubscriptionNextPaymentDate",
         latest_subscription.start_date::text as "latestSubscriptionStartDate",
@@ -242,6 +266,13 @@ const listCustomersByMode = cache(async (
         order by pl.created_at desc
         limit 1
       ) latest_payment_link on true
+      left join lateral (
+        select soc.*
+        from subscription_onboarding_consents soc
+        where soc.customer_id = c.id and soc.mode = c.mode
+        order by soc.created_at desc
+        limit 1
+      ) latest_consent on true
       left join lateral (
         select m.*
         from mandates m
@@ -317,6 +348,8 @@ export const getCustomerDetail = cache(async (
             latest_payment_link.id as "latestFirstPaymentLinkId",
             latest_payment_link.checkout_url as "latestFirstPaymentLinkUrl",
             latest_payment_link.mollie_status as "latestFirstPaymentLinkStatus",
+            latest_consent.consent_token as "latestConsentToken",
+            latest_consent.accepted_at as "latestConsentAcceptedAt",
             latest_mandate.id as "latestMandateId",
             latest_mandate.mollie_status as "latestMandateStatus",
             coalesce(latest_mandate.is_valid, false) as "hasValidMandate",
@@ -325,6 +358,11 @@ export const getCustomerDetail = cache(async (
             latest_subscription.amount_value::text as "latestSubscriptionAmountValue",
             latest_subscription.description as "latestSubscriptionDescription",
             latest_subscription.interval as "latestSubscriptionInterval",
+            latest_subscription.subscription_term_mode as "latestSubscriptionTermMode",
+            latest_subscription.total_payments as "latestSubscriptionTotalPayments",
+            latest_subscription.last_charge_date::text as "latestSubscriptionLastChargeDate",
+            latest_subscription.service_end_at as "latestSubscriptionServiceEndAt",
+            latest_subscription.cancellation_effect as "latestSubscriptionCancellationEffect",
             latest_subscription.mollie_status as "latestSubscriptionMollieStatus",
             latest_subscription.metadata ->> 'nextPaymentDate' as "latestSubscriptionNextPaymentDate",
             latest_subscription.start_date::text as "latestSubscriptionStartDate",
@@ -350,6 +388,13 @@ export const getCustomerDetail = cache(async (
             order by pl.created_at desc
             limit 1
           ) latest_payment_link on true
+          left join lateral (
+            select soc.*
+            from subscription_onboarding_consents soc
+            where soc.customer_id = c.id and soc.mode = c.mode
+            order by soc.created_at desc
+            limit 1
+          ) latest_consent on true
           left join lateral (
             select m.*
             from mandates m
@@ -437,6 +482,11 @@ export const getCustomerDetail = cache(async (
             s.amount_currency as "amountCurrency",
             s.local_status as "localStatus",
             s.mollie_status as "mollieStatus",
+            s.subscription_term_mode as "subscriptionTermMode",
+            s.total_payments as "totalPayments",
+            s.last_charge_date::text as "lastChargeDate",
+            s.service_end_at as "serviceEndAt",
+            s.cancellation_effect as "cancellationEffect",
             s.start_date::text as "startDate",
             s.canceled_at as "canceledAt",
             s.billing_day as "billingDay",
@@ -489,6 +539,11 @@ const listSubscriptionsByMode = cache(async (mode: DashboardModeFilter) => {
         s.amount_currency as "amountCurrency",
         s.local_status as "localStatus",
         s.mollie_status as "mollieStatus",
+        s.subscription_term_mode as "subscriptionTermMode",
+        s.total_payments as "totalPayments",
+        s.last_charge_date::text as "lastChargeDate",
+        s.service_end_at as "serviceEndAt",
+        s.cancellation_effect as "cancellationEffect",
         s.start_date::text as "startDate",
         s.canceled_at as "canceledAt",
         s.stop_after_current_period as "stopAfterCurrentPeriod",

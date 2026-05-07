@@ -20,10 +20,11 @@ These items are still in the backend or planned scope, but they are not fully re
 - [ ] Detailed customer history tables for payments, mandates, and subscriptions are no longer a first-class screen.
 - [ ] Platform readiness / integration diagnostics are no longer a dedicated screen.
 - [ ] Reconciliation and test-alert controls are no longer exposed in the active UI.
-- [ ] Fixed-term subscription support is not implemented yet.
-- [ ] The recurring onboarding flow does not yet show an explicit consent screen before the mandate-establishing first payment.
-- [ ] The recurring onboarding flow does not yet disclose cancellation-by-email terms to the customer.
-- [ ] Tenant-default subscription policy modeling is not implemented yet.
+- [x] Fixed-term subscription support is implemented with `subscription_term_mode`, `total_payments`, derived `last_charge_date`, `service_end_at`, and `cancellation_effect`.
+- [x] The recurring onboarding flow now uses an app-hosted consent screen before Mollie checkout.
+- [x] The recurring onboarding flow now discloses cancellation-by-email terms to the customer.
+- [x] Tenant-default subscription policy modeling is implemented for v1 with DB defaults bootstrapped from env.
+- [x] Onboarding supports first-payment mode selection (`real_installment` default or `mandate_only` at `€0.01`) with consent-bound subscription creation.
 
 ## Retained In Current UI
 

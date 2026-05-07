@@ -85,19 +85,26 @@ export type CustomerFlowRecord = {
   latestFirstPaymentCheckoutUrl: string | null;
   latestFirstPaymentLinkStatus: string | null;
   latestFirstPaymentLinkUrl: string | null;
+  latestConsentAcceptedAt: string | null;
+  latestConsentUrl: string | null;
   latestFirstPaymentPaidAt: string | null;
   latestFirstPaymentStatus: string | null;
   latestMandateStatus: string | null;
   latestSubscriptionAmountCurrency: string | null;
   latestSubscriptionAmountValue: string | null;
+  latestSubscriptionCancellationEffect: "immediate" | "end_of_paid_period" | null;
   latestSubscriptionDescription: string | null;
   latestSubscriptionId: string | null;
   latestSubscriptionInterval: string | null;
+  latestSubscriptionLastChargeDate: string | null;
   latestSubscriptionMollieStatus: string | null;
   latestSubscriptionNextPaymentDate: string | null;
+  latestSubscriptionServiceEndAt: string | null;
   latestSubscriptionStartDate: string | null;
   latestSubscriptionStatus: string | null;
   latestSubscriptionStopAfterCurrentPeriod: boolean | null;
+  latestSubscriptionTermMode: "open_ended" | "fixed_term" | null;
+  latestSubscriptionTotalPayments: number | null;
   mode: "live" | "test";
   notes: string | null;
   phone: string | null;
@@ -829,8 +836,22 @@ export function CreatePaymentLinkDialog({
   );
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(customer?.id ?? null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [amount, setAmount] = useState("10.00");
-  const [description, setDescription] = useState("First mandate payment");
+  const [firstPaymentMode, setFirstPaymentMode] = useState<
+    "real_installment" | "mandate_only"
+  >("real_installment");
+  const [subscriptionAmount, setSubscriptionAmount] = useState("49.99");
+  const [subscriptionInterval, setSubscriptionInterval] = useState<
+    "weekly" | "monthly" | "yearly"
+  >("monthly");
+  const [subscriptionDescription, setSubscriptionDescription] = useState("Premium Plan");
+  const [subscriptionStartDate, setSubscriptionStartDate] = useState(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [subscriptionTermMode, setSubscriptionTermMode] = useState<
+    "open_ended" | "fixed_term"
+  >("open_ended");
+  const [totalPayments, setTotalPayments] = useState("12");
+  const [serviceEndAt, setServiceEndAt] = useState("");
 
   const selectedCustomer =
     customer ?? customers.find((item) => item.id === selectedCustomerId) ?? null;
@@ -856,12 +877,12 @@ export function CreatePaymentLinkDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {step === "select_customer" ? "Select Customer" : "Create First Payment Link"}
+            {step === "select_customer" ? "Select Customer" : "Create First Payment Consent Link"}
           </DialogTitle>
           <DialogDescription>
             {step === "select_customer"
-              ? "Choose a customer to generate a payment link for."
-              : `Generate a payment link for ${selectedCustomer?.businessName ?? "this customer"}. This is required to establish a mandate before creating a subscription.`}
+              ? "Choose a customer to generate a consent link for."
+              : `Generate a hosted consent link for ${selectedCustomer?.businessName ?? "this customer"}. The customer must accept terms in-app before entering Mollie checkout.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -935,24 +956,122 @@ export function CreatePaymentLinkDialog({
             ) : null}
 
             <div className="space-y-2">
-              <Label htmlFor="amountValue">Amount (EUR)</Label>
+              <Label>First payment mode</Label>
+              <Select
+                name="firstPaymentMode"
+                value={firstPaymentMode}
+                onValueChange={(value) =>
+                  setFirstPaymentMode(value as "real_installment" | "mandate_only")
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select first payment mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="real_installment">Real first installment</SelectItem>
+                  <SelectItem value="mandate_only">Mandate-only (€0.01)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="subscriptionAmountValue">Subscription amount (EUR)</Label>
               <Input
-                id="amountValue"
-                name="amountValue"
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
+                id="subscriptionAmountValue"
+                name="subscriptionAmountValue"
+                value={subscriptionAmount}
+                onChange={(event) => setSubscriptionAmount(event.target.value)}
+                required
+              />
+              {firstPaymentMode === "mandate_only" ? (
+                <p className="text-xs text-muted-foreground">
+                  The first mandate-establishing payment will be fixed to €0.01.
+                </p>
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="subscriptionDescription">Subscription description</Label>
+              <Input
+                id="subscriptionDescription"
+                name="subscriptionDescription"
+                value={subscriptionDescription}
+                onChange={(event) => setSubscriptionDescription(event.target.value)}
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="paymentDescription">Description</Label>
+              <Label>Billing interval</Label>
+              <Select
+                name="subscriptionInterval"
+                value={subscriptionInterval}
+                onValueChange={(value) =>
+                  setSubscriptionInterval(value as "weekly" | "monthly" | "yearly")
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select interval" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="yearly">Yearly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="subscriptionStartDate">Subscription start date</Label>
               <Input
-                id="paymentDescription"
-                name="description"
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
+                id="subscriptionStartDate"
+                name="subscriptionStartDate"
+                type="date"
+                value={subscriptionStartDate}
+                onChange={(event) => setSubscriptionStartDate(event.target.value)}
                 required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Subscription term</Label>
+              <Select
+                name="subscriptionTermMode"
+                value={subscriptionTermMode}
+                onValueChange={(value) =>
+                  setSubscriptionTermMode(value as "open_ended" | "fixed_term")
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select subscription term" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="open_ended">Open-ended</SelectItem>
+                  <SelectItem value="fixed_term">Fixed-term</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="totalPayments">Total payments (fixed-term only)</Label>
+              <Input
+                id="totalPayments"
+                name="totalPayments"
+                value={totalPayments}
+                onChange={(event) => setTotalPayments(event.target.value)}
+                disabled={subscriptionTermMode !== "fixed_term"}
+                required={subscriptionTermMode === "fixed_term"}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="serviceEndAt">Service end date (optional override)</Label>
+              <Input
+                id="serviceEndAt"
+                name="serviceEndAt"
+                type="date"
+                value={serviceEndAt}
+                onChange={(event) => setServiceEndAt(event.target.value)}
               />
             </div>
 
@@ -960,7 +1079,7 @@ export function CreatePaymentLinkDialog({
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button type="submit">Generate Link</Button>
+              <Button type="submit">Generate Consent Link</Button>
             </DialogFooter>
           </form>
         ) : null}
@@ -1018,10 +1137,6 @@ export function CreateSubscriptionDialog({
   onOpenChange: (open: boolean) => void;
 }>) {
   const pathname = usePathname();
-  const [amount, setAmount] = useState("49.99");
-  const [interval, setInterval] = useState<"weekly" | "monthly" | "yearly">("monthly");
-  const [description, setDescription] = useState("Premium Plan");
-  const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0] ?? "");
 
   if (!customer) {
     return null;
@@ -1033,65 +1148,18 @@ export function CreateSubscriptionDialog({
         <DialogHeader>
           <DialogTitle>Create Subscription</DialogTitle>
           <DialogDescription>
-            Configure a recurring subscription for {customer.businessName}. They have a valid
-            mandate.
+            Start the recurring subscription for {customer.businessName} using the latest accepted
+            consent terms and verified mandate.
           </DialogDescription>
         </DialogHeader>
         <form className="space-y-4 py-4" action={createSubscriptionAction}>
           <input type="hidden" name="customerId" value={customer.id} />
           <input type="hidden" name="returnTo" value={pathname} />
 
-          <div className="space-y-2">
-            <Label htmlFor="subscriptionAmount">Amount (EUR)</Label>
-            <Input
-              id="subscriptionAmount"
-              name="amountValue"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Interval</Label>
-            <Select
-              name="interval"
-              value={interval}
-              onValueChange={(value) => setInterval(value as typeof interval)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select interval" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="weekly">Weekly</SelectItem>
-                <SelectItem value="monthly">Monthly</SelectItem>
-                <SelectItem value="yearly">Yearly</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="subscriptionDescription">Description</Label>
-            <Input
-              id="subscriptionDescription"
-              name="description"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="subscriptionStartDate">Start Date</Label>
-            <Input
-              id="subscriptionStartDate"
-              name="startDate"
-              type="date"
-              value={startDate}
-              onChange={(event) => setStartDate(event.target.value)}
-              required
-            />
-          </div>
+          <p className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+            The subscription amount, interval, term mode, and cancellation behavior are locked to
+            the accepted consent snapshot.
+          </p>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -1228,7 +1296,7 @@ export function CustomerDrawer({
             <div className="space-y-0">
               {[
                 "Customer Created",
-                "Payment Link Generated",
+                "Consent Link Generated",
                 "First Payment Completed",
                 "Subscription Active",
               ].map((label, index) => {
@@ -1299,12 +1367,34 @@ export function CustomerDrawer({
                       value={formatSubscriptionInterval(customer.latestSubscriptionInterval)}
                     />
                     <SubscriptionSummaryRow
+                      label="Term mode"
+                      value={formatLabel(customer.latestSubscriptionTermMode)}
+                    />
+                    {customer.latestSubscriptionTermMode === "fixed_term" ? (
+                      <SubscriptionSummaryRow
+                        label="Total payments"
+                        value={customer.latestSubscriptionTotalPayments ?? "Not available"}
+                      />
+                    ) : null}
+                    <SubscriptionSummaryRow
                       label="Start date"
                       value={formatDate(customer.latestSubscriptionStartDate)}
                     />
                     <SubscriptionSummaryRow
+                      label="Last charge date"
+                      value={formatDate(customer.latestSubscriptionLastChargeDate)}
+                    />
+                    <SubscriptionSummaryRow
+                      label="Service end at"
+                      value={formatDate(customer.latestSubscriptionServiceEndAt)}
+                    />
+                    <SubscriptionSummaryRow
                       label="Next payment"
                       value={formatDate(customer.latestSubscriptionNextPaymentDate)}
+                    />
+                    <SubscriptionSummaryRow
+                      label="Cancellation effect"
+                      value={formatLabel(customer.latestSubscriptionCancellationEffect)}
                     />
                     <SubscriptionSummaryRow
                       label="Status"
@@ -1328,18 +1418,25 @@ export function CustomerDrawer({
             </>
           ) : null}
 
-          {customer.latestFirstPaymentLinkUrl || customer.latestFirstPaymentPaidAt ? (
+          {customer.latestConsentUrl ||
+          customer.latestConsentAcceptedAt ||
+          customer.latestFirstPaymentPaidAt ? (
             <>
               <Separator />
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                   Payment Context
                 </h3>
-                {customer.latestFirstPaymentLinkUrl ? (
+                {customer.latestConsentUrl ? (
                   <div className="space-y-2">
-                    <Label>Payment Link</Label>
-                    <CopyField value={customer.latestFirstPaymentLinkUrl} />
+                    <Label>Hosted consent link</Label>
+                    <CopyField value={customer.latestConsentUrl} />
                   </div>
+                ) : null}
+                {customer.latestConsentAcceptedAt ? (
+                  <p className="text-sm text-muted-foreground">
+                    Consent accepted on {formatDate(customer.latestConsentAcceptedAt)}
+                  </p>
                 ) : null}
                 {customer.latestFirstPaymentPaidAt ? (
                   <p className="text-sm text-muted-foreground">
@@ -1361,7 +1458,7 @@ export function CustomerDrawer({
             {!isArchived && getCustomerActionKind(customer) === "create_payment" ? (
               <Button className="w-full" onClick={() => onOpenCreatePayment(customer)}>
                 <LinkIcon className="mr-2 h-4 w-4" />
-                Create Payment Link
+                Create Consent Link
               </Button>
             ) : null}
 

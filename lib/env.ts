@@ -68,6 +68,10 @@ const rawServerEnvSchema = z.object({
   ALERT_EMAIL_TO: optionalEmail,
   EBOEKHOUDEN_API_TOKEN: optionalString,
   EBOEKHOUDEN_API_SOURCE: z.string().trim().min(1).max(10).default("Kify"),
+  SUBSCRIPTION_CANCELLATION_EMAIL: optionalEmail,
+  SUBSCRIPTION_TERMS_URL: optionalUrl,
+  SUBSCRIPTION_PRIVACY_URL: optionalUrl,
+  SUBSCRIPTION_TERMS_VERSION: optionalString,
 });
 
 const parsedServerEnv = rawServerEnvSchema.parse(process.env);
@@ -140,6 +144,13 @@ const mollieWebhookConfigSchema = z.object({
 const eboekhoudenConfigSchema = z.object({
   EBOEKHOUDEN_API_SOURCE: z.string().trim().min(1).max(10),
   EBOEKHOUDEN_API_TOKEN: z.string().min(1),
+});
+
+const subscriptionPolicyConfigSchema = z.object({
+  SUBSCRIPTION_CANCELLATION_EMAIL: z.string().email(),
+  SUBSCRIPTION_PRIVACY_URL: z.string().url(),
+  SUBSCRIPTION_TERMS_URL: z.string().url(),
+  SUBSCRIPTION_TERMS_VERSION: z.string().min(1),
 });
 
 function buildStatus(issues: string[]): SetupSectionStatus {
@@ -234,4 +245,8 @@ export function getMollieWebhookConfig() {
 
 export function getEboekhoudenConfig() {
   return eboekhoudenConfigSchema.parse(env);
+}
+
+export function getSubscriptionPolicyConfig() {
+  return subscriptionPolicyConfigSchema.parse(env);
 }

@@ -22,6 +22,13 @@
       "when": 1777336800000,
       "tag": "0002_customer_archive",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778073684928,
+      "tag": "0003_kind_doctor_spectrum",
+      "breakpoints": true
     }
   ]
 }

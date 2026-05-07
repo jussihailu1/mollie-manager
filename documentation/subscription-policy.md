@@ -24,6 +24,9 @@ This file is normative for implementation. Keep it aligned with code changes.
 - Consent must be tied to the exact subscription terms shown to the customer.
 - The billing end concept and the service end concept are separate and must stay separate in the model.
 - Do not introduce overlapping policy fields that encode the same meaning twice.
+- V1 supports `first_payment_mode: real_installment | mandate_only`.
+- `real_installment` remains the default first-payment mode.
+- `mandate_only` in V1 is fixed at `€0.01` and is used only for mandate setup before recurring charges.
 
 ## V1 Policy Rules
 
@@ -31,10 +34,16 @@ This file is normative for implementation. Keep it aligned with code changes.
 - `open_ended` means the subscription continues until canceled.
 - `fixed_term` means the subscription has a bounded number of scheduled charges.
 - For `fixed_term`, `total_payments` is required.
+- `total_payments` is customer-visible charge count:
+  - for `real_installment`, include the first payment
+  - for `mandate_only`, exclude the `€0.01` mandate setup payment
 - `last_charge_date` may be entered by UI or shown by UI, but the implementation must resolve it into `total_payments`.
 - `service_end_at` is independent from the final billing date.
 - `cancellation_effect` governs what happens to service entitlement after cancellation, not how many charges exist.
 - Default cancellation behavior remains "stop future charges after the current paid period" unless the tenant default policy says otherwise.
+- Fixed-term validation minimums:
+  - `real_installment` requires `total_payments >= 2`
+  - `mandate_only` requires `total_payments >= 1`
 
 ## V1 Onboarding Flow Shape
 
