@@ -7,6 +7,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { getDb, transaction, type DbClient, type DbTransaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { getMollieClient, getMollieWebhookUrl, isMollieConfigured } from "@/lib/mollie/client";
+import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
 import {
   deliverAlertEmail,
   openAlert,
@@ -837,6 +838,19 @@ export async function syncPaymentByMollieId(
           resolvedCustomerId,
           actor,
         );
+
+  if (
+    resolvedCustomerId &&
+    resolvePaymentType(payment) === "first" &&
+    payment.status === "paid"
+  ) {
+    await attemptSubscriptionActivation({
+      actor,
+      customerId: resolvedCustomerId,
+      mode,
+      trigger: "auto",
+    });
+  }
 
   return {
     customerId: resolvedCustomerId,

@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { getDb } from "@/lib/db";
+import { env } from "@/lib/env";
 
 export const subscriptionConsentPlanSnapshotSchema = z.object({
   amountCurrency: z.literal("EUR"),
@@ -53,6 +54,17 @@ export type SubscriptionConsentRecord = {
   termsVersion: string;
 };
 
+export type SubscriptionOnboardingReturnRecord = {
+  acceptedAt: string | null;
+  businessName: string | null;
+  consentId: string;
+  consentToken: string;
+  firstPaymentMode: "real_installment" | "mandate_only";
+  firstPaymentStatus: string | null;
+  paymentLinkStatus: string | null;
+  subscriptionStatus: string | null;
+};
+
 function buildUrl(token: string, params: Record<string, string | null | undefined> = {}) {
   const search = new URLSearchParams();
 
@@ -66,6 +78,14 @@ function buildUrl(token: string, params: Record<string, string | null | undefine
 
   const searchString = search.toString();
   return `/subscribe/${token}${searchString ? `?${searchString}` : ""}`;
+}
+
+export function buildSubscriptionConsentReturnPath(token: string) {
+  return `/subscribe/${token}/return`;
+}
+
+export function buildSubscriptionConsentReturnUrl(token: string) {
+  return new URL(buildSubscriptionConsentReturnPath(token), env.APP_URL).toString();
 }
 
 export async function getSubscriptionConsentByToken(token: string) {
@@ -139,6 +159,58 @@ export async function getSubscriptionConsentByToken(token: string) {
       : [],
     termsVersion: row.termsVersion,
   } satisfies SubscriptionConsentRecord;
+}
+
+export async function getSubscriptionOnboardingReturnRecord(token: string) {
+  const parsedToken = consentTokenSchema.safeParse(token);
+
+  if (!parsedToken.success) {
+    return null;
+  }
+
+  const result = await getDb().execute<{
+    acceptedAt: string | null;
+    businessName: string | null;
+    consentId: string;
+    consentToken: string;
+    firstPaymentMode: "real_installment" | "mandate_only";
+    firstPaymentStatus: string | null;
+    paymentLinkStatus: string | null;
+    subscriptionStatus: string | null;
+  }>(sql`
+    select
+      soc.id as "consentId",
+      soc.consent_token as "consentToken",
+      soc.accepted_at as "acceptedAt",
+      soc.first_payment_mode as "firstPaymentMode",
+      pl.mollie_status as "paymentLinkStatus",
+      pl.metadata ->> 'latestPaymentStatus' as "firstPaymentStatus",
+      created_subscription.local_status as "subscriptionStatus",
+      coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "businessName"
+    from subscription_onboarding_consents soc
+    inner join payment_links pl on pl.id = soc.payment_link_id and pl.mode = soc.mode
+    inner join customers c on c.id = soc.customer_id and c.mode = soc.mode
+    left join lateral (
+      select s.local_status
+      from subscriptions s
+      where
+        s.customer_id = soc.customer_id
+        and s.mode = soc.mode
+        and s.metadata ->> 'consentId' = soc.id
+      order by s.created_at desc
+      limit 1
+    ) created_subscription on true
+    where soc.consent_token = ${parsedToken.data}
+    limit 1
+  `);
+
+  const row = result.rows[0];
+
+  if (!row) {
+    return null;
+  }
+
+  return row satisfies SubscriptionOnboardingReturnRecord;
 }
 
 export async function acceptSubscriptionConsentAction(formData: FormData) {

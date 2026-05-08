@@ -69,7 +69,8 @@ const statusOrder = {
   new: 0,
   payment_pending: 1,
   payment_completed: 2,
-  subscription_active: 3,
+  subscription_activation_pending: 3,
+  subscription_active: 4,
 } as const;
 
 const CUSTOMER_VIEWS = [
@@ -89,6 +90,12 @@ function getStatusBadge(stage: ReturnType<typeof getCustomerStage>) {
       );
     case "payment_completed":
       return <Badge variant="secondary" className="whitespace-nowrap">Payment Completed</Badge>;
+    case "subscription_activation_pending":
+      return (
+        <Badge className="whitespace-nowrap bg-sky-100 text-sky-900 hover:bg-sky-100/80">
+          Activation Pending
+        </Badge>
+      );
     case "subscription_active":
       return <Badge variant="default" className="whitespace-nowrap">Subscription Active</Badge>;
     default:
@@ -105,6 +112,10 @@ function getActionKind(customer: CustomerFlowRecord) {
 
   if (stage === "payment_pending") {
     return "confirm_payment";
+  }
+
+  if (stage === "subscription_activation_pending") {
+    return "activation_pending";
   }
 
   if (stage === "payment_completed") {
@@ -708,6 +719,8 @@ export function CustomersWorkspace({
                         <span className="sr-only">
                           {actionKind === "create_subscription"
                             ? "View customer details. Ready to create subscription."
+                            : actionKind === "activation_pending"
+                              ? "View customer details. Automatic subscription activation is pending."
                             : "View customer details"}
                         </span>
                       </Button>

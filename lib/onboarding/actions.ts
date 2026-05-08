@@ -27,12 +27,13 @@ import {
   type LocalRelationFields,
 } from "@/lib/eboekhouden/relation-mapping";
 import { getMollieClient, getMollieWebhookUrl } from "@/lib/mollie/client";
-import { getCustomerDetail, type MandateRecord } from "@/lib/onboarding/data";
+import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
+import { getCustomerDetail } from "@/lib/onboarding/data";
 import { syncPaymentLinkByMollieId } from "@/lib/reliability/sync";
+import { buildSubscriptionConsentReturnUrl } from "@/lib/subscription-consent";
 import { ensureTenantSubscriptionPolicyDefaults } from "@/lib/subscription-policy-defaults";
 import {
   buildConsentPlanSnapshot,
-  toMollieInterval,
   type BillingInterval,
 } from "@/lib/subscription-policy";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
@@ -125,37 +126,6 @@ type LocalPaymentRecord = {
 type LocalSubscriptionRecord = {
   id: string;
   mollieSubscriptionId: string;
-};
-
-const consentPlanSnapshotSchema = z.object({
-  amountCurrency: z.literal("EUR"),
-  billingInterval: z.enum(["weekly", "monthly", "yearly"]),
-  cancellationEffect: z.enum(["immediate", "end_of_paid_period"]),
-  cancellationEmail: z.string().email(),
-  cancellationMethod: z.literal("email"),
-  description: z.string().min(2),
-  finalChargeDate: z.string().nullable(),
-  firstPaymentAmountValue: z.string(),
-  firstPaymentMode: z.enum(["real_installment", "mandate_only"]),
-  recurringChargeCount: z.number().int().nullable(),
-  serviceEndAt: z.string().nullable(),
-  startDate: z.string(),
-  subscriptionAmountValue: z.string(),
-  subscriptionTermMode: z.enum(["open_ended", "fixed_term"]),
-  termsPrivacy: z.object({
-    privacyUrl: z.string().url(),
-    termsUrl: z.string().url(),
-    termsVersion: z.string().min(1),
-  }),
-  totalPayments: z.number().int().nullable(),
-});
-
-type AcceptedConsentRecord = {
-  acceptedAt: string;
-  consentId: string;
-  firstPaymentMode: "real_installment" | "mandate_only";
-  paymentLinkId: string;
-  planSnapshot: z.infer<typeof consentPlanSnapshotSchema>;
 };
 
 function buildPath(pathname: string, params?: URLSearchParams) {
@@ -388,57 +358,6 @@ async function getLocalSubscriptions(customerId: string, client: DbTransaction) 
   return result.rows;
 }
 
-async function getLatestAcceptedConsentForCustomer(
-  customerId: string,
-  mode: "live" | "test",
-) {
-  const result = await transaction(async (client) =>
-    client.execute<{
-      acceptedAt: string;
-      consentId: string;
-      firstPaymentMode: "real_installment" | "mandate_only";
-      paymentLinkId: string;
-      planSnapshot: Record<string, unknown>;
-    }>(sql`
-      select
-        soc.id as "consentId",
-        soc.payment_link_id as "paymentLinkId",
-        soc.first_payment_mode as "firstPaymentMode",
-        soc.plan_snapshot as "planSnapshot",
-        soc.accepted_at as "acceptedAt"
-      from subscription_onboarding_consents soc
-      inner join payment_links pl on pl.id = soc.payment_link_id and pl.mode = soc.mode
-      where
-        soc.customer_id = ${customerId}
-        and soc.mode = ${mode}
-        and soc.accepted_at is not null
-        and pl.mollie_status = 'paid'
-      order by soc.accepted_at desc
-      limit 1
-    `),
-  );
-
-  const consent = result.rows[0];
-
-  if (!consent) {
-    return null;
-  }
-
-  const parsedSnapshot = consentPlanSnapshotSchema.safeParse(consent.planSnapshot);
-
-  if (!parsedSnapshot.success) {
-    throw new Error("Accepted consent snapshot is invalid. Create a new first payment link.");
-  }
-
-  return {
-    acceptedAt: consent.acceptedAt,
-    consentId: consent.consentId,
-    firstPaymentMode: consent.firstPaymentMode,
-    paymentLinkId: consent.paymentLinkId,
-    planSnapshot: parsedSnapshot.data,
-  } satisfies AcceptedConsentRecord;
-}
-
 async function upsertMandate(
   client: DbTransaction,
   customerId: string,
@@ -502,16 +421,6 @@ async function upsertMandate(
     `);
 
   return localMandateId;
-}
-
-function findPreferredMandate(mandates: MandateRecord[]) {
-  return mandates.find(
-    (mandate) =>
-      (mandate.method === PaymentMethod.directdebit ||
-        mandate.method === "directdebit") &&
-      (mandate.mollieStatus === MandateStatus.valid ||
-        mandate.mollieStatus === MandateStatus.pending),
-  );
 }
 
 export async function archiveCustomerAction(formData: FormData) {
@@ -1034,6 +943,7 @@ export async function createFirstPaymentAction(formData: FormData) {
     const localConsentId = crypto.randomUUID();
     const consentToken = crypto.randomUUID().replaceAll("-", "");
     const webhookUrl = getMollieWebhookUrl();
+    const redirectUrl = buildSubscriptionConsentReturnUrl(consentToken);
     const paymentLink = await mollie.paymentLinks.create({
       allowedMethods: [PaymentMethod.ideal],
       amount: {
@@ -1043,6 +953,7 @@ export async function createFirstPaymentAction(formData: FormData) {
       customerId: mollieCustomerId,
       description: paymentDescription,
       idempotencyKey: crypto.randomUUID(),
+      redirectUrl,
       reusable: false,
       sequenceType: SequenceType.first,
       webhookUrl,
@@ -1092,6 +1003,7 @@ export async function createFirstPaymentAction(formData: FormData) {
               latestPaymentStatus: null,
               mollieCustomerId,
               paymentType: "first",
+              redirectUrl,
               reusable: paymentLink.reusable ?? false,
               sequenceType: paymentLink.sequenceType ?? SequenceType.first,
               source: "subscription_onboarding",
@@ -1332,181 +1244,71 @@ export async function createSubscriptionAction(formData: FormData) {
     });
   }
 
-  await requireViewerSession();
-
+  const session = await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
-  const detail = await getCustomerDetail(parsed.data.customerId, selectedMode);
   const returnTo = updatePath(parsed.data.returnTo, {
     focus: parsed.data.customerId,
   });
 
-  if (!detail || !detail.customer.mollieCustomerId) {
-    redirectWithMessage("/customers", {
-      error: "Customer not found in the selected Mollie mode or not linked to Mollie.",
-    });
-  }
-
-  if (detail.customer.archivedAt) {
-    redirectWithMessage(returnTo, {
-      error: "Restore this customer before creating a subscription.",
-    });
-  }
-
-  const mollieCustomerId = detail.customer.mollieCustomerId;
-
-  const latestPaidFirstPayment = detail.payments.find(
-    (payment) => payment.paymentType === "first" && payment.mollieStatus === "paid" && payment.paidAt,
-  );
-  const preferredMandate = findPreferredMandate(detail.mandates);
-  const existingSubscription = detail.subscriptions.find(
-    (subscription) =>
-      subscription.localStatus === "active" ||
-      subscription.localStatus === "mandate_pending" ||
-      subscription.localStatus === "draft",
-  );
-
-  if (!latestPaidFirstPayment) {
-    redirectWithMessage(returnTo, {
-      error: "A successful first payment is required before creating the subscription.",
-    });
-  }
-
-  if (!preferredMandate) {
-    redirectWithMessage(returnTo, {
-      error:
-        "No pending or valid direct debit mandate is available yet. Sync the customer first.",
-    });
-  }
-
-  if (existingSubscription) {
-    redirectWithMessage(returnTo, {
-      error:
-        "This customer already has a local subscription record in progress or active. Review it before creating another one.",
-    });
-  }
-
   try {
-    const acceptedConsent = await getLatestAcceptedConsentForCustomer(
-      detail.customer.id,
-      selectedMode,
-    );
+    const result = await attemptSubscriptionActivation({
+      actor: {
+        email: session.user.email ?? null,
+        kind: "user",
+      },
+      customerId: parsed.data.customerId,
+      mode: selectedMode,
+      trigger: "manual",
+    });
 
-    if (!acceptedConsent) {
+    if (result.status === "created") {
+      revalidatePath("/");
+      revalidatePath("/customers");
+      revalidatePath("/payments");
+      revalidatePath("/notifications");
       redirectWithMessage(returnTo, {
-        error:
-          "No accepted consent was found for a paid first payment. Create a new first payment link and complete consent first.",
+        notice:
+          result.firstPaymentMode === "real_installment"
+            ? "Subscription activation retried successfully. Future charges are now scheduled in Mollie."
+            : "Subscription created. Future charges are now scheduled in Mollie.",
       });
     }
 
-    const plan = acceptedConsent.planSnapshot;
-    const recurringChargeCount = plan.recurringChargeCount;
-    const mollieInterval = toMollieInterval(plan.billingInterval);
-    const mollie = getMollieClient(selectedMode);
-    const localSubscriptionId = crypto.randomUUID();
-    const subscription = await mollie.customerSubscriptions.create({
-      amount: {
-        currency: "EUR",
-        value: plan.subscriptionAmountValue,
-      },
-      customerId: mollieCustomerId,
-      description: plan.description,
-      idempotencyKey: crypto.randomUUID(),
-      interval: mollieInterval,
-      mandateId: preferredMandate.mollieMandateId,
-      metadata: {
-        consentId: acceptedConsent.consentId,
-        customerId: detail.customer.id,
-        firstPaymentMode: acceptedConsent.firstPaymentMode,
-        localSubscriptionId,
-      },
-      startDate: plan.startDate,
-      ...(plan.subscriptionTermMode === "fixed_term" && recurringChargeCount !== null
-        ? { times: recurringChargeCount }
-        : {}),
-      webhookUrl: getMollieWebhookUrl(),
-    });
+    if (result.status === "already_exists") {
+      redirectWithMessage(returnTo, {
+        notice:
+          result.reason === "consent_already_used"
+            ? "A subscription already exists for this onboarding flow."
+            : "This customer already has a local subscription record in progress or active.",
+      });
+    }
 
-    await transaction(async (client) => {
-      await client.execute(sql`
-          insert into subscriptions (
-            id,
-            customer_id,
-            mandate_id,
-            mode,
-            mollie_subscription_id,
-            local_status,
-            mollie_status,
-            description,
-            interval,
-            amount_value,
-            amount_currency,
-            subscription_term_mode,
-            total_payments,
-            last_charge_date,
-            service_end_at,
-            cancellation_effect,
-            billing_day,
-            start_date,
-            stop_after_current_period,
-            metadata,
-            created_at,
-            updated_at,
-            last_synced_at
-          ) values (
-            ${localSubscriptionId},
-            ${detail.customer.id},
-            ${preferredMandate.id},
-            ${selectedMode},
-            ${subscription.id},
-            ${mapSubscriptionLifecycle(subscription.status)},
-            ${subscription.status},
-            ${subscription.description},
-            ${subscription.interval},
-            ${subscription.amount.value},
-            ${subscription.amount.currency},
-            ${plan.subscriptionTermMode},
-            ${plan.totalPayments},
-            ${plan.finalChargeDate}::date,
-            ${plan.serviceEndAt}::timestamptz,
-            ${plan.cancellationEffect},
-            ${new Date(plan.startDate).getUTCDate()},
-            ${subscription.startDate}::date,
-            ${false},
-            ${JSON.stringify({
-              consentId: acceptedConsent.consentId,
-              firstPaymentMode: acceptedConsent.firstPaymentMode,
-              nextPaymentDate: subscription.nextPaymentDate ?? null,
-            })}::jsonb,
-            now(),
-            now(),
-            now()
-          )
-        `);
+    if (result.status === "skipped") {
+      redirectWithMessage(returnTo, {
+        error:
+          "This onboarding flow is mandate-only. Create the recurring subscription manually when you are ready.",
+      });
+    }
 
-      await writeAuditLog(
-        {
-          action: "subscription.create",
-          details: {
-            consentId: acceptedConsent.consentId,
-            localSubscriptionId,
-            mollieSubscriptionId: subscription.id,
-            startDate: subscription.startDate,
-          },
-          entityId: localSubscriptionId,
-          entityType: "subscription",
-          mode: selectedMode,
-          outcome: "success",
-          summary: "Created a subscription from accepted consent and a verified first payment.",
-        },
-        client,
-      );
-    });
+    if (result.status === "pending_prerequisites") {
+      const error =
+        result.reason === "archived"
+          ? "Restore this customer before creating a subscription."
+          : result.reason === "customer_not_linked"
+            ? "Customer not found in the selected Mollie mode or not linked to Mollie."
+            : result.reason === "missing_consent"
+              ? "No accepted consent was found yet. Complete the consent flow first."
+              : result.reason === "missing_mandate"
+                ? "No pending or valid direct debit mandate is available yet. Sync the customer first."
+                : "A successful first payment is required before creating the subscription.";
 
-    revalidatePath("/");
-    revalidatePath("/customers");
-    revalidatePath("/payments");
+      redirectWithMessage(returnTo, {
+        error,
+      });
+    }
+
     redirectWithMessage(returnTo, {
-      notice: "Subscription created. Future charges are now scheduled in Mollie.",
+      error: result.message,
     });
   } catch (error) {
     unstable_rethrow(error);

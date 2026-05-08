@@ -87,6 +87,7 @@ export type CustomerFlowRecord = {
   latestFirstPaymentLinkUrl: string | null;
   latestConsentAcceptedAt: string | null;
   latestConsentUrl: string | null;
+  latestFirstPaymentMode: "real_installment" | "mandate_only" | null;
   latestFirstPaymentPaidAt: string | null;
   latestFirstPaymentStatus: string | null;
   latestMandateStatus: string | null;
@@ -133,11 +134,13 @@ export type CustomerStage =
   | "new"
   | "payment_pending"
   | "payment_completed"
+  | "subscription_activation_pending"
   | "subscription_active";
 
 type CustomerActionKind =
   | "create_payment"
   | "confirm_payment"
+  | "activation_pending"
   | "create_subscription"
   | "active";
 
@@ -151,6 +154,12 @@ function getStatusBadge(stage: CustomerStage) {
       );
     case "payment_completed":
       return <Badge variant="secondary">Payment Completed</Badge>;
+    case "subscription_activation_pending":
+      return (
+        <Badge className="bg-sky-100 text-sky-900 hover:bg-sky-100/80">
+          Activation Pending
+        </Badge>
+      );
     case "subscription_active":
       return <Badge variant="default">Subscription Active</Badge>;
     default:
@@ -190,6 +199,10 @@ function getCustomerActionKind(customer: CustomerFlowRecord): CustomerActionKind
 
   if (stage === "subscription_active") {
     return "active";
+  }
+
+  if (stage === "subscription_activation_pending") {
+    return "activation_pending";
   }
 
   if (stage === "payment_completed") {
@@ -350,6 +363,13 @@ export function getCustomerDisplayName(customer: CustomerFlowRecord) {
 export function getCustomerStage(customer: CustomerFlowRecord): CustomerStage {
   if (customer.latestSubscriptionStatus === "active") {
     return "subscription_active";
+  }
+
+  if (
+    customer.latestFirstPaymentStatus === "paid" &&
+    customer.latestFirstPaymentMode === "real_installment"
+  ) {
+    return "subscription_activation_pending";
   }
 
   if (customer.latestFirstPaymentStatus === "paid") {
@@ -1142,14 +1162,19 @@ export function CreateSubscriptionDialog({
     return null;
   }
 
+  const isActivationRetry = getCustomerStage(customer) === "subscription_activation_pending";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create Subscription</DialogTitle>
+          <DialogTitle>
+            {isActivationRetry ? "Retry Subscription Activation" : "Create Subscription"}
+          </DialogTitle>
           <DialogDescription>
-            Start the recurring subscription for {customer.businessName} using the latest accepted
-            consent terms and verified mandate.
+            {isActivationRetry
+              ? `Retry automatic subscription activation for ${customer.businessName} using the latest accepted consent terms and verified mandate.`
+              : `Start the recurring subscription for ${customer.businessName} using the latest accepted consent terms and verified mandate.`}
           </DialogDescription>
         </DialogHeader>
         <form className="space-y-4 py-4" action={createSubscriptionAction}>
@@ -1165,7 +1190,9 @@ export function CreateSubscriptionDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit">Start Subscription</Button>
+            <Button type="submit">
+              {isActivationRetry ? "Retry Activation" : "Start Subscription"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -1204,6 +1231,7 @@ export function CustomerDrawer({
     "new",
     "payment_pending",
     "payment_completed",
+    "subscription_activation_pending",
     "subscription_active",
   ].indexOf(stage);
 
@@ -1298,11 +1326,12 @@ export function CustomerDrawer({
                 "Customer Created",
                 "Consent Link Generated",
                 "First Payment Completed",
+                "Subscription Activation Pending",
                 "Subscription Active",
               ].map((label, index) => {
                 const isCompleted = index <= currentStepIndex;
                 const isCurrent = index === currentStepIndex;
-                const isLast = index === 3;
+                const isLast = index === 4;
 
                 return (
                   <div key={label} className="flex gap-3">
@@ -1473,6 +1502,13 @@ export function CustomerDrawer({
               <Button className="w-full" onClick={() => onOpenCreateSubscription(customer)}>
                 <Repeat className="mr-2 h-4 w-4" />
                 Create Subscription
+              </Button>
+            ) : null}
+
+            {!isArchived && getCustomerActionKind(customer) === "activation_pending" ? (
+              <Button className="w-full" variant="outline" onClick={() => onOpenCreateSubscription(customer)}>
+                <Repeat className="mr-2 h-4 w-4" />
+                Retry Subscription Activation
               </Button>
             ) : null}
 

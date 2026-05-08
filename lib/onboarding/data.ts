@@ -27,6 +27,7 @@ export type CustomerOverview = {
   latestFirstPaymentLinkUrl: string | null;
   latestConsentAcceptedAt: string | null;
   latestConsentToken: string | null;
+  latestFirstPaymentMode: "real_installment" | "mandate_only" | null;
   latestFirstPaymentPaidAt: string | null;
   latestFirstPaymentStatus: string | null;
   latestMandateId: string | null;
@@ -228,6 +229,7 @@ const listCustomersByMode = cache(async (
         latest_payment_link.mollie_status as "latestFirstPaymentLinkStatus",
         latest_consent.consent_token as "latestConsentToken",
         latest_consent.accepted_at as "latestConsentAcceptedAt",
+        latest_consent.first_payment_mode as "latestFirstPaymentMode",
         latest_mandate.id as "latestMandateId",
         latest_mandate.mollie_status as "latestMandateStatus",
         coalesce(latest_mandate.is_valid, false) as "hasValidMandate",
@@ -350,6 +352,7 @@ export const getCustomerDetail = cache(async (
             latest_payment_link.mollie_status as "latestFirstPaymentLinkStatus",
             latest_consent.consent_token as "latestConsentToken",
             latest_consent.accepted_at as "latestConsentAcceptedAt",
+            latest_consent.first_payment_mode as "latestFirstPaymentMode",
             latest_mandate.id as "latestMandateId",
             latest_mandate.mollie_status as "latestMandateStatus",
             coalesce(latest_mandate.is_valid, false) as "hasValidMandate",

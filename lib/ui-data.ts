@@ -27,6 +27,7 @@ export type UiCustomerRecord = {
   latestFirstPaymentLinkUrl: string | null;
   latestConsentAcceptedAt: string | null;
   latestConsentUrl: string | null;
+  latestFirstPaymentMode: "real_installment" | "mandate_only" | null;
   latestFirstPaymentPaidAt: string | null;
   latestFirstPaymentStatus: string | null;
   latestMandateStatus: string | null;
@@ -147,6 +148,7 @@ export function toUiCustomerRecord(customer: CustomerOverview): UiCustomerRecord
     latestFirstPaymentLinkUrl: customer.latestFirstPaymentLinkUrl,
     latestConsentAcceptedAt: customer.latestConsentAcceptedAt,
     latestConsentUrl,
+    latestFirstPaymentMode: customer.latestFirstPaymentMode,
     latestFirstPaymentPaidAt: customer.latestFirstPaymentPaidAt,
     latestFirstPaymentStatus: customer.latestFirstPaymentStatus,
     latestMandateStatus: customer.latestMandateStatus,
