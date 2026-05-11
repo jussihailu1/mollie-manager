@@ -6,6 +6,7 @@ import { useEffect, useState, useSyncExternalStore, useTransition, type ReactNod
 import {
   Bell,
   CreditCard,
+  Cog,
   Ellipsis,
   LayoutDashboard,
   Moon,
@@ -66,6 +67,12 @@ const navigation = [
     icon: Bell,
     label: "Notifications",
     match: (pathname: string) => pathname.startsWith("/notifications"),
+  },
+  {
+    href: "/settings",
+    icon: Cog,
+    label: "Settings",
+    match: (pathname: string) => pathname.startsWith("/settings"),
   },
 ] as const;
 

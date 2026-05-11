@@ -4,6 +4,8 @@ import { sql } from "drizzle-orm";
 
 import { getDb, type DbClient } from "@/lib/db";
 import { sendPlainEmail, notificationsAreConfigured } from "@/lib/notifications/email";
+import { composeAlertEmail } from "@/lib/reliability/alert-email";
+import { deliverAlertEmailWithDependencies } from "@/lib/reliability/alert-email-delivery";
 
 type AlertSeverity = "critical" | "warning";
 
@@ -102,38 +104,18 @@ export async function deliverAlertEmail(input: {
   message: string;
   title: string;
 }) {
-  if (!notificationsAreConfigured()) {
-    return {
-      delivered: false,
-      error: "Notifications are not configured.",
-    };
-  }
-
-  try {
-    await sendPlainEmail({
-      subject: `[Mollie Manager] ${input.title}`,
-      text: `${input.title}\n\n${input.message}`,
-    });
-
-    await getDb().execute(sql`
+  return deliverAlertEmailWithDependencies(input, {
+    composeAlertEmail,
+    markAlertEmailSent: async (alertId) => {
+      await getDb().execute(sql`
         update alerts
         set
           email_sent_at = now(),
           updated_at = now()
-        where id = ${input.alertId}
+        where id = ${alertId}
       `);
-  } catch (error) {
-    return {
-      delivered: false,
-      error:
-        error instanceof Error
-          ? error.message.slice(0, 180)
-          : "Email delivery failed.",
-    };
-  }
-
-  return {
-    delivered: true,
-    error: null,
-  };
+    },
+    notificationsAreConfigured,
+    sendNotificationEmail: sendPlainEmail,
+  });
 }
