@@ -6,12 +6,14 @@ Canonical current-state policy for subscription term handling, consent, cancella
 
 This file is normative for implementation. Keep it aligned with code changes.
 
+Customer-visible recurring invoice timing, direct-debit notice, failed collection handling, and the EUR 0.01 mandate-setup flow are defined separately in `documentation/recurring-billing-policy.md`.
+
 ## Canonical Terms
 
 - `subscription_term_mode`: `open_ended | fixed_term`
 - `total_payments`: billing source of truth for `fixed_term`
 - `last_charge_date`: derived or validated display/audit value, not the primary billing control
-- `service_end_at`: end of entitlement/service access
+- `service_end_at`: end of entitlement or service access
 - `cancellation_effect`: `immediate | end_of_paid_period`
 
 ## Locked Product Decisions
@@ -26,7 +28,8 @@ This file is normative for implementation. Keep it aligned with code changes.
 - Do not introduce overlapping policy fields that encode the same meaning twice.
 - V1 supports `first_payment_mode: real_installment | mandate_only`.
 - `real_installment` remains the default first-payment mode.
-- `mandate_only` in V1 is fixed at `€0.01` and is used only for mandate setup before recurring charges.
+- `mandate_only` in V1 is fixed at `EUR 0.01` and is used only for mandate setup before recurring charges.
+- Customer-visible recurring billing notice rules must stay separate from accounting configuration such as invoice templates, email templates, VAT, and ledger mapping.
 
 ## V1 Policy Rules
 
@@ -36,7 +39,7 @@ This file is normative for implementation. Keep it aligned with code changes.
 - For `fixed_term`, `total_payments` is required.
 - `total_payments` is customer-visible charge count:
   - for `real_installment`, include the first payment
-  - for `mandate_only`, exclude the `€0.01` mandate setup payment
+  - for `mandate_only`, exclude the `EUR 0.01` mandate setup payment
 - `last_charge_date` may be entered by UI or shown by UI, but the implementation must resolve it into `total_payments`.
 - `service_end_at` is independent from the final billing date.
 - `cancellation_effect` governs what happens to service entitlement after cancellation, not how many charges exist.
@@ -56,7 +59,8 @@ This file is normative for implementation. Keep it aligned with code changes.
   - service end behavior
   - cancellation method
   - cancellation email address
-  - links or references to terms/privacy content
+  - links or references to terms and privacy content
+- If the recurring billing notice timing is part of the customer promise, the terms shown must also include the recurring invoice timing and automatic collection framing defined in `documentation/recurring-billing-policy.md`.
 - The customer must actively accept the required consent checkboxes.
 - Consent evidence must be stored with a snapshot of the shown terms.
 - The mandate-establishing first payment remains part of the flow, but the customer-facing entrypoint should become the app-hosted consent screen rather than a raw Mollie checkout URL.
@@ -77,7 +81,7 @@ This file is normative for implementation. Keep it aligned with code changes.
 
 ## Out Of Scope / Not In V1
 
-- Per-subscription policy overrides
+- Per-subscription overrides
 - Customer self-serve cancellation UI
 - Generalized legal rule engine
 - Full multi-tenant SaaS policy management

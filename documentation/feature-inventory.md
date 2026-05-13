@@ -5,6 +5,7 @@ This document tracks the current state after the Magic Patterns UI transplant.
 Policy source docs for the next subscription feature pass:
 
 - Current-state policy: `documentation/subscription-policy.md`
+- Current-state recurring billing policy: `documentation/recurring-billing-policy.md`
 - Future-state roadmap: `documentation/subscription-roadmap.md`
 
 ## Remaining After MP Transplant
@@ -24,7 +25,7 @@ These items are still in the backend or planned scope, but they are not fully re
 - [x] The recurring onboarding flow now uses an app-hosted consent screen before Mollie checkout.
 - [x] The recurring onboarding flow now discloses cancellation-by-email terms to the customer.
 - [x] Tenant-default subscription policy modeling is implemented for v1 with DB defaults bootstrapped from env.
-- [x] Onboarding supports first-payment mode selection (`real_installment` default or `mandate_only` at `€0.01`) with consent-bound subscription creation.
+- [x] Onboarding supports first-payment mode selection (`real_installment` default or `mandate_only` at `EUR 0.01`) with consent-bound subscription creation.
 
 ## Retained In Current UI
 
@@ -87,5 +88,6 @@ These are still part of the product behavior even if the new UI is narrower than
 - The active dashboard, customers, payments, notifications, and shell surfaces are wired back to real data and server actions.
 - The richer customer fields are still stored in `customers.metadata`; e-Boekhouden link state now has first-class customer columns and a Drizzle migration in `db/drizzle`.
 - e-Boekhouden import/linking requires `EBOEKHOUDEN_API_TOKEN` in the server environment. `EBOEKHOUDEN_API_SOURCE` defaults to `Kify`.
-- The next subscription feature pass should follow `documentation/subscription-policy.md`.
+- The next subscription feature pass should follow `documentation/subscription-policy.md` and `documentation/recurring-billing-policy.md`.
 - Longer-term subscription-platform work should accumulate in `documentation/subscription-roadmap.md`.
+- Reliability follow-up to keep on the future backlog: add scheduled reconciliation as a backend safety net even when webhooks are working, so missed or delayed webhook delivery does not leave local state stale.
