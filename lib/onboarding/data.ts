@@ -20,6 +20,13 @@ export type CustomerOverview = {
   fullName: string | null;
   hasValidMandate: boolean;
   id: string;
+  latestPaymentAmountCurrency: string | null;
+  latestPaymentAmountValue: string | null;
+  latestPaymentCreatedAt: string | null;
+  latestPaymentId: string | null;
+  latestPaymentPaidAt: string | null;
+  latestPaymentStatus: string | null;
+  latestPaymentType: "first" | "recurring" | null;
   latestFirstPaymentCheckoutUrl: string | null;
   latestFirstPaymentId: string | null;
   latestFirstPaymentLinkId: string | null;
@@ -220,10 +227,17 @@ const listCustomersByMode = cache(async (
         nullif(c.metadata ->> 'phone', '') as "phone",
         c.created_at as "createdAt",
         c.archived_at as "archivedAt",
-        latest_payment.id as "latestFirstPaymentId",
-        latest_payment.checkout_url as "latestFirstPaymentCheckoutUrl",
-        latest_payment.mollie_status as "latestFirstPaymentStatus",
-        latest_payment.paid_at as "latestFirstPaymentPaidAt",
+        latest_payment.id as "latestPaymentId",
+        latest_payment.amount_currency as "latestPaymentAmountCurrency",
+        latest_payment.amount_value::text as "latestPaymentAmountValue",
+        latest_payment.created_at as "latestPaymentCreatedAt",
+        latest_payment.paid_at as "latestPaymentPaidAt",
+        latest_payment.mollie_status as "latestPaymentStatus",
+        latest_payment.payment_type as "latestPaymentType",
+        latest_first_payment.id as "latestFirstPaymentId",
+        latest_first_payment.checkout_url as "latestFirstPaymentCheckoutUrl",
+        latest_first_payment.mollie_status as "latestFirstPaymentStatus",
+        latest_first_payment.paid_at as "latestFirstPaymentPaidAt",
         latest_payment_link.id as "latestFirstPaymentLinkId",
         latest_payment_link.checkout_url as "latestFirstPaymentLinkUrl",
         latest_payment_link.mollie_status as "latestFirstPaymentLinkStatus",
@@ -253,10 +267,19 @@ const listCustomersByMode = cache(async (
       left join lateral (
         select p.*
         from payments p
+        where p.customer_id = c.id and p.mode = c.mode
+        order by
+          coalesce(p.paid_at, p.failed_at, p.created_at) desc,
+          p.created_at desc
+        limit 1
+      ) latest_payment on true
+      left join lateral (
+        select p.*
+        from payments p
         where p.customer_id = c.id and p.mode = c.mode and p.payment_type = 'first'
         order by p.created_at desc
         limit 1
-      ) latest_payment on true
+      ) latest_first_payment on true
       left join lateral (
         select pl.*
         from payment_links pl
@@ -343,10 +366,17 @@ export const getCustomerDetail = cache(async (
             nullif(c.metadata ->> 'phone', '') as "phone",
             c.created_at as "createdAt",
             c.archived_at as "archivedAt",
-            latest_payment.id as "latestFirstPaymentId",
-            latest_payment.checkout_url as "latestFirstPaymentCheckoutUrl",
-            latest_payment.mollie_status as "latestFirstPaymentStatus",
-            latest_payment.paid_at as "latestFirstPaymentPaidAt",
+            latest_payment.id as "latestPaymentId",
+            latest_payment.amount_currency as "latestPaymentAmountCurrency",
+            latest_payment.amount_value::text as "latestPaymentAmountValue",
+            latest_payment.created_at as "latestPaymentCreatedAt",
+            latest_payment.paid_at as "latestPaymentPaidAt",
+            latest_payment.mollie_status as "latestPaymentStatus",
+            latest_payment.payment_type as "latestPaymentType",
+            latest_first_payment.id as "latestFirstPaymentId",
+            latest_first_payment.checkout_url as "latestFirstPaymentCheckoutUrl",
+            latest_first_payment.mollie_status as "latestFirstPaymentStatus",
+            latest_first_payment.paid_at as "latestFirstPaymentPaidAt",
             latest_payment_link.id as "latestFirstPaymentLinkId",
             latest_payment_link.checkout_url as "latestFirstPaymentLinkUrl",
             latest_payment_link.mollie_status as "latestFirstPaymentLinkStatus",
@@ -376,10 +406,19 @@ export const getCustomerDetail = cache(async (
           left join lateral (
             select p.*
             from payments p
+            where p.customer_id = c.id and p.mode = c.mode
+            order by
+              coalesce(p.paid_at, p.failed_at, p.created_at) desc,
+              p.created_at desc
+            limit 1
+          ) latest_payment on true
+          left join lateral (
+            select p.*
+            from payments p
             where p.customer_id = c.id and p.mode = c.mode and p.payment_type = 'first'
             order by p.created_at desc
             limit 1
-          ) latest_payment on true
+          ) latest_first_payment on true
           left join lateral (
             select pl.*
             from payment_links pl

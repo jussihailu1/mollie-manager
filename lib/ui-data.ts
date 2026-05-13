@@ -22,6 +22,13 @@ export type UiCustomerRecord = {
   email: string;
   hasValidMandate: boolean;
   id: string;
+  latestPaymentAmountCurrency: string | null;
+  latestPaymentAmountValue: string | null;
+  latestPaymentCreatedAt: string | null;
+  latestPaymentId: string | null;
+  latestPaymentPaidAt: string | null;
+  latestPaymentStatus: "pending" | "paid" | "failed" | "expired" | null;
+  latestPaymentType: "first" | "recurring" | null;
   latestFirstPaymentCheckoutUrl: string | null;
   latestFirstPaymentLinkStatus: string | null;
   latestFirstPaymentLinkUrl: string | null;
@@ -60,6 +67,7 @@ export type UiPaymentRecord = {
   customerId: string | null;
   description: string;
   id: string;
+  molliePaymentId: string | null;
   paidAt: string | null;
   reference: string;
   status: "pending" | "paid" | "failed" | "expired";
@@ -143,6 +151,18 @@ export function toUiCustomerRecord(customer: CustomerOverview): UiCustomerRecord
     email: customer.email,
     hasValidMandate: customer.hasValidMandate,
     id: customer.id,
+    latestPaymentAmountCurrency: customer.latestPaymentAmountCurrency,
+    latestPaymentAmountValue: customer.latestPaymentAmountValue,
+    latestPaymentCreatedAt: customer.latestPaymentCreatedAt,
+    latestPaymentId: customer.latestPaymentId,
+    latestPaymentPaidAt: customer.latestPaymentPaidAt,
+    latestPaymentStatus: customer.latestPaymentStatus
+      ? mapPaymentStatus(customer.latestPaymentStatus)
+      : null,
+    latestPaymentType:
+      customer.latestPaymentType === "first" || customer.latestPaymentType === "recurring"
+        ? customer.latestPaymentType
+        : null,
     latestFirstPaymentCheckoutUrl: customer.latestFirstPaymentCheckoutUrl,
     latestFirstPaymentLinkStatus: customer.latestFirstPaymentLinkStatus,
     latestFirstPaymentLinkUrl: customer.latestFirstPaymentLinkUrl,
@@ -188,6 +208,7 @@ export function toUiPaymentRecord(payment: PaymentOverview): UiPaymentRecord {
         ? "First mandate payment"
         : "Recurring subscription payment"),
     id: payment.id,
+    molliePaymentId: payment.molliePaymentId,
     paidAt: payment.paidAt,
     reference: payment.molliePaymentId ?? payment.id,
     status: mapPaymentStatus(payment.mollieStatus),

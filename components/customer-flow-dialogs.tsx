@@ -82,6 +82,13 @@ export type CustomerFlowRecord = {
   email: string;
   hasValidMandate: boolean;
   id: string;
+  latestPaymentAmountCurrency: string | null;
+  latestPaymentAmountValue: string | null;
+  latestPaymentCreatedAt: string | null;
+  latestPaymentId: string | null;
+  latestPaymentPaidAt: string | null;
+  latestPaymentStatus: "pending" | "paid" | "failed" | "expired" | null;
+  latestPaymentType: "first" | "recurring" | null;
   latestFirstPaymentCheckoutUrl: string | null;
   latestFirstPaymentLinkStatus: string | null;
   latestFirstPaymentLinkUrl: string | null;
@@ -143,29 +150,6 @@ type CustomerActionKind =
   | "activation_pending"
   | "create_subscription"
   | "active";
-
-function getStatusBadge(stage: CustomerStage) {
-  switch (stage) {
-    case "payment_pending":
-      return (
-        <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100/80">
-          Payment Pending
-        </Badge>
-      );
-    case "payment_completed":
-      return <Badge variant="secondary">Payment Completed</Badge>;
-    case "subscription_activation_pending":
-      return (
-        <Badge className="bg-sky-100 text-sky-900 hover:bg-sky-100/80">
-          Activation Pending
-        </Badge>
-      );
-    case "subscription_active":
-      return <Badge variant="default">Subscription Active</Badge>;
-    default:
-      return <Badge variant="outline">New</Badge>;
-  }
-}
 
 export function getEboekhoudenStatusBadge(customer: CustomerFlowRecord) {
   switch (customer.eboekhoudenLinkStatus) {
@@ -230,6 +214,65 @@ function formatSubscriptionInterval(value: string | null) {
     default:
       return formatLabel(value);
   }
+}
+
+function formatPaymentType(type: CustomerFlowRecord["latestPaymentType"]) {
+  if (type === "first") {
+    return "First payment";
+  }
+
+  if (type === "recurring") {
+    return "Recurring payment";
+  }
+
+  return "Not available";
+}
+
+function formatFirstPaymentMode(mode: CustomerFlowRecord["latestFirstPaymentMode"]) {
+  if (mode === "real_installment") {
+    return "Real first installment";
+  }
+
+  if (mode === "mandate_only") {
+    return "Mandate-only (€0.01)";
+  }
+
+  return "Not available";
+}
+
+function getPaymentStatusBadge(status: CustomerFlowRecord["latestPaymentStatus"]) {
+  switch (status) {
+    case "pending":
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100/80">
+          Pending
+        </Badge>
+      );
+    case "paid":
+      return <Badge variant="default">Paid</Badge>;
+    case "failed":
+      return <Badge variant="destructive">Failed</Badge>;
+    case "expired":
+      return <Badge variant="outline">Expired</Badge>;
+    default:
+      return <Badge variant="outline">Unknown</Badge>;
+  }
+}
+
+function getSubscriptionStatusBadge(status: CustomerFlowRecord["latestSubscriptionStatus"]) {
+  if (status === "active") {
+    return <Badge variant="default">Active</Badge>;
+  }
+
+  if (status === "payment_action_required" || status === "out_of_sync") {
+    return <Badge variant="destructive">{formatLabel(status)}</Badge>;
+  }
+
+  if (status === "future_charges_stopped") {
+    return <Badge variant="secondary">Stopping</Badge>;
+  }
+
+  return <Badge variant="outline">{formatLabel(status)}</Badge>;
 }
 
 function SubscriptionSummaryRow({
@@ -1227,6 +1270,7 @@ export function CustomerDrawer({
 
   const stage = getCustomerStage(customer);
   const isArchived = Boolean(customer.archivedAt);
+  const showOnboardingSections = stage !== "subscription_active";
   const currentStepIndex = [
     "new",
     "payment_pending",
@@ -1234,16 +1278,25 @@ export function CustomerDrawer({
     "subscription_activation_pending",
     "subscription_active",
   ].indexOf(stage);
+  const latestPaymentDateLabel =
+    customer.latestPaymentStatus === "paid" && customer.latestPaymentPaidAt
+      ? "Paid on"
+      : "Created on";
+  const latestPaymentDateValue =
+    customer.latestPaymentStatus === "paid" && customer.latestPaymentPaidAt
+      ? customer.latestPaymentPaidAt
+      : customer.latestPaymentCreatedAt;
+  const hasSubscriptionDetails = Boolean(
+    customer.latestSubscriptionId ||
+      customer.latestFirstPaymentMode ||
+      customer.latestConsentAcceptedAt,
+  );
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-md overflow-y-auto z-50 px-6">
         <SheetHeader className="pb-6">
-          <div className="flex items-center gap-2">
-            <SheetTitle className="text-2xl">{customer.businessName}</SheetTitle>
-            {isArchived ? <Badge variant="secondary">Archived</Badge> : getStatusBadge(stage)}
-            {getEboekhoudenStatusBadge(customer)}
-          </div>
+          <SheetTitle className="text-2xl">{getCustomerDisplayName(customer)}</SheetTitle>
           <SheetDescription>
             {isArchived
               ? `Archived on ${formatDate(customer.archivedAt ?? customer.createdAt)}`
@@ -1254,7 +1307,7 @@ export function CustomerDrawer({
         <div className="space-y-8">
           <div className="space-y-4">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Details
+              Personal details
             </h3>
             <div className="space-y-3 text-sm">
               <div className="flex items-start gap-3">
@@ -1283,102 +1336,56 @@ export function CustomerDrawer({
                   <span className="italic text-muted-foreground">{customer.notes}</span>
                 </div>
               ) : null}
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              e-Boekhouden
-            </h3>
-            <div className="flex items-center justify-between gap-3 rounded-md border p-3">
-              <div className="min-w-0">
-                <div className="mb-1">{getEboekhoudenStatusBadge(customer)}</div>
-                <p className="truncate text-sm text-muted-foreground">
-                  {customer.eboekhoudenRelationCode
-                    ? `Relation ${customer.eboekhoudenRelationCode}`
-                    : "No e-Boekhouden relation linked."}
-                </p>
-              </div>
-              {!isArchived && customer.eboekhoudenLinkStatus === "unlinked" ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onOpenLinkEboekhouden(customer)}
-                >
-                  <LinkIcon className="mr-2 h-4 w-4" />
-                  Link
-                </Button>
-              ) : null}
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Workflow Status
-            </h3>
-            <div className="space-y-0">
-              {[
-                "Customer Created",
-                "Consent Link Generated",
-                "First Payment Completed",
-                "Subscription Activation Pending",
-                "Subscription Active",
-              ].map((label, index) => {
-                const isCompleted = index <= currentStepIndex;
-                const isCurrent = index === currentStepIndex;
-                const isLast = index === 4;
-
-                return (
-                  <div key={label} className="flex gap-3">
-                    <div className="flex flex-col items-center">
-                      <div
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${
-                          isCompleted ? "border-primary bg-primary" : "border-muted bg-background"
-                        }`}
-                      >
-                        {isCompleted ? (
-                          <CheckCircle className="h-3.5 w-3.5 text-primary-foreground" />
-                        ) : null}
-                      </div>
-                      {!isLast ? (
-                        <div
-                          className={`min-h-6 w-0.5 flex-1 ${
-                            index < currentStepIndex ? "bg-primary" : "bg-muted"
-                          }`}
-                        />
-                      ) : null}
-                    </div>
-                    <div
-                      className={`pb-6 pt-0.5 text-sm ${
-                        isCurrent
-                          ? "font-semibold text-foreground"
-                          : isCompleted
-                            ? "font-medium text-foreground"
-                            : "text-muted-foreground"
-                      }`}
-                    >
-                      {label}
-                    </div>
+              <div className="flex items-start gap-3">
+                <LinkIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm">
+                      {customer.eboekhoudenRelationCode
+                        ? `e-Boekhouden linked${customer.eboekhoudenRelationCode ? ` · Relation ${customer.eboekhoudenRelationCode}` : ""}`
+                        : "No e-Boekhouden relation linked."}
+                    </span>
+                    {customer.eboekhoudenLinkStatus !== "linked"
+                      ? getEboekhoudenStatusBadge(customer)
+                      : null}
                   </div>
-                );
-              })}
+                </div>
+                {!isArchived && customer.eboekhoudenLinkStatus === "unlinked" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onOpenLinkEboekhouden(customer)}
+                  >
+                    Link
+                  </Button>
+                ) : null}
+              </div>
             </div>
           </div>
 
-          {customer.latestSubscriptionId ? (
-            <>
-              <Separator />
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Subscription
-                </h3>
-                <div className="rounded-md border p-3">
-                  <div className="flex flex-col gap-3">
+          <Separator />
+
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Subscription details
+            </h3>
+            {hasSubscriptionDetails ? (
+              <div className="flex flex-col gap-3">
+                {customer.latestFirstPaymentMode ? (
+                  <SubscriptionSummaryRow
+                    label="Started with"
+                    value={formatFirstPaymentMode(customer.latestFirstPaymentMode)}
+                  />
+                ) : null}
+                {customer.latestConsentAcceptedAt ? (
+                  <SubscriptionSummaryRow
+                    label="Consent accepted"
+                    value={formatDate(customer.latestConsentAcceptedAt)}
+                  />
+                ) : null}
+                {customer.latestSubscriptionId ? (
+                  <>
                     <SubscriptionSummaryRow
                       label="Amount"
                       value={
@@ -1427,11 +1434,7 @@ export function CustomerDrawer({
                     />
                     <SubscriptionSummaryRow
                       label="Status"
-                      value={
-                        <Badge variant="outline">
-                          {formatLabel(customer.latestSubscriptionStatus)}
-                        </Badge>
-                      }
+                      value={getSubscriptionStatusBadge(customer.latestSubscriptionStatus)}
                     />
                     <SubscriptionSummaryRow
                       label="Future charges"
@@ -1441,20 +1444,123 @@ export function CustomerDrawer({
                           : "Continue"
                       }
                     />
-                  </div>
+                  </>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No subscription details yet.
+              </p>
+            )}
+          </div>
+
+          {customer.latestPaymentId ? (
+            <>
+              <Separator />
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                    Latest payment
+                  </h3>
+                  {getPaymentStatusBadge(customer.latestPaymentStatus)}
+                </div>
+                <div className="flex flex-col gap-3">
+                  <SubscriptionSummaryRow
+                    label="Amount"
+                    value={
+                      customer.latestPaymentAmountValue && customer.latestPaymentAmountCurrency
+                        ? formatCurrency(
+                            customer.latestPaymentAmountValue,
+                            customer.latestPaymentAmountCurrency,
+                          )
+                        : "Not available"
+                    }
+                  />
+                  <SubscriptionSummaryRow
+                    label="Type"
+                    value={formatPaymentType(customer.latestPaymentType)}
+                  />
+                  <SubscriptionSummaryRow
+                    label={latestPaymentDateLabel}
+                    value={formatDate(latestPaymentDateValue)}
+                  />
+                  <Button asChild variant="outline" size="sm" className="mt-1 w-full">
+                    <Link href={`/payments?customerId=${encodeURIComponent(customer.id)}`}>
+                      View all their payments
+                    </Link>
+                  </Button>
                 </div>
               </div>
             </>
           ) : null}
 
-          {customer.latestConsentUrl ||
-          customer.latestConsentAcceptedAt ||
-          customer.latestFirstPaymentPaidAt ? (
+          {showOnboardingSections ? (
             <>
               <Separator />
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Payment Context
+                  Workflow status
+                </h3>
+                <div className="space-y-0">
+                  {[
+                    "Customer Created",
+                    "Consent Link Generated",
+                    "First Payment Completed",
+                    "Subscription Activation Pending",
+                    "Subscription Active",
+                  ].map((label, index) => {
+                    const isCompleted = index <= currentStepIndex;
+                    const isCurrent = index === currentStepIndex;
+                    const isLast = index === 4;
+
+                    return (
+                      <div key={label} className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <div
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${
+                              isCompleted ? "border-primary bg-primary" : "border-muted bg-background"
+                            }`}
+                          >
+                            {isCompleted ? (
+                              <CheckCircle className="h-3.5 w-3.5 text-primary-foreground" />
+                            ) : null}
+                          </div>
+                          {!isLast ? (
+                            <div
+                              className={`min-h-6 w-0.5 flex-1 ${
+                                index < currentStepIndex ? "bg-primary" : "bg-muted"
+                              }`}
+                            />
+                          ) : null}
+                        </div>
+                        <div
+                          className={`pb-6 pt-0.5 text-sm ${
+                            isCurrent
+                              ? "font-semibold text-foreground"
+                              : isCompleted
+                                ? "font-medium text-foreground"
+                                : "text-muted-foreground"
+                          }`}
+                        >
+                          {label}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          ) : null}
+
+          {showOnboardingSections &&
+          (customer.latestConsentUrl ||
+            customer.latestConsentAcceptedAt ||
+            customer.latestFirstPaymentPaidAt) ? (
+            <>
+              <Separator />
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Payment context
                 </h3>
                 {customer.latestConsentUrl ? (
                   <div className="space-y-2">
@@ -1512,15 +1618,9 @@ export function CustomerDrawer({
               </Button>
             ) : null}
 
-            {!isArchived && getCustomerActionKind(customer) === "active" ? (
-              <Button className="w-full" variant="outline" disabled>
-                Subscription is Active
-              </Button>
-            ) : null}
-
             {!isArchived ? (
               <Button
-                className="w-full"
+                className="w-full border-destructive/40 text-destructive hover:border-destructive hover:bg-destructive hover:text-destructive-foreground"
                 variant="outline"
                 onClick={() => onOpenArchiveCustomer(customer)}
               >
