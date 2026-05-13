@@ -211,6 +211,13 @@ Relevant files:
 
 Verified from the repo on 2026-04-07.
 
+## Operational Notes From Live Data
+
+- Recurring SEPA direct debit payments in Mollie can remain `pending` for multiple days before turning `paid` or `failed`. Do not treat a 2-3 day `pending` window as an automatic incident by itself.
+- The local app can still look stale even when Mollie has already created or settled the recurring payment. Always verify the live Mollie payment directly before assuming the charge did not run.
+- Older live subscriptions may still point at an older webhook base URL or deployment environment. When that happens, Mollie can be correct while the current database misses the webhook and payment sync.
+- Reliability takeaway: live recurring payments need a stable production webhook target and scheduled reconciliation so missed webhooks do not leave subscription/payment state stale indefinitely.
+
 ### Stack
 
 - Next.js `16.2.2`

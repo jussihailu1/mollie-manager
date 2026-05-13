@@ -33,8 +33,10 @@ type MolliePaymentLink = {
   id: string;
   minimumAmount?: MollieAmount;
   paidAt?: string;
+  redirectUrl?: string;
   reusable?: boolean;
   sequenceType: string;
+  webhookUrl?: string;
 };
 
 type SyncActor = {
@@ -65,6 +67,7 @@ type LocalPaymentRow = {
 type LocalStoredPaymentLink = {
   customerId: string | null;
   id: string;
+  metadata: Record<string, unknown>;
   molliePaymentLinkId: string | null;
 };
 
@@ -271,13 +274,24 @@ async function getLocalPaymentLinkByMollieId(
       select
         id,
         customer_id as "customerId",
+        metadata,
         mollie_payment_link_id as "molliePaymentLinkId"
       from payment_links
       where mode = ${mode} and mollie_payment_link_id = ${molliePaymentLinkId}
       limit 1
     `);
 
-  return result.rows[0] ?? null;
+  const row = result.rows[0];
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    metadata:
+      typeof row.metadata === "object" && row.metadata !== null ? row.metadata : {},
+  } satisfies LocalStoredPaymentLink;
 }
 
 async function findLocalMandateId(
@@ -407,19 +421,31 @@ function derivePaymentLinkStatus(
 function buildPaymentLinkMetadata(
   paymentLink: MolliePaymentLink,
   payments: Payment[],
+  existingMetadata: Record<string, unknown> = {},
 ) {
   const latestPayment = payments[0] ?? null;
 
   return {
+    ...existingMetadata,
     allowedMethods: paymentLink.allowedMethods ?? ["ideal"],
     latestPaymentId: latestPayment?.id ?? null,
     latestPaymentStatus: latestPayment?.status ?? null,
     mollieCustomerId: paymentLink.customerId ?? null,
     paymentIds: payments.map((payment) => payment.id),
     paymentType: "first",
+    redirectUrl:
+      paymentLink.redirectUrl ??
+      (typeof existingMetadata.redirectUrl === "string"
+        ? existingMetadata.redirectUrl
+        : null),
     reusable: paymentLink.reusable ?? false,
     sequenceType: paymentLink.sequenceType,
     source: "subscription_onboarding",
+    webhookUrl:
+      paymentLink.webhookUrl ??
+      (typeof existingMetadata.webhookUrl === "string"
+        ? existingMetadata.webhookUrl
+        : null),
   };
 }
 
@@ -479,7 +505,9 @@ async function upsertPaymentLinkFromMollie(
           ${paymentLinkAmount.currency},
           ${paymentLink.getPaymentUrl()},
           ${paymentLink.expiresAt ?? null}::timestamptz,
-          ${JSON.stringify(buildPaymentLinkMetadata(paymentLink, payments))}::jsonb,
+          ${JSON.stringify(
+            buildPaymentLinkMetadata(paymentLink, payments, existingPaymentLink?.metadata),
+          )}::jsonb,
           coalesce(${paymentLink.createdAt ?? null}::timestamptz, now()),
           now(),
           now()

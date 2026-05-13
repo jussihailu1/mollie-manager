@@ -11,6 +11,7 @@ Future-state notes for subscription-platform evolution. This file is not the cur
 - Add customer self-serve cancellation as a stronger alternative to email-only cancellation.
 - Add richer service-entitlement rules where service end is derived from a priced service period rather than entered directly.
 - Add broader SaaS / multi-tenant positioning where each tenant owns its own cancellation text, terms versioning, and default policy.
+- Improve the UI/UX of the customer-facing hosted onboarding return/success screen after Mollie checkout, including clearer success/pending states, better mandate-only messaging, and stronger branded reassurance while backend activation is still confirming.
 
 ## Constraints On Future Work
 
