@@ -1,11 +1,15 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  ArrowUpRight,
   Calendar,
+  ChevronRight,
   CheckCircle,
   DollarSign,
   Download,
@@ -15,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { type CustomerFlowRecord, CreatePaymentLinkDialog } from "@/components/customer-flow-dialogs";
+import { PaymentDrawer } from "@/components/payment-drawer";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,6 +51,7 @@ type PaymentRecord = {
   customerId: string | null;
   description: string;
   id: string;
+  molliePaymentId: string | null;
   paidAt: string | null;
   reference: string;
   status: "pending" | "paid" | "failed" | "expired";
@@ -140,20 +146,47 @@ function getInitialPage(payments: PaymentRecord[], initialFocusId?: string | nul
   return Math.floor(focusedIndex / 10) + 1;
 }
 
+function CustomerLink({
+  customerId,
+  customerName,
+}: Readonly<{
+  customerId: string | null;
+  customerName: string;
+}>) {
+  if (!customerId) {
+    return <span>{customerName}</span>;
+  }
+
+  return (
+    <Link
+      href={`/customers?focus=${encodeURIComponent(customerId)}`}
+      className="group inline-flex items-center gap-1 hover:underline"
+    >
+      <span>{customerName}</span>
+      <ArrowUpRight className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
+    </Link>
+  );
+}
+
 export function PaymentsWorkspace({
   customers,
   error,
+  initialCustomerId,
   initialFocusId,
   notice,
   payments,
 }: Readonly<{
   customers: CustomerFlowRecord[];
   error?: string | null;
+  initialCustomerId?: string | null;
   initialFocusId?: string | null;
   notice?: string | null;
   payments: PaymentRecord[];
 }>) {
+  const pathname = usePathname();
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
+  const [customerIdFilter, setCustomerIdFilter] = useState(initialCustomerId ?? null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -162,10 +195,42 @@ export function PaymentsWorkspace({
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [currentPage, setCurrentPage] = useState(() => getInitialPage(payments, initialFocusId));
   const [isCreatePaymentOpen, setIsCreatePaymentOpen] = useState(false);
+  const focusedPayment = initialFocusId
+    ? payments.find((payment) => payment.id === initialFocusId) ?? null
+    : null;
+  const [isPaymentDrawerOpen, setIsPaymentDrawerOpen] = useState(Boolean(focusedPayment));
+  const [selectedPayment, setSelectedPayment] = useState<PaymentRecord | null>(focusedPayment);
   const itemsPerPage = 10;
+  const customerScopedPayments = useMemo(
+    () =>
+      customerIdFilter
+        ? payments.filter((payment) => payment.customerId === customerIdFilter)
+        : payments,
+    [customerIdFilter, payments],
+  );
+  const activeCustomerName = useMemo(
+    () => {
+      if (!customerIdFilter) {
+        return null;
+      }
+
+      return (
+        customerScopedPayments.find((payment) => payment.customerId === customerIdFilter)
+          ?.customerBusinessName ??
+        customers.find((customer) => customer.id === customerIdFilter)?.businessName ??
+        customers.find((customer) => customer.id === customerIdFilter)?.email ??
+        null
+      );
+    },
+    [customerIdFilter, customerScopedPayments, customers],
+  );
 
   const filteredAndSorted = useMemo(() => {
     let result = [...payments];
+
+    if (customerIdFilter) {
+      result = result.filter((payment) => payment.customerId === customerIdFilter);
+    }
 
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -233,7 +298,17 @@ export function PaymentsWorkspace({
     });
 
     return result;
-  }, [dateFrom, dateTo, payments, searchQuery, sortDirection, sortField, statusFilter, typeFilter]);
+  }, [
+    customerIdFilter,
+    dateFrom,
+    dateTo,
+    payments,
+    searchQuery,
+    sortDirection,
+    sortField,
+    statusFilter,
+    typeFilter,
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(filteredAndSorted.length / itemsPerPage));
   const paginatedPayments = filteredAndSorted.slice(
@@ -242,17 +317,18 @@ export function PaymentsWorkspace({
   );
 
   const stats = useMemo(() => {
-    const paidPayments = payments.filter((payment) => payment.status === "paid");
+    const paidPayments = customerScopedPayments.filter((payment) => payment.status === "paid");
     const totalRevenue = paidPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const paymentsThisMonth = payments.filter(
+    const paymentsThisMonth = customerScopedPayments.filter(
       (payment) => new Date(payment.createdAt) >= startOfMonth,
     ).length;
-    const nonPending = payments.filter((payment) => payment.status !== "pending");
+    const nonPending = customerScopedPayments.filter((payment) => payment.status !== "pending");
     const successRate = nonPending.length > 0 ? (paidPayments.length / nonPending.length) * 100 : 0;
     const averagePayment = paidPayments.length > 0 ? totalRevenue / paidPayments.length : 0;
-    const primaryCurrency = paidPayments[0]?.currency ?? payments[0]?.currency ?? "EUR";
+    const primaryCurrency =
+      paidPayments[0]?.currency ?? customerScopedPayments[0]?.currency ?? "EUR";
 
     return {
       averagePayment,
@@ -261,9 +337,10 @@ export function PaymentsWorkspace({
       successRate,
       totalRevenue,
     };
-  }, [payments]);
+  }, [customerScopedPayments]);
 
   const hasActiveFilters =
+    Boolean(customerIdFilter) ||
     Boolean(searchQuery) ||
     statusFilter !== "all" ||
     typeFilter !== "all" ||
@@ -278,6 +355,28 @@ export function PaymentsWorkspace({
 
     setSortField(field);
     setSortDirection("asc");
+  }
+
+  function clearCustomerFilter() {
+    setCustomerIdFilter(null);
+    setCurrentPage(1);
+    const params = new URLSearchParams(window.location.search);
+    params.delete("customerId");
+    const nextSearch = params.toString();
+    router.replace(nextSearch ? `${pathname}?${nextSearch}` : pathname, { scroll: false });
+  }
+
+  function clearAllFilters() {
+    setSearchQuery("");
+    setStatusFilter("all");
+    setTypeFilter("all");
+    setDateFrom("");
+    setDateTo("");
+    setCurrentPage(1);
+
+    if (customerIdFilter) {
+      clearCustomerFilter();
+    }
   }
 
   function handleExportCSV() {
@@ -392,6 +491,20 @@ export function PaymentsWorkspace({
       </div>
 
       <div className="flex flex-col gap-4">
+        {customerIdFilter ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/30 px-4 py-3">
+            <p className="text-sm text-muted-foreground">
+              Showing payments for{" "}
+              <span className="font-medium text-foreground">
+                {activeCustomerName ?? "this customer"}
+              </span>
+              .
+            </p>
+            <Button variant="ghost" size="sm" onClick={clearCustomerFilter}>
+              Clear customer filter
+            </Button>
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -467,14 +580,7 @@ export function PaymentsWorkspace({
           {hasActiveFilters ? (
             <Button
               variant="ghost"
-              onClick={() => {
-                setSearchQuery("");
-                setStatusFilter("all");
-                setTypeFilter("all");
-                setDateFrom("");
-                setDateTo("");
-                setCurrentPage(1);
-              }}
+              onClick={clearAllFilters}
               className="px-3"
             >
               Clear filters
@@ -558,13 +664,16 @@ export function PaymentsWorkspace({
                   <SortIcon field="amount" sortDirection={sortDirection} sortField={sortField} />
                 </button>
               </TableHead>
+              <TableHead className="w-12 px-2 text-right">
+                <span className="sr-only">Open payment details</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {paginatedPayments.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                  {payments.length === 0
+                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                  {customerScopedPayments.length === 0
                     ? "No payments found."
                     : "No payments match your filters."}
                 </TableCell>
@@ -575,10 +684,18 @@ export function PaymentsWorkspace({
                   key={payment.id}
                   className={cn(initialFocusId === payment.id && "bg-accent/40")}
                 >
-                  <TableCell className="font-mono text-xs text-muted-foreground">
+                  <TableCell
+                    className="max-w-[9rem] truncate font-mono text-xs text-muted-foreground"
+                    title={payment.reference}
+                  >
                     {payment.reference}
                   </TableCell>
-                  <TableCell className="font-medium">{payment.customerBusinessName}</TableCell>
+                  <TableCell className="font-medium">
+                    <CustomerLink
+                      customerId={payment.customerId}
+                      customerName={payment.customerBusinessName}
+                    />
+                  </TableCell>
                   <TableCell className="max-w-[200px] truncate" title={payment.description}>
                     {payment.description}
                   </TableCell>
@@ -590,6 +707,20 @@ export function PaymentsWorkspace({
                   </TableCell>
                   <TableCell className="text-right font-medium">
                     {formatCurrency(payment.amount, payment.currency)}
+                  </TableCell>
+                  <TableCell className="px-2 text-right">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => {
+                        setSelectedPayment(payment);
+                        setIsPaymentDrawerOpen(true);
+                      }}
+                    >
+                      <ChevronRight />
+                      <span className="sr-only">View payment details</span>
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))
@@ -628,6 +759,12 @@ export function PaymentsWorkspace({
           </div>
         </div>
       ) : null}
+
+      <PaymentDrawer
+        payment={selectedPayment}
+        open={isPaymentDrawerOpen}
+        onOpenChange={setIsPaymentDrawerOpen}
+      />
 
       <CreatePaymentLinkDialog
         key={`payments-create-${Number(isCreatePaymentOpen)}`}
