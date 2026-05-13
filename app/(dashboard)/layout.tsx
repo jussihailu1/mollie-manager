@@ -14,7 +14,7 @@ export default async function DashboardLayout({
 }: Readonly<{
   children: ReactNode;
 }>) {
-  await requireViewerSession();
+  const session = await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
   const recentAlerts = (await listAlertInbox({ mode: selectedMode }))
     .slice(0, 8)
@@ -25,6 +25,8 @@ export default async function DashboardLayout({
       isLiveModeDisabled={env.APP_ENV === "test"}
       recentAlerts={recentAlerts}
       selectedMode={selectedMode}
+      userEmail={session.user.email ?? ""}
+      userName={session.user.name ?? null}
     >
       {children}
     </OperationsShell>

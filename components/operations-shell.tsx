@@ -6,25 +6,30 @@ import { useEffect, useState, useSyncExternalStore, useTransition, type ReactNod
 import {
   Bell,
   CreditCard,
-  Cog,
   Ellipsis,
+  ExternalLink,
+  FlaskConical,
   LayoutDashboard,
+  LogOut,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
+  Settings,
   Sun,
   Users,
 } from "lucide-react";
 
 import { setSelectedMollieModeAction } from "@/lib/dashboard-mode-actions";
+import { signOutUser } from "@/lib/auth/actions";
 import { markAllAlertsReadAction, openAlertAction } from "@/lib/reliability/actions";
 import { GlobalSearchDialog } from "@/components/global-search-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuLabel,
+  DropdownMenuGroup,
+  DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -33,6 +38,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+const mollieDashboardHref = "https://my.mollie.com/dashboard/org_19456510/home";
 
 type ShellAlert = {
   createdAt: string;
@@ -67,12 +74,6 @@ const navigation = [
     icon: Bell,
     label: "Notifications",
     match: (pathname: string) => pathname.startsWith("/notifications"),
-  },
-  {
-    href: "/settings",
-    icon: Cog,
-    label: "Settings",
-    match: (pathname: string) => pathname.startsWith("/settings"),
   },
 ] as const;
 
@@ -146,16 +147,30 @@ function setStoredSidebarCollapsed(collapsed: boolean) {
   window.dispatchEvent(new Event("sidebarcollapsechange"));
 }
 
+function getUserInitials(userName: string | null, userEmail: string) {
+  const source = userName?.trim() || userEmail.trim();
+  const parts = source
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2);
+
+  return parts.map((part) => part[0]?.toUpperCase() ?? "").join("") || "U";
+}
+
 export function OperationsShell({
   children,
   isLiveModeDisabled = false,
   recentAlerts,
   selectedMode,
+  userEmail,
+  userName,
 }: Readonly<{
   children: ReactNode;
   isLiveModeDisabled?: boolean;
   recentAlerts: ShellAlert[];
   selectedMode: "test" | "live";
+  userEmail: string;
+  userName: string | null;
 }>) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -171,12 +186,11 @@ export function OperationsShell({
   );
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isModePending, startModeTransition] = useTransition();
+  const [isLogoutPending, startLogoutTransition] = useTransition();
   const unreadCount = recentAlerts.filter((alert) => !alert.read).length;
   const returnTo = getReturnTo(pathname, new URLSearchParams(searchParams.toString()));
-
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark");
-  }, [theme]);
+  const isTestMode = selectedMode === "test";
+  const userInitials = getUserInitials(userName, userEmail);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -215,38 +229,77 @@ export function OperationsShell({
                 <span className="sr-only">Open environment menu</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              <DropdownMenuLabel>Environment</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <div className="flex items-center justify-between gap-3 px-2 py-2">
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <p className="text-sm font-medium">
-                    {selectedMode === "live" ? "Live mode" : "Test mode"}
+            <DropdownMenuContent align="start" className="w-80 p-2">
+              <div className="flex items-center gap-3 px-2 py-2.5">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full border bg-muted text-sm font-medium text-muted-foreground">
+                  {userInitials}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium leading-none text-foreground">
+                    {userName ?? userEmail}
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    {isLiveModeDisabled
-                      ? "Live mode disabled in test environment"
-                      : selectedMode === "live"
-                        ? "Real Mollie data"
-                        : "Sandbox Mollie data"}
+                  <p className="truncate pt-1 text-sm text-muted-foreground">
+                    {userEmail}
                   </p>
                 </div>
-                <Switch
-                  aria-label="Toggle Mollie live mode"
-                  checked={selectedMode === "live"}
-                  disabled={isModePending || isLiveModeDisabled}
-                  size="sm"
-                  onCheckedChange={(checked) => {
-                    if (isLiveModeDisabled) {
-                      return;
-                    }
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuItem asChild>
+                  <Link href="/settings">
+                    <Settings data-icon="inline-start" />
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
+                <div className="flex items-center gap-3 rounded-sm px-2 py-2 text-sm">
+                  <FlaskConical className="size-4 text-muted-foreground" />
+                  <span className="flex-1 font-medium text-foreground">Test mode</span>
+                  <Switch
+                    aria-label="Toggle test mode"
+                    checked={isTestMode}
+                    disabled={isModePending || isLiveModeDisabled}
+                    size="sm"
+                    onCheckedChange={(checked) => {
+                      if (!checked && isLiveModeDisabled) {
+                        return;
+                      }
 
-                    startModeTransition(async () => {
-                      await updateSelectedMode(checked ? "live" : "test", returnTo);
+                      startModeTransition(async () => {
+                        await updateSelectedMode(checked ? "test" : "live", returnTo);
+                      });
+                    }}
+                  />
+                </div>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuItem asChild>
+                  <a
+                    href={mollieDashboardHref}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <ExternalLink data-icon="inline-start" />
+                    Open Mollie
+                  </a>
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  disabled={isLogoutPending}
+                  variant="destructive"
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    startLogoutTransition(async () => {
+                      await signOutUser();
                     });
                   }}
-                />
-              </div>
+                >
+                  <LogOut data-icon="inline-start" />
+                  Log out
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
