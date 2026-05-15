@@ -193,7 +193,7 @@ export function OperationsShell({
   const isTestMode = selectedMode === "test";
   const userInitials = getUserInitials(userName, userEmail);
   const isSidebarVisuallyCollapsed = isSidebarCollapsed && !isSidebarHovered;
-  const shouldShowSidebarMenu = !isSidebarCollapsed;
+  const shouldShowSidebarMenu = !isSidebarVisuallyCollapsed;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -221,11 +221,7 @@ export function OperationsShell({
         <div
           className={cn(
             "flex items-center p-6",
-            isSidebarVisuallyCollapsed
-              ? "flex-col justify-center gap-3 px-0"
-              : shouldShowSidebarMenu
-                ? "justify-between"
-                : "justify-start",
+            isSidebarVisuallyCollapsed ? "flex-col justify-center gap-3 px-0" : "justify-between",
           )}
         >
           <h1 className="text-2xl font-bold tracking-tighter text-primary">
