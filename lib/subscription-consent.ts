@@ -7,6 +7,22 @@ import { z } from "zod";
 
 import { getDb } from "@/lib/db";
 import { env } from "@/lib/env";
+import {
+  buildRecurringBillingConsentSnapshot,
+} from "@/lib/recurring-billing-policy";
+
+const recurringBillingConsentSnapshotSchema = z
+  .object({
+    automaticCollectionOnPlannedDate: z.literal(true),
+    invoiceNoticeDaysBeforeDueDate: z.number().int().positive(),
+    invoicePreNotificationMethod: z.literal("invoice_email"),
+    invoiceSentBeforeAutomaticCollection: z.literal(true),
+    mandateOnlySetupPaymentExcludedFromRecurringInvoice: z.boolean(),
+    sepaDirectDebitCanFailOrBeReversed: z.literal(true),
+    sepaPendingReturnWindowDays: z.number().int().positive(),
+    shorterSepaPreNotificationAgreed: z.literal(true),
+  })
+  .default(buildRecurringBillingConsentSnapshot({ firstPaymentMode: "real_installment" }));
 
 export const subscriptionConsentPlanSnapshotSchema = z.object({
   amountCurrency: z.literal("EUR"),
@@ -18,6 +34,7 @@ export const subscriptionConsentPlanSnapshotSchema = z.object({
   finalChargeDate: z.string().nullable(),
   firstPaymentAmountValue: z.string(),
   firstPaymentMode: z.enum(["real_installment", "mandate_only"]),
+  recurringBilling: recurringBillingConsentSnapshotSchema,
   recurringChargeCount: z.number().int().nullable(),
   serviceEndAt: z.string().nullable(),
   startDate: z.string(),
@@ -35,6 +52,7 @@ const consentTokenSchema = z.string().trim().min(8).max(200);
 
 const acceptConsentSchema = z.object({
   cancellationPolicyAck: z.string().optional(),
+  recurringBillingPolicyAck: z.string().optional(),
   recurringTermsAck: z.string().optional(),
   token: consentTokenSchema,
 });
@@ -218,6 +236,8 @@ export async function acceptSubscriptionConsentAction(formData: FormData) {
 
   const parsed = acceptConsentSchema.safeParse({
     cancellationPolicyAck: formData.get("cancellationPolicyAck") || undefined,
+    recurringBillingPolicyAck:
+      formData.get("recurringBillingPolicyAck") || undefined,
     recurringTermsAck: formData.get("recurringTermsAck") || undefined,
     token: formData.get("token"),
   });
@@ -243,6 +263,9 @@ export async function acceptSubscriptionConsentAction(formData: FormData) {
 
   const acknowledgedKeys = [
     parsed.data.recurringTermsAck ? "recurring_terms_ack" : null,
+    parsed.data.recurringBillingPolicyAck
+      ? "recurring_billing_policy_ack"
+      : null,
     parsed.data.cancellationPolicyAck ? "cancellation_policy_ack" : null,
   ].filter((value): value is string => value !== null);
 

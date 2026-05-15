@@ -7,6 +7,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { getDb, transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { getMollieClient, getMollieWebhookUrl } from "@/lib/mollie/client";
+import { upsertRecurringBillingScheduleForSubscription } from "@/lib/recurring-billing-schedule";
 import { deliverAlertEmail, openAlert, resolveAlertsForEntity } from "@/lib/reliability/alerts";
 import { subscriptionConsentPlanSnapshotSchema } from "@/lib/subscription-consent";
 import { toMollieInterval } from "@/lib/subscription-policy";
@@ -420,6 +421,20 @@ export async function attemptSubscriptionActivation(input: {
         client,
         input.actor,
       );
+
+      await upsertRecurringBillingScheduleForSubscription(client, {
+        actor: input.actor,
+        amountCurrency: subscription.amount.currency,
+        amountValue: subscription.amount.value,
+        firstPaymentMode: acceptedConsent.firstPaymentMode,
+        interval: subscription.interval,
+        mode: input.mode,
+        nextPaymentDate: subscription.nextPaymentDate ?? null,
+        startDate: subscription.startDate ?? plan.startDate,
+        subscriptionId: localSubscriptionId,
+        subscriptionTermMode: plan.subscriptionTermMode,
+        totalPayments: plan.totalPayments,
+      });
     });
 
     await resolveAlertsForEntity({

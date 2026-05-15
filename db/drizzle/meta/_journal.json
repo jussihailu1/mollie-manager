@@ -29,6 +29,34 @@
       "when": 1778073684928,
       "tag": "0003_kind_doctor_spectrum",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778680000000,
+      "tag": "0004_recurring_billing_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778683600000,
+      "tag": "0005_recurring_billing_schedules",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778687200000,
+      "tag": "0006_tenant_billing_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1778700000000,
+      "tag": "0007_recurring_invoice_creating_state",
+      "breakpoints": true
     }
   ]
 }

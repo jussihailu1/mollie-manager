@@ -86,6 +86,36 @@ export const firstPaymentModeEnum = pgEnum("first_payment_mode", [
   "mandate_only",
 ]);
 
+export const recurringCollectionStateEnum = pgEnum(
+  "recurring_collection_state",
+  [
+    "not_applicable",
+    "settled",
+    "pending_return_window",
+    "failed_needs_review",
+    "mandate_problem_review",
+    "reversal_critical_review",
+  ],
+);
+
+export const recurringBillingInvoiceStateEnum = pgEnum(
+  "recurring_billing_invoice_state",
+  [
+    "pending_invoice",
+    "invoice_creating",
+    "invoice_created",
+    "invoice_sent",
+    "invoice_failed",
+    "skipped",
+    "canceled",
+  ],
+);
+
+export const invoiceEmailDeliveryModeEnum = pgEnum(
+  "invoice_email_delivery_mode",
+  ["app_smtp", "eboekhouden", "none"],
+);
+
 export const customers = pgTable(
   "customers",
   {
@@ -319,6 +349,42 @@ export const tenantSubscriptionPolicyDefaults = pgTable(
   },
 );
 
+export const tenantBillingSettings = pgTable("tenant_billing_settings", {
+  id: text("id").primaryKey(),
+  invoiceTemplateId: integer("invoice_template_id"),
+  revenueLedgerId: integer("revenue_ledger_id"),
+  revenueLedgerName: text("revenue_ledger_name")
+    .notNull()
+    .default("Omzet abonnementen"),
+  vatCode: text("vat_code").notNull().default("HOOG_VERK_21"),
+  vatPercentage: numeric("vat_percentage", {
+    precision: 5,
+    scale: 2,
+  })
+    .notNull()
+    .default("21.00"),
+  invoiceLineDescriptionSource: text("invoice_line_description_source")
+    .notNull()
+    .default("subscription_description"),
+  invoiceEmailDeliveryMode: invoiceEmailDeliveryModeEnum(
+    "invoice_email_delivery_mode",
+  )
+    .notNull()
+    .default("app_smtp"),
+  createdAt: timestamp("created_at", {
+    mode: "string",
+    withTimezone: true,
+  })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", {
+    mode: "string",
+    withTimezone: true,
+  })
+    .notNull()
+    .defaultNow(),
+});
+
 export const payments = pgTable(
   "payments",
   {
@@ -351,6 +417,15 @@ export const payments = pgTable(
       withTimezone: true,
     }),
     disputedAt: timestamp("disputed_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    recurringCollectionState: recurringCollectionStateEnum(
+      "recurring_collection_state",
+    )
+      .notNull()
+      .default("not_applicable"),
+    collectionReviewRequiredAt: timestamp("collection_review_required_at", {
       mode: "string",
       withTimezone: true,
     }),
@@ -399,6 +474,110 @@ export const payments = pgTable(
     index("payments_subscription_idx").on(
       table.subscriptionId,
       table.paymentType,
+    ),
+    index("payments_recurring_collection_state_idx").on(
+      table.paymentType,
+      table.recurringCollectionState,
+    ),
+  ],
+);
+
+export const recurringBillingSchedules = pgTable(
+  "recurring_billing_schedules",
+  {
+    id: text("id").primaryKey(),
+    subscriptionId: text("subscription_id").notNull(),
+    mode: mollieModeEnum("mode").notNull(),
+    plannedCollectionDate: date("planned_collection_date", {
+      mode: "string",
+    }).notNull(),
+    invoiceSendDueDate: date("invoice_send_due_date", {
+      mode: "string",
+    }).notNull(),
+    invoiceNoticeDaysBeforeDueDate: integer(
+      "invoice_notice_days_before_due_date",
+    )
+      .notNull()
+      .default(5),
+    invoiceState: recurringBillingInvoiceStateEnum("invoice_state")
+      .notNull()
+      .default("pending_invoice"),
+    collectionState: recurringCollectionStateEnum("collection_state")
+      .notNull()
+      .default("not_applicable"),
+    paymentId: text("payment_id"),
+    amountValue: numeric("amount_value", {
+      precision: 12,
+      scale: 2,
+    }).notNull(),
+    amountCurrency: char("amount_currency", { length: 3 }).notNull(),
+    billingPeriodIndex: integer("billing_period_index"),
+    eboekhoudenInvoiceId: text("eboekhouden_invoice_id"),
+    eboekhoudenInvoiceNumber: text("eboekhouden_invoice_number"),
+    invoiceCreatedAt: timestamp("invoice_created_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    invoiceSentAt: timestamp("invoice_sent_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    invoiceFailedAt: timestamp("invoice_failed_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    collectionResolvedAt: timestamp("collection_resolved_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.subscriptionId],
+      foreignColumns: [subscriptions.id],
+      name: "recurring_billing_schedules_subscription_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.paymentId],
+      foreignColumns: [payments.id],
+      name: "recurring_billing_schedules_payment_id_fkey",
+    }).onDelete("set null"),
+    unique("recurring_billing_schedules_subscription_date_key").on(
+      table.subscriptionId,
+      table.plannedCollectionDate,
+    ),
+    check(
+      "recurring_billing_schedules_notice_days_check",
+      sql`${table.invoiceNoticeDaysBeforeDueDate} > 0`,
+    ),
+    check(
+      "recurring_billing_schedules_amount_value_check",
+      sql`${table.amountValue} >= 0`,
+    ),
+    index("recurring_billing_schedules_due_idx").on(
+      table.mode,
+      table.invoiceState,
+      table.invoiceSendDueDate,
+    ),
+    index("recurring_billing_schedules_subscription_idx").on(
+      table.subscriptionId,
+      table.plannedCollectionDate,
     ),
   ],
 );

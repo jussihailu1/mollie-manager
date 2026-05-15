@@ -14,6 +14,10 @@ Future-state notes for subscription-platform evolution. This file is not the cur
 - Improve the UI/UX of the customer-facing hosted onboarding return/success screen after Mollie checkout, including clearer success/pending states, better mandate-only messaging, and stronger branded reassurance while backend activation is still confirming.
 - Add scheduled reconciliation so missed, delayed, or failed webhooks do not leave Mollie-backed subscription and payment state stale indefinitely.
   Future implementation note: if Vercel cron remains unavailable on the current plan, run this via a Cloudflare Worker cron trigger that calls a protected reconciliation endpoint in the app.
+- Add app-owned recurring invoice email delivery using the existing SMTP stack first, with Resend as a later replacement option if needed.
+- Implement first-payment e-Boekhouden invoicing for `real_installment` onboarding flows as a separate path from recurring pre-collection invoices.
+  Detailed plan: `documentation/first-payment-invoice-plan.md`.
+- Hide or remove redundant internal billing labels from the settings UI once e-Boekhouden dropdown mappings are stable.
 
 ## Constraints On Future Work
 

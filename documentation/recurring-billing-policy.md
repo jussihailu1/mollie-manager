@@ -24,6 +24,7 @@ Do not treat accounting configuration as policy. The following belong in tenant 
 - ledger or product mappings
 - VAT configuration
 - invoice numbering preferences
+- internal display labels for selected accounting mappings
 
 ## Locked Product Decisions
 
@@ -35,6 +36,7 @@ Do not treat accounting configuration as policy. The following belong in tenant 
 - V1 default pre-notification lead time is 5 calendar days before the debit due date.
 - The shorter-than-default SEPA pre-notification timeline must be agreed with the customer in the terms and consent flow.
 - V1 invoice wording must clearly state that the amount will be collected automatically on the stated date.
+- e-Boekhouden remains the bookkeeping source for recurring invoices; customer email delivery may be app-owned and must not change invoice/accounting truth.
 - `real_installment` remains the default first-payment mode.
 - `mandate_only` remains available only for mandate setup before recurring charges start.
 - The EUR 0.01 `mandate_only` payment is not a normal subscription installment and is not a recurring invoice event.

@@ -1,5 +1,10 @@
 ﻿import "server-only";
 
+import {
+  buildRecurringBillingConsentSnapshot,
+  type RecurringBillingConsentSnapshot,
+} from "@/lib/recurring-billing-policy";
+
 export type BillingInterval = "weekly" | "monthly" | "yearly";
 export type SubscriptionTermMode = "open_ended" | "fixed_term";
 export type CancellationEffect = "immediate" | "end_of_paid_period";
@@ -7,6 +12,7 @@ export type FirstPaymentMode = "real_installment" | "mandate_only";
 
 export const REQUIRED_CONSENT_CHECKBOX_KEYS = [
   "recurring_terms_ack",
+  "recurring_billing_policy_ack",
   "cancellation_policy_ack",
 ] as const;
 
@@ -31,6 +37,7 @@ export type ConsentPlanSnapshot = {
   finalChargeDate: string | null;
   firstPaymentAmountValue: string;
   firstPaymentMode: FirstPaymentMode;
+  recurringBilling: RecurringBillingConsentSnapshot;
   recurringChargeCount: number | null;
   serviceEndAt: string | null;
   startDate: string;
@@ -190,6 +197,9 @@ export function buildConsentPlanSnapshot(input: {
     finalChargeDate,
     firstPaymentAmountValue,
     firstPaymentMode: input.firstPaymentMode,
+    recurringBilling: buildRecurringBillingConsentSnapshot({
+      firstPaymentMode: input.firstPaymentMode,
+    }),
     recurringChargeCount,
     serviceEndAt: deriveServiceEndAt({
       explicitServiceEndAt: input.explicitServiceEndAt,

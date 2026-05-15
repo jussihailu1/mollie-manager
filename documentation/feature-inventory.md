@@ -26,6 +26,15 @@ These items are still in the backend or planned scope, but they are not fully re
 - [x] The recurring onboarding flow now discloses cancellation-by-email terms to the customer.
 - [x] Tenant-default subscription policy modeling is implemented for v1 with DB defaults bootstrapped from env.
 - [x] Onboarding supports first-payment mode selection (`real_installment` default or `mandate_only` at `EUR 0.01`) with consent-bound subscription creation.
+- [x] Consent snapshots now include recurring billing notice terms: invoice email before automatic collection, 5 calendar day pre-notification, SEPA failure/reversal disclosure, and mandate-only exclusion.
+- [x] Recurring payment sync stores operational collection state and opens policy-aware alerts for confirmed failures, mandate problems, and reversals without treating pending SEPA payments as failed.
+- [x] Recurring billing schedule rows are stored per subscription and planned collection date, with invoice send due date calculated 5 calendar days before collection.
+- [x] Tenant billing settings now store e-Boekhouden invoice template, revenue ledger, 21% VAT code, plain-text line source, and app-owned email delivery mode separately from policy.
+- [x] Settings discovery fetches e-Boekhouden invoice templates and ledger accounts from the official REST API and shows them as dropdowns, so template and ledger IDs do not need to be typed manually.
+- [x] e-Boekhouden recurring invoice creation service exists for scheduled billing rows once tenant billing settings are complete.
+- [x] Operators can now manually create due recurring e-Boekhouden invoices from `/settings`, gated on complete billing settings and the selected Mollie mode.
+- [x] Due recurring invoice creation now claims schedule rows before the upstream API call, stores returned e-Boekhouden invoice id/number on success, and writes audit logs plus operator alerts for success/failure.
+- [ ] App-owned invoice email delivery is not implemented yet; SMTP exists for alerts and Resend remains a future replacement option.
 
 ## Retained In Current UI
 
@@ -88,6 +97,8 @@ These are still part of the product behavior even if the new UI is narrower than
 - The active dashboard, customers, payments, notifications, and shell surfaces are wired back to real data and server actions.
 - The richer customer fields are still stored in `customers.metadata`; e-Boekhouden link state now has first-class customer columns and a Drizzle migration in `db/drizzle`.
 - e-Boekhouden import/linking requires `EBOEKHOUDEN_API_TOKEN` in the server environment. `EBOEKHOUDEN_API_SOURCE` defaults to `Kify`.
+- e-Boekhouden billing settings are accounting configuration, not subscription policy. The revenue ledger label is only an internal fallback/display label; the selected e-Boekhouden ledger ID is the actual accounting mapping.
 - The next subscription feature pass should follow `documentation/subscription-policy.md` and `documentation/recurring-billing-policy.md`.
 - Longer-term subscription-platform work should accumulate in `documentation/subscription-roadmap.md`.
 - Reliability follow-up to keep on the future backlog: add scheduled reconciliation as a backend safety net even when webhooks are working, so missed or delayed webhook delivery does not leave local state stale.
+- Manual recurring invoice creation intentionally stops on `invoice_failed` rows after uncertain upstream outcomes so operators can review before any retry and avoid duplicate e-Boekhouden invoices.

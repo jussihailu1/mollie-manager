@@ -7,7 +7,7 @@ import { sendPlainEmail, notificationsAreConfigured } from "@/lib/notifications/
 import { composeAlertEmail } from "@/lib/reliability/alert-email";
 import { deliverAlertEmailWithDependencies } from "@/lib/reliability/alert-email-delivery";
 
-type AlertSeverity = "critical" | "warning";
+type AlertSeverity = "critical" | "info" | "warning";
 
 type AlertInput = {
   customerId?: string | null;

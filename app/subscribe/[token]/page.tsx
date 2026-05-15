@@ -148,6 +148,32 @@ export default async function SubscribeConsentPage({
               {formatCurrency(plan.firstPaymentAmountValue, plan.amountCurrency)}
             </span>
           </div>
+          <div className="flex items-start justify-between gap-4">
+            <span className="text-neutral-700">Recurring invoice notice</span>
+            <span className="max-w-[18rem] text-right font-medium">
+              Invoices are sent by email {plan.recurringBilling.invoiceNoticeDaysBeforeDueDate} calendar days before the planned automatic collection date.
+            </span>
+          </div>
+          <div className="flex items-start justify-between gap-4">
+            <span className="text-neutral-700">Automatic collection</span>
+            <span className="max-w-[18rem] text-right font-medium">
+              The invoice states the planned collection date and the amount will be collected automatically on that date.
+            </span>
+          </div>
+          <div className="flex items-start justify-between gap-4">
+            <span className="text-neutral-700">SEPA direct debit note</span>
+            <span className="max-w-[18rem] text-right font-medium">
+              A direct debit can still fail or be reversed later; the underlying payment obligation may remain open.
+            </span>
+          </div>
+          {plan.firstPaymentMode === "mandate_only" ? (
+            <div className="flex items-start justify-between gap-4">
+              <span className="text-neutral-700">Mandate-only setup</span>
+              <span className="max-w-[18rem] text-right font-medium">
+                The EUR 0.01 setup payment is separate from the recurring subscription and is not counted as an installment.
+              </span>
+            </div>
+          ) : null}
         </section>
 
         {consent.acceptedAt ? (
@@ -177,6 +203,19 @@ export default async function SubscribeConsentPage({
               />
               <span>
                 I understand that this starts a recurring subscription under the terms shown above.
+              </span>
+            </label>
+
+            <label className="flex items-start gap-3 rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm leading-6">
+              <input
+                className="mt-1 h-4 w-4"
+                type="checkbox"
+                name="recurringBillingPolicyAck"
+                value="yes"
+                required
+              />
+              <span>
+                I agree that recurring invoices are sent {plan.recurringBilling.invoiceNoticeDaysBeforeDueDate} calendar days before automatic collection and that SEPA direct debits can fail or be reversed later.
               </span>
             </label>
 

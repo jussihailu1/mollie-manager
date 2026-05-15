@@ -9,6 +9,16 @@ import type { MollieMode } from "@/lib/env";
 import { getMollieClient, getMollieWebhookUrl, isMollieConfigured } from "@/lib/mollie/client";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
 import {
+  upsertRecurringBillingScheduleForPayment,
+  upsertRecurringBillingScheduleForSubscription,
+} from "@/lib/recurring-billing-schedule";
+import {
+  classifyRecurringCollection,
+  DEFAULT_RECURRING_BILLING_POLICY,
+  isCollectionReviewState,
+  type RecurringCollectionState,
+} from "@/lib/recurring-billing-policy";
+import {
   deliverAlertEmail,
   openAlert,
   resolveAlertsForEntity,
@@ -56,8 +66,11 @@ type LocalSubscriptionLink = {
   id: string;
   localStatus: string;
   mandateId: string | null;
+  metadata: Record<string, unknown>;
   mode: MollieMode;
   mollieSubscriptionId: string | null;
+  subscriptionTermMode: "fixed_term" | "open_ended";
+  totalPayments: number | null;
 };
 
 type LocalPaymentRow = {
@@ -115,6 +128,37 @@ function hasChargeback(payment: Payment) {
   return Boolean(
     payment.amountChargedBack && payment.amountChargedBack.value !== "0.00",
   );
+}
+
+function serializeStatusReason(statusReason: Payment["statusReason"]) {
+  if (!statusReason) {
+    return null;
+  }
+
+  if (typeof statusReason === "string") {
+    return statusReason;
+  }
+
+  return [statusReason.code, statusReason.message].filter(Boolean).join(": ");
+}
+
+function getRecurringCollectionState(payment: Payment) {
+  return classifyRecurringCollection({
+    hasChargeback: hasChargeback(payment),
+    paymentType: resolvePaymentType(payment),
+    status: payment.status,
+    statusReason: serializeStatusReason(payment.statusReason),
+  });
+}
+
+function getReviewRequiredAt(state: RecurringCollectionState) {
+  return isCollectionReviewState(state) ? new Date().toISOString() : null;
+}
+
+function getFirstPaymentMode(metadata: Record<string, unknown>) {
+  return metadata.firstPaymentMode === "mandate_only"
+    ? "mandate_only"
+    : "real_installment";
 }
 
 async function findPaymentAcrossModes(
@@ -227,6 +271,9 @@ export async function getManagedSubscription(subscriptionId: string) {
         s.local_status as "localStatus",
         s.mandate_id as "mandateId",
         s.mollie_subscription_id as "mollieSubscriptionId",
+        s.subscription_term_mode as "subscriptionTermMode",
+        s.total_payments as "totalPayments",
+        s.metadata,
         c.id as "customerId",
         c.mollie_customer_id as "customerMollieId"
       from subscriptions s
@@ -253,6 +300,9 @@ async function getManagedSubscriptionByMollieId(
         s.local_status as "localStatus",
         s.mandate_id as "mandateId",
         s.mollie_subscription_id as "mollieSubscriptionId",
+        s.subscription_term_mode as "subscriptionTermMode",
+        s.total_payments as "totalPayments",
+        s.metadata,
         c.id as "customerId",
         c.mollie_customer_id as "customerMollieId"
       from subscriptions s
@@ -607,6 +657,107 @@ async function handlePaymentAlerts(input: {
   payment: Payment;
   subscriptionId: string | null;
 }) {
+  const paymentType = resolvePaymentType(input.payment);
+  const recurringCollectionState = getRecurringCollectionState(input.payment);
+
+  if (paymentType === "recurring") {
+    if (recurringCollectionState === "pending_return_window") {
+      return;
+    }
+
+    if (recurringCollectionState === "reversal_critical_review") {
+      const alert = await openAlert({
+        customerId: input.customerId,
+        message:
+          "A recurring SEPA direct debit was reversed or disputed. The invoice obligation may still be open; review Mollie and e-Boekhouden before changing service or billing state.",
+        paymentId: input.localPaymentId,
+        payload: {
+          policy: "recurring_billing_policy",
+          recurringCollectionState,
+        },
+        severity: "critical",
+        subscriptionId: input.subscriptionId,
+        title: "Recurring collection reversed",
+      });
+
+      if (alert.isNew) {
+        await deliverAlertEmail({
+          alertId: alert.id,
+          message:
+            "A recurring SEPA direct debit was reversed or disputed. Review Mollie, the invoice, and the subscription before taking action.",
+          title: "Recurring collection reversed",
+        });
+      }
+
+      return;
+    }
+
+    if (recurringCollectionState === "mandate_problem_review") {
+      const alert = await openAlert({
+        customerId: input.customerId,
+        message:
+          "A recurring collection failed with a possible mandate or bank-account problem. Do not rely on future automatic collection until the mandate or payment path is reviewed.",
+        paymentId: input.localPaymentId,
+        payload: {
+          policy: "recurring_billing_policy",
+          recurringCollectionState,
+          statusReason: serializeStatusReason(input.payment.statusReason),
+        },
+        severity: "critical",
+        subscriptionId: input.subscriptionId,
+        title: "Recurring mandate problem",
+      });
+
+      if (alert.isNew) {
+        await deliverAlertEmail({
+          alertId: alert.id,
+          message:
+            "A recurring collection failed with a possible mandate problem. Review the customer before retrying automatic collection.",
+          title: "Recurring mandate problem",
+        });
+      }
+
+      return;
+    }
+
+    if (recurringCollectionState === "failed_needs_review") {
+      const alert = await openAlert({
+        customerId: input.customerId,
+        message:
+          "A recurring collection failed. Keep the existing invoice open, do not create a duplicate invoice, and review the customer manually before retrying or changing service state.",
+        paymentId: input.localPaymentId,
+        payload: {
+          invoiceStatePolicy: "keep_existing_invoice_open",
+          noAutomaticCancellation: true,
+          noAutomaticFees: true,
+          policy: "recurring_billing_policy",
+          recurringCollectionState,
+        },
+        severity: "warning",
+        subscriptionId: input.subscriptionId,
+        title: "Recurring collection failed",
+      });
+
+      if (alert.isNew) {
+        await deliverAlertEmail({
+          alertId: alert.id,
+          message:
+            "A recurring collection failed. Keep the existing invoice open and review manually; do not create a duplicate invoice or auto-cancel.",
+          title: "Recurring collection failed",
+        });
+      }
+
+      return;
+    }
+
+    if (recurringCollectionState === "settled") {
+      await resolveAlertsForEntity({
+        paymentId: input.localPaymentId,
+      });
+      return;
+    }
+  }
+
   if (hasChargeback(input.payment)) {
     const alert = await openAlert({
       customerId: input.customerId,
@@ -741,6 +892,9 @@ export async function syncPaymentByMollieId(
     payment.subscriptionId,
   );
   const resolvedCustomerId = localCustomer?.id ?? localSubscription?.customerId ?? null;
+  const paymentType = resolvePaymentType(payment);
+  const recurringCollectionState = getRecurringCollectionState(payment);
+  const collectionReviewRequiredAt = getReviewRequiredAt(recurringCollectionState);
   let localPaymentId = crypto.randomUUID();
 
   await transaction(async (client) => {
@@ -779,6 +933,8 @@ export async function syncPaymentByMollieId(
           paid_at,
           failed_at,
           disputed_at,
+          recurring_collection_state,
+          collection_review_required_at,
           metadata,
           created_at,
           updated_at,
@@ -789,7 +945,7 @@ export async function syncPaymentByMollieId(
           ${localSubscription?.id ?? null},
           ${localMandateId},
           ${mode},
-          ${resolvePaymentType(payment)},
+          ${paymentType},
           ${payment.id},
           ${payment.status},
           ${payment.sequenceType},
@@ -801,10 +957,19 @@ export async function syncPaymentByMollieId(
           ${payment.paidAt ?? null}::timestamptz,
           ${payment.failedAt ?? null}::timestamptz,
           ${hasChargeback(payment) ? new Date().toISOString() : null}::timestamptz,
+          ${recurringCollectionState},
+          ${collectionReviewRequiredAt}::timestamptz,
           ${JSON.stringify({
             description: payment.description,
+            recurringBillingPolicy:
+              paymentType === "recurring"
+                ? {
+                    sepaPendingReturnWindowDays:
+                      DEFAULT_RECURRING_BILLING_POLICY.sepaPendingReturnWindowDays,
+                  }
+                : null,
             redirectUrl: payment.redirectUrl ?? null,
-            statusReason: payment.statusReason ?? null,
+            statusReason: serializeStatusReason(payment.statusReason),
             webhookUrl: getMollieWebhookUrl(),
           })}::jsonb,
           ${payment.createdAt}::timestamptz,
@@ -827,10 +992,27 @@ export async function syncPaymentByMollieId(
           paid_at = excluded.paid_at,
           failed_at = excluded.failed_at,
           disputed_at = excluded.disputed_at,
+          recurring_collection_state = excluded.recurring_collection_state,
+          collection_review_required_at = case
+            when excluded.collection_review_required_at is null then null
+            else coalesce(payments.collection_review_required_at, excluded.collection_review_required_at)
+          end,
           metadata = excluded.metadata,
           updated_at = now(),
           last_synced_at = now()
       `);
+
+    if (paymentType === "recurring" && localSubscription) {
+      await upsertRecurringBillingScheduleForPayment(client, {
+        amountCurrency: payment.amount.currency,
+        amountValue: payment.amount.value,
+        collectionState: recurringCollectionState,
+        mode,
+        paymentCreatedAt: payment.createdAt,
+        paymentId: localPaymentId,
+        subscriptionId: localSubscription.id,
+      });
+    }
 
     await writeAuditLog(
       {
@@ -839,6 +1021,7 @@ export async function syncPaymentByMollieId(
           localPaymentId,
           molliePaymentId: payment.id,
           mollieStatus: payment.status,
+          recurringCollectionState,
         },
         entityId: localPaymentId,
         entityType: "payment",
@@ -869,7 +1052,7 @@ export async function syncPaymentByMollieId(
 
   if (
     resolvedCustomerId &&
-    resolvePaymentType(payment) === "first" &&
+    paymentType === "first" &&
     payment.status === "paid"
   ) {
     await attemptSubscriptionActivation({
@@ -1002,6 +1185,21 @@ export async function syncSubscriptionByLocalId(
         where id = ${localSubscription.id}
       `);
 
+    await upsertRecurringBillingScheduleForSubscription(client, {
+      actor,
+      amountCurrency: subscription.amount.currency,
+      amountValue: subscription.amount.value,
+      firstPaymentMode: getFirstPaymentMode(localSubscription.metadata),
+      interval: subscription.interval,
+      mode: localSubscription.mode,
+      nextPaymentDate: subscription.nextPaymentDate ?? null,
+      periodLimit: 1,
+      startDate: null,
+      subscriptionId: localSubscription.id,
+      subscriptionTermMode: localSubscription.subscriptionTermMode,
+      totalPayments: localSubscription.totalPayments,
+    });
+
     for (const payment of payments) {
       const existingPayment = await client.execute<LocalPaymentRow>(sql`
           select id
@@ -1015,6 +1213,11 @@ export async function syncSubscriptionByLocalId(
         localMandateId ??
         null;
       const localPaymentId = existingPayment.rows[0]?.id ?? crypto.randomUUID();
+      const paymentType = resolvePaymentType(payment);
+      const recurringCollectionState = getRecurringCollectionState(payment);
+      const collectionReviewRequiredAt = getReviewRequiredAt(
+        recurringCollectionState,
+      );
 
       await client.execute(sql`
           insert into payments (
@@ -1035,6 +1238,8 @@ export async function syncSubscriptionByLocalId(
             paid_at,
             failed_at,
             disputed_at,
+            recurring_collection_state,
+            collection_review_required_at,
             metadata,
             created_at,
             updated_at,
@@ -1045,7 +1250,7 @@ export async function syncSubscriptionByLocalId(
             ${localSubscription.id},
             ${linkedMandateId},
             ${localSubscription.mode},
-            ${resolvePaymentType(payment)},
+            ${paymentType},
             ${payment.id},
             ${payment.status},
             ${payment.sequenceType},
@@ -1057,9 +1262,19 @@ export async function syncSubscriptionByLocalId(
             ${payment.paidAt ?? null}::timestamptz,
             ${payment.failedAt ?? null}::timestamptz,
             ${hasChargeback(payment) ? new Date().toISOString() : null}::timestamptz,
+            ${recurringCollectionState},
+            ${collectionReviewRequiredAt}::timestamptz,
             ${JSON.stringify({
               description: payment.description,
+              recurringBillingPolicy:
+                paymentType === "recurring"
+                  ? {
+                      sepaPendingReturnWindowDays:
+                        DEFAULT_RECURRING_BILLING_POLICY.sepaPendingReturnWindowDays,
+                    }
+                  : null,
               redirectUrl: payment.redirectUrl ?? null,
+              statusReason: serializeStatusReason(payment.statusReason),
             })}::jsonb,
             ${payment.createdAt}::timestamptz,
             now(),
@@ -1081,10 +1296,27 @@ export async function syncSubscriptionByLocalId(
             paid_at = excluded.paid_at,
             failed_at = excluded.failed_at,
             disputed_at = excluded.disputed_at,
+            recurring_collection_state = excluded.recurring_collection_state,
+            collection_review_required_at = case
+              when excluded.collection_review_required_at is null then null
+              else coalesce(payments.collection_review_required_at, excluded.collection_review_required_at)
+            end,
             metadata = excluded.metadata,
             updated_at = now(),
             last_synced_at = now()
         `);
+
+      if (paymentType === "recurring") {
+        await upsertRecurringBillingScheduleForPayment(client, {
+          amountCurrency: payment.amount.currency,
+          amountValue: payment.amount.value,
+          collectionState: recurringCollectionState,
+          mode: localSubscription.mode,
+          paymentCreatedAt: payment.createdAt,
+          paymentId: localPaymentId,
+          subscriptionId: localSubscription.id,
+        });
+      }
     }
 
     await writeAuditLog(

@@ -34,6 +34,7 @@ import { buildSubscriptionConsentReturnUrl } from "@/lib/subscription-consent";
 import { ensureTenantSubscriptionPolicyDefaults } from "@/lib/subscription-policy-defaults";
 import {
   buildConsentPlanSnapshot,
+  REQUIRED_CONSENT_CHECKBOX_KEYS,
   type BillingInterval,
 } from "@/lib/subscription-policy";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
@@ -1039,7 +1040,7 @@ export async function createFirstPaymentAction(formData: FormData) {
             ${consentToken},
             ${parsed.data.firstPaymentMode},
             ${tenantPolicy.termsVersion},
-            ${JSON.stringify(["recurring_terms_ack", "cancellation_policy_ack"])}::jsonb,
+            ${JSON.stringify([...REQUIRED_CONSENT_CHECKBOX_KEYS])}::jsonb,
             '[]'::jsonb,
             ${JSON.stringify(planSnapshot)}::jsonb,
             null,

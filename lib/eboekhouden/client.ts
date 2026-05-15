@@ -19,6 +19,52 @@ type RelationListResponse = {
   }[];
 };
 
+export type EboekhoudenListResponse<T> = {
+  count?: number;
+  items?: T[];
+};
+
+export type EboekhoudenInvoiceTemplate = {
+  active?: boolean | null;
+  id: number;
+  name?: string | null;
+  type?: "A" | "E" | string | null;
+};
+
+export type EboekhoudenLedger = {
+  category?: string | null;
+  code?: string | null;
+  description?: string | null;
+  id: number;
+  name?: string | null;
+};
+
+export type EboekhoudenInvoiceItemInput = {
+  description: string;
+  ledgerId: number;
+  pricePerUnit: number;
+  quantity?: number;
+  vatCode: string;
+};
+
+export type EboekhoudenCreateInvoiceInput = {
+  date: string;
+  inExVat?: "EX" | "IN";
+  items: EboekhoudenInvoiceItemInput[];
+  print?: boolean;
+  reference?: string;
+  relationId: number;
+  templateId: number;
+  termOfPayment: number;
+};
+
+export type EboekhoudenInvoice = {
+  id?: number;
+  invoiceNumber?: string | null;
+  number?: string | null;
+  urlPdfFile?: string | null;
+};
+
 let sessionCache: SessionCache | null = null;
 
 export class EboekhoudenConfigError extends Error {
@@ -64,21 +110,33 @@ async function parseError(response: Response) {
 
   if (typeof body === "object" && body !== null) {
     const record = body as Record<string, unknown>;
+    const code = typeof record.code === "string" ? record.code : undefined;
+    const propertyName =
+      typeof record.propertyName === "string"
+        ? record.propertyName
+        : undefined;
+    const traceId =
+      typeof record.traceId === "string" ? record.traceId : undefined;
     const message =
       typeof record.message === "string"
         ? record.message
         : typeof record.title === "string"
           ? record.title
           : "e-Boekhouden request failed.";
+    const details = [
+      code ? `code ${code}` : null,
+      propertyName ? `field ${propertyName}` : null,
+      traceId ? `trace ${traceId}` : null,
+    ].filter((value): value is string => value !== null);
 
-    return new EboekhoudenApiError(message, {
-      code: typeof record.code === "string" ? record.code : undefined,
-      propertyName:
-        typeof record.propertyName === "string"
-          ? record.propertyName
-          : undefined,
-      status: response.status,
-    });
+    return new EboekhoudenApiError(
+      details.length > 0 ? `${message} (${details.join(", ")})` : message,
+      {
+        code,
+        propertyName,
+        status: response.status,
+      },
+    );
   }
 
   return new EboekhoudenApiError("e-Boekhouden request failed.", {
@@ -247,6 +305,49 @@ export async function searchEboekhoudenRelations(options: {
 
 export async function getEboekhoudenRelation(id: number) {
   return requestEboekhouden<EboekhoudenRelation>(`/v1/relation/${id}`);
+}
+
+export async function listEboekhoudenInvoiceTemplates(options?: {
+  active?: boolean;
+  limit?: number;
+  offset?: number;
+  type?: "A" | "E";
+}) {
+  const params = new URLSearchParams();
+  params.set("limit", String(Math.min(Math.max(options?.limit ?? 100, 1), 2000)));
+  params.set("offset", String(Math.max(options?.offset ?? 0, 0)));
+  if (typeof options?.active === "boolean") {
+    params.set("active", String(options.active));
+  }
+  if (options?.type) {
+    params.set("type", options.type);
+  }
+
+  return requestEboekhouden<EboekhoudenListResponse<EboekhoudenInvoiceTemplate>>(
+    `/v1/invoicetemplate?${params.toString()}`,
+  );
+}
+
+export async function listEboekhoudenLedgers(options?: {
+  limit?: number;
+  offset?: number;
+}) {
+  const params = new URLSearchParams();
+  params.set("limit", String(Math.min(Math.max(options?.limit ?? 2000, 1), 2000)));
+  params.set("offset", String(Math.max(options?.offset ?? 0, 0)));
+
+  return requestEboekhouden<EboekhoudenListResponse<EboekhoudenLedger>>(
+    `/v1/ledger?${params.toString()}`,
+  );
+}
+
+export async function createEboekhoudenInvoice(
+  payload: EboekhoudenCreateInvoiceInput,
+) {
+  return requestEboekhouden<EboekhoudenInvoice>("/v1/invoice", {
+    body: JSON.stringify(payload),
+    method: "POST",
+  });
 }
 
 export async function createEboekhoudenRelation(
