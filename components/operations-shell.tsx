@@ -185,6 +185,7 @@ export function OperationsShell({
     getServerSidebarCollapsed,
   );
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  const [isSidebarMenuOpen, setIsSidebarMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isModePending, startModeTransition] = useTransition();
   const [isLogoutPending, startLogoutTransition] = useTransition();
@@ -192,7 +193,7 @@ export function OperationsShell({
   const returnTo = getReturnTo(pathname, new URLSearchParams(searchParams.toString()));
   const isTestMode = selectedMode === "test";
   const userInitials = getUserInitials(userName, userEmail);
-  const isSidebarVisuallyCollapsed = isSidebarCollapsed && !isSidebarHovered;
+  const isSidebarVisuallyCollapsed = isSidebarCollapsed && !isSidebarHovered && !isSidebarMenuOpen;
   const shouldShowSidebarMenu = !isSidebarVisuallyCollapsed;
 
   useEffect(() => {
@@ -228,7 +229,7 @@ export function OperationsShell({
             {isSidebarVisuallyCollapsed ? "K" : "Kify"}
           </h1>
           {shouldShowSidebarMenu ? (
-            <DropdownMenu>
+            <DropdownMenu open={isSidebarMenuOpen} onOpenChange={setIsSidebarMenuOpen}>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
                   <Ellipsis className="h-4 w-4" />
@@ -350,7 +351,7 @@ export function OperationsShell({
           <Button
             type="button"
             variant="ghost"
-            size={isSidebarVisuallyCollapsed ? "icon" : "default"}
+            size="default"
             className={cn("w-full", isSidebarVisuallyCollapsed ? "justify-center" : "justify-start px-2")}
             title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             onClick={() => setStoredSidebarCollapsed(!isSidebarCollapsed)}
