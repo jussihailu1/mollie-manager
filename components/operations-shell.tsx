@@ -184,6 +184,7 @@ export function OperationsShell({
     getBrowserSidebarCollapsed,
     getServerSidebarCollapsed,
   );
+  const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isModePending, startModeTransition] = useTransition();
   const [isLogoutPending, startLogoutTransition] = useTransition();
@@ -191,6 +192,8 @@ export function OperationsShell({
   const returnTo = getReturnTo(pathname, new URLSearchParams(searchParams.toString()));
   const isTestMode = selectedMode === "test";
   const userInitials = getUserInitials(userName, userEmail);
+  const isSidebarVisuallyCollapsed = isSidebarCollapsed && !isSidebarHovered;
+  const shouldShowSidebarMenu = !isSidebarCollapsed;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -208,103 +211,111 @@ export function OperationsShell({
   return (
     <div className="flex min-h-screen bg-background">
       <aside
+        onMouseEnter={() => setIsSidebarHovered(true)}
+        onMouseLeave={() => setIsSidebarHovered(false)}
         className={cn(
           "min-h-screen shrink-0 overflow-hidden border-r bg-card flex flex-col transition-all duration-200",
-          isSidebarCollapsed ? "w-16" : "w-64",
+          isSidebarVisuallyCollapsed ? "w-16" : "w-64",
         )}
       >
         <div
           className={cn(
             "flex items-center p-6",
-            isSidebarCollapsed ? "flex-col justify-center gap-3 px-0" : "justify-between",
+            isSidebarVisuallyCollapsed
+              ? "flex-col justify-center gap-3 px-0"
+              : shouldShowSidebarMenu
+                ? "justify-between"
+                : "justify-start",
           )}
         >
           <h1 className="text-2xl font-bold tracking-tighter text-primary">
-            {isSidebarCollapsed ? "K" : "Kify"}
+            {isSidebarVisuallyCollapsed ? "K" : "Kify"}
           </h1>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
-                <Ellipsis className="h-4 w-4" />
-                <span className="sr-only">Open environment menu</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-80 p-2">
-              <div className="flex items-center gap-3 px-2 py-2.5">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-full border bg-muted text-sm font-medium text-muted-foreground">
-                  {userInitials}
+          {shouldShowSidebarMenu ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
+                  <Ellipsis className="h-4 w-4" />
+                  <span className="sr-only">Open environment menu</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-80 p-2">
+                <div className="flex items-center gap-3 px-2 py-2.5">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full border bg-muted text-sm font-medium text-muted-foreground">
+                    {userInitials}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium leading-none text-foreground">
+                      {userName ?? userEmail}
+                    </p>
+                    <p className="truncate pt-1 text-sm text-muted-foreground">
+                      {userEmail}
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium leading-none text-foreground">
-                    {userName ?? userEmail}
-                  </p>
-                  <p className="truncate pt-1 text-sm text-muted-foreground">
-                    {userEmail}
-                  </p>
-                </div>
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem asChild>
-                  <Link href="/settings">
-                    <Settings data-icon="inline-start" />
-                    Settings
-                  </Link>
-                </DropdownMenuItem>
-                <div className="flex items-center gap-3 rounded-sm px-2 py-2 text-sm">
-                  <FlaskConical className="size-4 text-muted-foreground" />
-                  <span className="flex-1 font-medium text-foreground">Test mode</span>
-                  <Switch
-                    aria-label="Toggle test mode"
-                    checked={isTestMode}
-                    disabled={isModePending || isLiveModeDisabled}
-                    size="sm"
-                    onCheckedChange={(checked) => {
-                      if (!checked && isLiveModeDisabled) {
-                        return;
-                      }
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem asChild>
+                    <Link href="/settings">
+                      <Settings data-icon="inline-start" />
+                      Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <div className="flex items-center gap-3 rounded-sm px-2 py-2 text-sm">
+                    <FlaskConical className="size-4 text-muted-foreground" />
+                    <span className="flex-1 font-medium text-foreground">Test mode</span>
+                    <Switch
+                      aria-label="Toggle test mode"
+                      checked={isTestMode}
+                      disabled={isModePending || isLiveModeDisabled}
+                      size="sm"
+                      onCheckedChange={(checked) => {
+                        if (!checked && isLiveModeDisabled) {
+                          return;
+                        }
 
-                      startModeTransition(async () => {
-                        await updateSelectedMode(checked ? "test" : "live", returnTo);
+                        startModeTransition(async () => {
+                          await updateSelectedMode(checked ? "test" : "live", returnTo);
+                        });
+                      }}
+                    />
+                  </div>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem asChild>
+                    <a
+                      href={mollieDashboardHref}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      <ExternalLink data-icon="inline-start" />
+                      Open Mollie
+                    </a>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem
+                    disabled={isLogoutPending}
+                    variant="destructive"
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      startLogoutTransition(async () => {
+                        await signOutUser();
                       });
                     }}
-                  />
-                </div>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem asChild>
-                  <a
-                    href={mollieDashboardHref}
-                    rel="noreferrer"
-                    target="_blank"
                   >
-                    <ExternalLink data-icon="inline-start" />
-                    Open Mollie
-                  </a>
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem
-                  disabled={isLogoutPending}
-                  variant="destructive"
-                  onSelect={(event) => {
-                    event.preventDefault();
-                    startLogoutTransition(async () => {
-                      await signOutUser();
-                    });
-                  }}
-                >
-                  <LogOut data-icon="inline-start" />
-                  Log out
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                    <LogOut data-icon="inline-start" />
+                    Log out
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
         </div>
 
-        <nav className={cn("flex-1 space-y-2", isSidebarCollapsed ? "px-2" : "px-4")}>
+        <nav className={cn("flex-1 space-y-2", isSidebarVisuallyCollapsed ? "px-2" : "px-4")}>
           {navigation.map((item) => {
             const isActive = item.match(pathname);
 
@@ -315,19 +326,19 @@ export function OperationsShell({
                 variant={isActive ? "secondary" : "ghost"}
                 className={cn(
                   "w-full",
-                  isSidebarCollapsed ? "justify-center px-0" : "justify-start",
+                  isSidebarVisuallyCollapsed ? "justify-center px-0" : "justify-start",
                   item.href === "/notifications" && "relative",
                 )}
-                title={isSidebarCollapsed ? item.label : undefined}
+                title={isSidebarVisuallyCollapsed ? item.label : undefined}
               >
                 <Link href={item.href}>
-                  <item.icon className={cn(isSidebarCollapsed ? "h-5 w-5" : "mr-2 h-4 w-4")} />
-                  <span className={cn(isSidebarCollapsed && "sr-only")}>{item.label}</span>
+                  <item.icon className={cn(isSidebarVisuallyCollapsed ? "h-5 w-5" : "mr-2 h-4 w-4")} />
+                  <span className={cn(isSidebarVisuallyCollapsed && "sr-only")}>{item.label}</span>
                   {item.href === "/notifications" && unreadCount > 0 ? (
                     <span
                       className={cn(
                         "absolute rounded-full bg-red-600",
-                        isSidebarCollapsed
+                        isSidebarVisuallyCollapsed
                           ? "right-1.5 top-1.5 h-2.5 w-2.5 border-2 border-card"
                           : "right-3 h-2.5 w-2.5",
                       )}
@@ -343,18 +354,15 @@ export function OperationsShell({
           <Button
             type="button"
             variant="ghost"
-            size={isSidebarCollapsed ? "icon" : "default"}
-            className={cn("w-full", isSidebarCollapsed ? "justify-center" : "justify-start px-2")}
+            size={isSidebarVisuallyCollapsed ? "icon" : "default"}
+            className={cn("w-full", isSidebarVisuallyCollapsed ? "justify-center" : "justify-start px-2")}
             title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             onClick={() => setStoredSidebarCollapsed(!isSidebarCollapsed)}
           >
             {isSidebarCollapsed ? (
               <PanelLeftOpen className="size-5 text-muted-foreground" />
             ) : (
-              <>
-                <PanelLeftClose className="mr-2 size-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Collapse</span>
-              </>
+              <PanelLeftClose className={cn("size-4 text-muted-foreground", !isSidebarVisuallyCollapsed && "mr-2")} />
             )}
             <span className="sr-only">
               {isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
