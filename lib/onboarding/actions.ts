@@ -129,6 +129,16 @@ type LocalSubscriptionRecord = {
   mollieSubscriptionId: string;
 };
 
+type CustomerRepairResult = {
+  customerId: string;
+  mandateCount: number;
+  paymentCount: number;
+  paymentLinkCount: number;
+  status: "repaired" | "skipped";
+  subscriptionCount: number;
+  reason?: "archived" | "missing_customer" | "not_linked";
+};
+
 function buildPath(pathname: string, params?: URLSearchParams) {
   const search = params?.toString();
   return search ? `${pathname}?${search}` : pathname;
@@ -364,11 +374,11 @@ async function upsertMandate(
   customerId: string,
   mode: "live" | "test",
   mandate: {
-    createdAt?: string;
+    createdAt?: string | null;
     details?: unknown;
     id: string;
-    method?: string;
-    status?: string;
+    method?: string | null;
+    status?: string | null;
   },
 ) {
   const existing = await client.execute<{ id: string }>(sql`
@@ -422,6 +432,175 @@ async function upsertMandate(
     `);
 
   return localMandateId;
+}
+
+export async function repairCustomerBillingState(input: {
+  actor?: {
+    email?: string | null;
+    kind: "system" | "user";
+  };
+  customerId: string;
+  mode: "live" | "test";
+}): Promise<CustomerRepairResult> {
+  const actor = input.actor ?? {
+    kind: "system" as const,
+  };
+  const customerDetail = await getCustomerDetail(input.customerId, input.mode);
+  if (!customerDetail) {
+    return {
+      customerId: input.customerId,
+      mandateCount: 0,
+      paymentCount: 0,
+      paymentLinkCount: 0,
+      status: "skipped",
+      reason: "missing_customer",
+      subscriptionCount: 0,
+    };
+  }
+
+  const customer = customerDetail.customer;
+
+  if (!customer.mollieCustomerId) {
+    return {
+      customerId: customer.id,
+      mandateCount: 0,
+      paymentCount: 0,
+      paymentLinkCount: 0,
+      status: "skipped",
+      reason: "not_linked",
+      subscriptionCount: 0,
+    };
+  }
+
+  const mollieCustomerId = customer.mollieCustomerId;
+
+  if (customer.archivedAt) {
+    return {
+      customerId: customer.id,
+      mandateCount: 0,
+      paymentCount: 0,
+      paymentLinkCount: 0,
+      status: "skipped",
+      reason: "archived",
+      subscriptionCount: 0,
+    };
+  }
+
+  const mollie = getMollieClient(input.mode);
+  const mandates = await mollie.customerMandates.page({
+    customerId: mollieCustomerId,
+  });
+
+  await transaction(async (client) => {
+    const mandateIdMap = new Map<string, string>();
+
+    for (const mandate of mandates) {
+      const localMandateId = await upsertMandate(client, customer.id, customer.mode, {
+        createdAt: mandate.createdAt,
+        details: mandate.details,
+        id: mandate.id,
+        method: mandate.method,
+        status: mandate.status,
+      });
+
+      mandateIdMap.set(mandate.id, localMandateId);
+    }
+
+    const localPayments = await getLocalPayments(customer.id, client);
+
+    for (const localPayment of localPayments) {
+      const payment = await mollie.payments.get(localPayment.molliePaymentId);
+      const linkedMandateId = payment.mandateId
+        ? mandateIdMap.get(payment.mandateId) ?? null
+        : null;
+
+      await client.execute(sql`
+          update payments
+          set
+            mandate_id = ${linkedMandateId},
+            mollie_status = ${payment.status},
+            sequence_type = ${payment.sequenceType},
+            method = ${payment.method ?? null},
+            checkout_url = ${payment.getCheckoutUrl()},
+            expires_at = ${payment.expiresAt ?? null}::timestamptz,
+            paid_at = ${payment.paidAt ?? null}::timestamptz,
+            failed_at = ${payment.failedAt ?? null}::timestamptz,
+            updated_at = now(),
+            last_synced_at = now()
+          where id = ${localPayment.id}
+        `);
+    }
+
+    const localSubscriptions = await getLocalSubscriptions(customer.id, client);
+
+    for (const localSubscription of localSubscriptions) {
+      const subscription = (await mollie.customerSubscriptions.get(
+        localSubscription.mollieSubscriptionId,
+        {
+          customerId: mollieCustomerId,
+        },
+      )) as unknown as {
+        status: string;
+      };
+
+      await client.execute(sql`
+          update subscriptions
+          set
+            mollie_status = ${subscription.status},
+            local_status = ${mapSubscriptionLifecycle(subscription.status)},
+            updated_at = now(),
+            last_synced_at = now()
+          where id = ${localSubscription.id}
+        `);
+    }
+
+    await client.execute(sql`
+        update customers
+        set
+          updated_at = now(),
+          last_synced_at = now()
+        where id = ${customer.id}
+      `);
+
+    await writeAuditLog(
+      {
+        action: "customer.repair",
+        details: {
+          localCustomerId: customer.id,
+          mandateCount: mandates.length,
+          paymentLinkCount: customerDetail?.paymentLinks.length ?? 0,
+        },
+        entityId: customer.id,
+        entityType: "customer",
+        mode: customer.mode,
+        outcome: "success",
+        summary: "Repaired the customer graph from Mollie.",
+      },
+      client,
+      actor,
+    );
+  });
+
+  for (const paymentLink of customerDetail.paymentLinks) {
+    if (!paymentLink.molliePaymentLinkId) {
+      continue;
+    }
+
+    await syncPaymentLinkByMollieId(paymentLink.molliePaymentLinkId, {
+      actor,
+      preferredMode: input.mode,
+      strictMode: true,
+    });
+  }
+
+  return {
+    customerId: customer.id,
+    mandateCount: mandates.length,
+    paymentCount: customerDetail.payments.length,
+    paymentLinkCount: customerDetail.paymentLinks.length,
+    status: "repaired",
+    subscriptionCount: customerDetail.subscriptions.length,
+  };
 }
 
 export async function archiveCustomerAction(formData: FormData) {
@@ -1096,125 +1275,31 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
   }
 
   const session = await requireViewerSession();
-
   const selectedMode = await getSelectedMollieMode();
-  const customer = await getLocalCustomer(parsed.data.customerId, selectedMode);
   const returnTo = updatePath(parsed.data.returnTo, {
     focus: parsed.data.customerId,
   });
 
-  if (!customer || !customer.mollieCustomerId) {
-    redirectWithMessage("/customers", {
-      error: "Customer not found in the selected Mollie mode or not linked to Mollie.",
-    });
-  }
-
-  if (customer.archivedAt) {
-    redirectWithMessage(returnTo, {
-      error: "Restore this customer before refreshing billing state.",
-    });
-  }
-
-  const mollieCustomerId = customer.mollieCustomerId;
-  const customerDetail = await getCustomerDetail(customer.id, selectedMode);
-
   try {
-    const mollie = getMollieClient(selectedMode);
-    const mandates = await mollie.customerMandates.page({
-      customerId: mollieCustomerId,
+    const result = await repairCustomerBillingState({
+      actor: {
+        email: session.user.email ?? null,
+        kind: "user",
+      },
+      customerId: parsed.data.customerId,
+      mode: selectedMode,
     });
 
-    await transaction(async (client) => {
-      const mandateIdMap = new Map<string, string>();
+    if (result.status === "skipped") {
+      const message =
+        result.reason === "archived"
+          ? "Restore this customer before repairing billing state."
+          : result.reason === "not_linked"
+            ? "Customer is not linked to Mollie."
+            : "Customer not found in the selected Mollie mode.";
 
-      for (const mandate of mandates) {
-        const localMandateId = await upsertMandate(client, customer.id, customer.mode, {
-          createdAt: mandate.createdAt,
-          details: mandate.details,
-          id: mandate.id,
-          method: mandate.method,
-          status: mandate.status,
-        });
-
-        mandateIdMap.set(mandate.id, localMandateId);
-      }
-
-      const localPayments = await getLocalPayments(customer.id, client);
-
-      for (const localPayment of localPayments) {
-        const payment = await mollie.payments.get(localPayment.molliePaymentId);
-        const linkedMandateId = payment.mandateId
-          ? mandateIdMap.get(payment.mandateId) ?? null
-          : null;
-
-        await client.execute(sql`
-            update payments
-            set
-              mandate_id = ${linkedMandateId},
-              mollie_status = ${payment.status},
-              sequence_type = ${payment.sequenceType},
-              method = ${payment.method ?? null},
-              checkout_url = ${payment.getCheckoutUrl()},
-              expires_at = ${payment.expiresAt ?? null}::timestamptz,
-              paid_at = ${payment.paidAt ?? null}::timestamptz,
-              failed_at = ${payment.failedAt ?? null}::timestamptz,
-              updated_at = now(),
-              last_synced_at = now()
-            where id = ${localPayment.id}
-          `);
-      }
-
-      const localSubscriptions = await getLocalSubscriptions(customer.id, client);
-
-      for (const localSubscription of localSubscriptions) {
-        const subscription = await mollie.customerSubscriptions.get(
-          localSubscription.mollieSubscriptionId,
-          {
-            customerId: mollieCustomerId,
-          },
-        );
-
-        await client.execute(sql`
-            update subscriptions
-            set
-              mollie_status = ${subscription.status},
-              local_status = ${mapSubscriptionLifecycle(subscription.status)},
-              updated_at = now(),
-              last_synced_at = now()
-            where id = ${localSubscription.id}
-          `);
-      }
-
-      await writeAuditLog(
-        {
-          action: "customer.sync",
-          details: {
-            localCustomerId: customer.id,
-            mandateCount: mandates.length,
-            paymentLinkCount: customerDetail?.paymentLinks.length ?? 0,
-          },
-          entityId: customer.id,
-          entityType: "customer",
-          mode: customer.mode,
-          outcome: "success",
-          summary: "Refreshed mandates, payments, and subscriptions from Mollie.",
-        },
-        client,
-      );
-    });
-
-    for (const paymentLink of customerDetail?.paymentLinks ?? []) {
-      if (!paymentLink.molliePaymentLinkId) {
-        continue;
-      }
-
-      await syncPaymentLinkByMollieId(paymentLink.molliePaymentLinkId, {
-        actor: {
-          email: session.user.email ?? null,
-          kind: "user",
-        },
-        preferredMode: selectedMode,
-        strictMode: true,
+      redirectWithMessage(returnTo, {
+        error: message,
       });
     }
 
@@ -1223,7 +1308,7 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
     revalidatePath("/payments");
     revalidatePath("/notifications");
     redirectWithMessage(returnTo, {
-      notice: "Customer state refreshed from Mollie.",
+      notice: "Customer state repaired from Mollie.",
     });
   } catch (error) {
     unstable_rethrow(error);

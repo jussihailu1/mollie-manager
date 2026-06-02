@@ -54,6 +54,7 @@ export type CustomerOverview = {
   latestSubscriptionStopAfterCurrentPeriod: boolean | null;
   latestSubscriptionTermMode: "open_ended" | "fixed_term" | null;
   latestSubscriptionTotalPayments: number | null;
+  lastSyncedAt: string | null;
   mode: "live" | "test";
   mollieCustomerId: string | null;
   notes: string | null;
@@ -89,6 +90,7 @@ export type PaymentLinkRecord = {
   metadata: Record<string, unknown>;
   molliePaymentLinkId: string | null;
   mollieStatus: string | null;
+  lastSyncedAt: string | null;
 };
 
 export type MandateRecord = {
@@ -114,6 +116,7 @@ export type SubscriptionRecord = {
   lastChargeDate: string | null;
   localStatus: string;
   mandateId: string | null;
+  lastSyncedAt: string | null;
   mollieStatus: string | null;
   nextPaymentDate: string | null;
   serviceEndAt: string | null;
@@ -146,6 +149,7 @@ export type SubscriptionOverview = {
   lastChargeDate: string | null;
   localStatus: string;
   mandateId: string | null;
+  lastSyncedAt: string | null;
   mode: "live" | "test";
   mollieSubscriptionId: string | null;
   mollieStatus: string | null;
@@ -169,6 +173,7 @@ export type PaymentOverview = {
   id: string;
   mandateId: string | null;
   method: string | null;
+  lastSyncedAt: string | null;
   mode: "live" | "test";
   molliePaymentId: string | null;
   mollieStatus: string | null;
@@ -262,6 +267,17 @@ const listCustomersByMode = cache(async (
         latest_subscription.start_date::text as "latestSubscriptionStartDate",
         latest_subscription.local_status as "latestSubscriptionStatus",
         latest_subscription.stop_after_current_period as "latestSubscriptionStopAfterCurrentPeriod",
+        nullif(
+          greatest(
+            coalesce(c.last_synced_at, 'epoch'::timestamptz),
+            coalesce(latest_payment.last_synced_at, 'epoch'::timestamptz),
+            coalesce(latest_first_payment.last_synced_at, 'epoch'::timestamptz),
+            coalesce(latest_payment_link.last_synced_at, 'epoch'::timestamptz),
+            coalesce(latest_mandate.last_synced_at, 'epoch'::timestamptz),
+            coalesce(latest_subscription.last_synced_at, 'epoch'::timestamptz)
+          ),
+          'epoch'::timestamptz
+        ) as "lastSyncedAt",
         coalesce(subscription_counts.total, 0)::int as "subscriptionCount"
       from customers c
       left join lateral (
@@ -401,6 +417,17 @@ export const getCustomerDetail = cache(async (
             latest_subscription.start_date::text as "latestSubscriptionStartDate",
             latest_subscription.local_status as "latestSubscriptionStatus",
             latest_subscription.stop_after_current_period as "latestSubscriptionStopAfterCurrentPeriod",
+            nullif(
+              greatest(
+                coalesce(c.last_synced_at, 'epoch'::timestamptz),
+                coalesce(latest_payment.last_synced_at, 'epoch'::timestamptz),
+                coalesce(latest_first_payment.last_synced_at, 'epoch'::timestamptz),
+                coalesce(latest_payment_link.last_synced_at, 'epoch'::timestamptz),
+                coalesce(latest_mandate.last_synced_at, 'epoch'::timestamptz),
+                coalesce(latest_subscription.last_synced_at, 'epoch'::timestamptz)
+              ),
+              'epoch'::timestamptz
+            ) as "lastSyncedAt",
             coalesce(subscription_counts.total, 0)::int as "subscriptionCount"
           from customers c
           left join lateral (
@@ -460,7 +487,7 @@ export const getCustomerDetail = cache(async (
             and (${modeParam}::mollie_mode is null or c.mode = ${modeParam})
           limit 1
         `),
-      getDb().execute<PaymentRecord>(sql`
+        getDb().execute<PaymentRecord>(sql`
           select
             p.id,
             p.payment_type as "paymentType",
@@ -468,6 +495,7 @@ export const getCustomerDetail = cache(async (
             p.mollie_status as "mollieStatus",
             p.sequence_type as "sequenceType",
             p.method,
+            p.last_synced_at as "lastSyncedAt",
             p.amount_value::text as "amountValue",
             p.amount_currency as "amountCurrency",
             p.checkout_url as "checkoutUrl",
@@ -492,6 +520,7 @@ export const getCustomerDetail = cache(async (
             pl.checkout_url as "checkoutUrl",
             pl.expires_at as "expiresAt",
             pl.metadata,
+            pl.last_synced_at as "lastSyncedAt",
             pl.created_at as "createdAt"
           from payment_links pl
           where
@@ -534,6 +563,7 @@ export const getCustomerDetail = cache(async (
             s.billing_day as "billingDay",
             s.mandate_id as "mandateId",
             s.stop_after_current_period as "stopAfterCurrentPeriod",
+            s.last_synced_at as "lastSyncedAt",
             s.metadata ->> 'nextPaymentDate' as "nextPaymentDate",
             s.created_at as "createdAt"
           from subscriptions s
@@ -623,6 +653,7 @@ const listPaymentsByMode = cache(async (mode: DashboardModeFilter) => {
         p.mollie_status as "mollieStatus",
         p.sequence_type as "sequenceType",
         p.method,
+        p.last_synced_at as "lastSyncedAt",
         p.amount_value::text as "amountValue",
         p.amount_currency as "amountCurrency",
         p.checkout_url as "checkoutUrl",

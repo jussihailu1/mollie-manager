@@ -175,8 +175,9 @@ export async function runReconciliationAction(formData: FormData) {
     revalidatePath("/notifications");
     revalidatePath("/payments");
     revalidatePath("/customers");
+    revalidatePath("/settings");
     redirectWithMessage(parsed.data.returnTo, {
-      notice: `Reconciliation complete. Checked ${result.subscriptionsChecked} subscriptions, ${result.paymentLinksChecked} payment links, and ${result.firstPaymentsChecked} first payments.`,
+      notice: `Repair pass complete. Checked ${result.subscriptionsChecked} subscriptions, ${result.paymentLinksChecked} payment links, and ${result.firstPaymentsChecked} first payments.`,
     });
   } catch (error) {
     unstable_rethrow(error);

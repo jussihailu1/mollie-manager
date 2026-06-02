@@ -52,6 +52,7 @@ type PaymentRecord = {
   description: string;
   id: string;
   molliePaymentId: string | null;
+  lastSyncedAt: string | null;
   paidAt: string | null;
   reference: string;
   status: "pending" | "paid" | "failed" | "expired";
@@ -199,7 +200,16 @@ export function PaymentsWorkspace({
     ? payments.find((payment) => payment.id === initialFocusId) ?? null
     : null;
   const [isPaymentDrawerOpen, setIsPaymentDrawerOpen] = useState(Boolean(focusedPayment));
-  const [selectedPayment, setSelectedPayment] = useState<PaymentRecord | null>(focusedPayment);
+  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(
+    focusedPayment?.id ?? null,
+  );
+  const selectedPayment = useMemo(() => {
+    if (!selectedPaymentId) {
+      return null;
+    }
+
+    return payments.find((payment) => payment.id === selectedPaymentId) ?? null;
+  }, [payments, selectedPaymentId]);
   const itemsPerPage = 10;
   const customerScopedPayments = useMemo(
     () =>
@@ -709,15 +719,15 @@ export function PaymentsWorkspace({
                     {formatCurrency(payment.amount, payment.currency)}
                   </TableCell>
                   <TableCell className="px-2 text-right">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => {
-                        setSelectedPayment(payment);
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => {
+                        setSelectedPaymentId(payment.id);
                         setIsPaymentDrawerOpen(true);
-                      }}
-                    >
+                        }}
+                      >
                       <ChevronRight />
                       <span className="sr-only">View payment details</span>
                     </Button>
@@ -762,7 +772,7 @@ export function PaymentsWorkspace({
 
       <PaymentDrawer
         payment={selectedPayment}
-        open={isPaymentDrawerOpen}
+        open={isPaymentDrawerOpen && selectedPayment !== null}
         onOpenChange={setIsPaymentDrawerOpen}
       />
 

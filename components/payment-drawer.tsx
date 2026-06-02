@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
+  LoaderCircle,
   ExternalLink,
   FileText,
   FileXCorner,
-  LoaderCircle,
 } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -29,6 +30,11 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  REPAIR_RETRY_AFTER_MS,
+  REPAIR_STALE_AFTER_MS,
+  isOlderThan,
+} from "@/lib/freshness";
 import { formatCurrency, formatDateTime, formatLabel } from "@/lib/format";
 import type { PaymentDrawerData } from "@/lib/payment-details";
 import { cn } from "@/lib/utils";
@@ -38,6 +44,7 @@ type PaymentRecord = {
   customerId: string | null;
   id: string;
   molliePaymentId: string | null;
+  lastSyncedAt: string | null;
   reference: string;
   status: "pending" | "paid" | "failed" | "expired";
 };
@@ -173,6 +180,46 @@ function Section({
   );
 }
 
+function getRepairStorageKey(payment: PaymentRecord, fingerprint: string) {
+  return `repair:payment:${payment.id}:${fingerprint}`;
+}
+
+function formatInvoiceTriggerKind(
+  value: PaymentDrawerData["invoice"]["triggerKind"],
+) {
+  switch (value) {
+    case "automation":
+      return "Automation";
+    case "manual":
+      return "Manual";
+    case "recovered_existing":
+      return "Recovered existing";
+    default:
+      return "Unknown";
+  }
+}
+
+function formatInvoiceOwnerType(
+  value: PaymentDrawerData["invoice"]["ownerType"],
+) {
+  return value === "recurring_schedule" ? "Recurring schedule" : "Payment row";
+}
+
+function shouldAutoRepairPayment(
+  payment: PaymentRecord,
+  details: PaymentDrawerData | null,
+) {
+  if (!payment.molliePaymentId) {
+    return false;
+  }
+
+  if (isOlderThan(payment.lastSyncedAt, REPAIR_STALE_AFTER_MS)) {
+    return true;
+  }
+
+  return details?.invoiceState === "invoice_failed";
+}
+
 export function PaymentDrawer({
   onOpenChange,
   open,
@@ -182,26 +229,33 @@ export function PaymentDrawer({
   open: boolean;
   payment: PaymentRecord | null;
 }>) {
+  const router = useRouter();
   const [details, setDetails] = useState<PaymentDrawerData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [repairError, setRepairError] = useState<string | null>(null);
+  const [isRepairing, setIsRepairing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const [showMore, setShowMore] = useState(false);
 
   useEffect(() => {
-    if (!open || !payment) {
+    const currentPayment = payment;
+
+    if (!open || !currentPayment) {
       return;
     }
+
+    const paymentId = currentPayment.id;
 
     setShowMore(false);
     setIsInvoiceDialogOpen(false);
 
     let active = true;
     const params = new URLSearchParams();
-    params.set("paymentId", payment.id);
+    params.set("paymentId", paymentId);
 
-    if (payment.molliePaymentId) {
-      params.set("molliePaymentId", payment.molliePaymentId);
+    if (currentPayment.molliePaymentId) {
+      params.set("molliePaymentId", currentPayment.molliePaymentId);
     }
 
     async function load() {
@@ -251,11 +305,86 @@ export function PaymentDrawer({
     };
   }, [open, payment]);
 
+  useEffect(() => {
+    const currentPayment = payment;
+
+    if (!open || !currentPayment || !shouldAutoRepairPayment(currentPayment, details)) {
+      return;
+    }
+
+    const paymentId = currentPayment.id;
+    const fingerprint = `${currentPayment.lastSyncedAt ?? "never"}:${details?.invoiceState ?? "unknown"}`;
+    const storageKey = getRepairStorageKey(currentPayment, fingerprint);
+    const lastAttempt = Number(window.localStorage.getItem(storageKey) ?? "0");
+
+    if (Number.isFinite(lastAttempt) && Date.now() - lastAttempt < REPAIR_RETRY_AFTER_MS) {
+      return;
+    }
+
+    let active = true;
+    window.localStorage.setItem(storageKey, String(Date.now()));
+    setIsRepairing(true);
+    setRepairError(null);
+
+    async function repair() {
+      try {
+        const response = await fetch("/api/reliability/repair", {
+          body: JSON.stringify({
+            id: paymentId,
+            kind: "payment",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        });
+        const body = (await response.json().catch(() => null)) as
+          | { error?: string; status?: string }
+          | null;
+
+        if (!response.ok) {
+          throw new Error(
+            body && typeof body.error === "string"
+              ? body.error
+              : "Failed to repair payment state.",
+          );
+        }
+
+        if (active && body?.status === "repaired") {
+          router.refresh();
+        }
+      } catch (repairError) {
+        if (active) {
+          setRepairError(
+            repairError instanceof Error
+              ? repairError.message
+              : "Failed to repair payment state.",
+          );
+        }
+      } finally {
+        if (active) {
+          setIsRepairing(false);
+        }
+      }
+    }
+
+    repair();
+
+    return () => {
+      active = false;
+    };
+  }, [details, open, payment, router]);
+
+  useEffect(() => {
+    setRepairError(null);
+    setIsRepairing(false);
+  }, [payment?.id]);
+
   const drawerTitle = details?.molliePaymentId ?? payment?.reference ?? "Payment details";
   const mollieDashboardUrl = details?.payment.links.dashboard ?? null;
   const hasInvoice =
     details?.invoiceState === "invoice_created" || details?.invoiceState === "invoice_sent";
-  const invoiceDownloadUrl = details?.invoicePdfUrl ?? null;
+  const invoiceDownloadUrl = details?.invoice.invoicePdfUrl ?? details?.invoicePdfUrl ?? null;
 
   const linkEntries = useMemo(
     () => Object.entries(details?.payment.links ?? {}),
@@ -348,6 +477,26 @@ export function PaymentDrawer({
               label="Description"
               value={details?.payment.description ?? <span className="text-muted-foreground">-</span>}
             />
+            {details ? (
+              <>
+                <ValueRow
+                  label="Invoice State"
+                  value={formatLabel(details.invoice.state)}
+                />
+                <ValueRow
+                  label="Invoice Stored On"
+                  value={formatInvoiceOwnerType(details.invoice.ownerType)}
+                />
+                <ValueRow
+                  label="Invoice Trigger"
+                  value={formatInvoiceTriggerKind(details.invoice.triggerKind)}
+                />
+                <ValueRow
+                  label="Invoice Number"
+                  value={details.invoice.eboekhoudenInvoiceNumber ?? "-"}
+                />
+              </>
+            ) : null}
             <ValueRow
               label="Method"
               value={details?.payment.method ? formatLabel(details.payment.method) : "-"}
@@ -364,7 +513,25 @@ export function PaymentDrawer({
               label="Paid At"
               value={details?.payment.paidAt ? formatDateTime(details.payment.paidAt) : "-"}
             />
+            <ValueRow
+              label="Last Synced"
+              value={details?.lastSyncedAt ? formatDateTime(details.lastSyncedAt) : "-"}
+            />
           </Section>
+
+          {isRepairing ? (
+            <div className="flex items-center gap-2 rounded-md border p-4 text-sm text-muted-foreground">
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+              Repairing local payment state from Mollie...
+            </div>
+          ) : null}
+
+          {repairError ? (
+            <Alert variant="destructive">
+              <AlertTitle>Repair failed</AlertTitle>
+              <AlertDescription>{repairError}</AlertDescription>
+            </Alert>
+          ) : null}
 
           {loading ? (
             <div className="flex items-center gap-2 rounded-md border p-4 text-sm text-muted-foreground">
@@ -388,6 +555,55 @@ export function PaymentDrawer({
                   This payment already has an e-Boekhouden invoice.
                 </DialogDescription>
               </DialogHeader>
+              {details ? (
+                <div className="space-y-3">
+                  <ValueRow
+                    label="Invoice number"
+                    value={details.invoice.eboekhoudenInvoiceNumber ?? "-"}
+                  />
+                  <ValueRow
+                    label="Stored on"
+                    value={formatInvoiceOwnerType(details.invoice.ownerType)}
+                  />
+                  <ValueRow
+                    label="Trigger"
+                    value={formatInvoiceTriggerKind(details.invoice.triggerKind)}
+                  />
+                  <ValueRow
+                    label="Source"
+                    value={details.invoice.source ? formatLabel(details.invoice.source) : "-"}
+                  />
+                  <ValueRow
+                    label="Created at"
+                    value={details.invoice.createdAt ? formatDateTime(details.invoice.createdAt) : "-"}
+                  />
+                  <ValueRow
+                    label="Sent at"
+                    value={details.invoice.sentAt ? formatDateTime(details.invoice.sentAt) : "-"}
+                  />
+                  <ValueRow
+                    label="Delivery recipient"
+                    value={details.invoice.deliveryRecipient ?? "-"}
+                  />
+                  <ValueRow
+                    label="Intended recipient"
+                    value={details.invoice.intendedRecipient ?? "-"}
+                  />
+                  <ValueRow
+                    label="Recipient overridden"
+                    value={details.invoice.recipientOverridden ? "Yes" : "No"}
+                  />
+                  <ValueRow
+                    label="Audit actor"
+                    value={
+                      details.invoice.createdByActorEmail ??
+                      (details.invoice.createdByActorKind
+                        ? formatLabel(details.invoice.createdByActorKind)
+                        : "-")
+                    }
+                  />
+                </div>
+              ) : null}
               <DialogFooter className="justify-center sm:justify-center">
                 {invoiceDownloadUrl ? (
                   <Button asChild className="!bg-foreground !text-background hover:!bg-foreground/90 hover:!text-background">

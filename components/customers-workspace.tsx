@@ -296,7 +296,19 @@ export function CustomersWorkspace({
   const [archiveAction, setArchiveAction] = useState<"archive" | "restore">("archive");
   const [isArchiveDialogOpen, setIsArchiveDialogOpen] = useState(false);
   const [isCustomerDrawerOpen, setIsCustomerDrawerOpen] = useState(Boolean(focusedCustomer));
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerFlowRecord | null>(focusedCustomer);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
+    focusedCustomer?.id ?? null,
+  );
+  const selectedCustomer = useMemo(() => {
+    if (!selectedCustomerId) {
+      return null;
+    }
+
+    return (
+      [...customers, ...archivedCustomers].find((customer) => customer.id === selectedCustomerId) ??
+      null
+    );
+  }, [archivedCustomers, customers, selectedCustomerId]);
 
   function handleSort(field: SortField) {
     if (sortField === field) {
@@ -316,7 +328,7 @@ export function CustomersWorkspace({
   }
 
   function openArchiveDialog(customer: CustomerFlowRecord, action: "archive" | "restore") {
-    setSelectedCustomer(customer);
+    setSelectedCustomerId(customer.id);
     setArchiveAction(action);
     setIsArchiveDialogOpen(true);
   }
@@ -711,7 +723,7 @@ export function CustomersWorkspace({
                             "bg-primary/10 text-primary ring-1 ring-primary/40 hover:bg-primary/15",
                         )}
                         onClick={() => {
-                          setSelectedCustomer(customer);
+                          setSelectedCustomerId(customer.id);
                           setIsCustomerDrawerOpen(true);
                         }}
                       >
@@ -735,26 +747,26 @@ export function CustomersWorkspace({
 
       <CustomerDrawer
         customer={selectedCustomer}
-        open={isCustomerDrawerOpen}
+        open={isCustomerDrawerOpen && selectedCustomer !== null}
         onOpenChange={setIsCustomerDrawerOpen}
         onOpenCreatePayment={(customer) => {
           setIsCustomerDrawerOpen(false);
-          setSelectedCustomer(customer);
+          setSelectedCustomerId(customer.id);
           setTimeout(() => setIsCreatePaymentOpen(true), 150);
         }}
         onOpenConfirmPayment={(customer) => {
           setIsCustomerDrawerOpen(false);
-          setSelectedCustomer(customer);
+          setSelectedCustomerId(customer.id);
           setTimeout(() => setIsConfirmPaymentOpen(true), 150);
         }}
         onOpenLinkEboekhouden={(customer) => {
           setIsCustomerDrawerOpen(false);
-          setSelectedCustomer(customer);
+          setSelectedCustomerId(customer.id);
           setTimeout(() => setIsLinkEboekhoudenOpen(true), 150);
         }}
         onOpenCreateSubscription={(customer) => {
           setIsCustomerDrawerOpen(false);
-          setSelectedCustomer(customer);
+          setSelectedCustomerId(customer.id);
           setTimeout(() => setIsCreateSubscriptionOpen(true), 150);
         }}
         onOpenArchiveCustomer={(customer) => {

@@ -1544,7 +1544,7 @@ export async function reconcileOperationalData(actor?: SyncActor, mode?: MollieM
       entityType: "reconciliation",
       mode,
       outcome: "success",
-      summary: "Completed a full reconciliation pass against Mollie.",
+      summary: "Completed a full repair pass against Mollie.",
     },
     undefined,
     effectiveActor,

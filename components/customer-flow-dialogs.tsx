@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -17,6 +17,7 @@ import {
   PenLine,
   Phone,
   Plus,
+  LoaderCircle,
   Repeat,
   RotateCcw,
   Search,
@@ -58,8 +59,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCurrency, formatDate, formatLabel } from "@/lib/format";
+import {
+  REPAIR_RETRY_AFTER_MS,
+  REPAIR_STALE_AFTER_MS,
+  isOlderThan,
+} from "@/lib/freshness";
+import { formatCurrency, formatDate, formatDateTime, formatLabel } from "@/lib/format";
 import {
   hasMeaningfulDifference,
   relationFieldLabels,
@@ -82,6 +89,7 @@ export type CustomerFlowRecord = {
   email: string;
   hasValidMandate: boolean;
   id: string;
+  mollieCustomerId: string | null;
   latestPaymentAmountCurrency: string | null;
   latestPaymentAmountValue: string | null;
   latestPaymentCreatedAt: string | null;
@@ -113,6 +121,7 @@ export type CustomerFlowRecord = {
   latestSubscriptionStopAfterCurrentPeriod: boolean | null;
   latestSubscriptionTermMode: "open_ended" | "fixed_term" | null;
   latestSubscriptionTotalPayments: number | null;
+  lastSyncedAt: string | null;
   mode: "live" | "test";
   notes: string | null;
   phone: string | null;
@@ -427,6 +436,38 @@ export function getCustomerStage(customer: CustomerFlowRecord): CustomerStage {
   }
 
   return "new";
+}
+
+function getCustomerRepairStorageKey(customer: CustomerFlowRecord, fingerprint: string) {
+  return `repair:customer:${customer.mode}:${customer.id}:${fingerprint}`;
+}
+
+function shouldAutoRepairCustomer(customer: CustomerFlowRecord) {
+  if (customer.archivedAt) {
+    return false;
+  }
+
+  if (!customer.mollieCustomerId) {
+    return false;
+  }
+
+  if (customer.eboekhoudenLinkStatus === "needs_review") {
+    return true;
+  }
+
+  if (customer.eboekhoudenLinkStatus === "sync_error") {
+    return true;
+  }
+
+  if (customer.latestSubscriptionStatus === "out_of_sync") {
+    return true;
+  }
+
+  if (customer.latestSubscriptionStatus === "payment_action_required") {
+    return true;
+  }
+
+  return isOlderThan(customer.lastSyncedAt, REPAIR_STALE_AFTER_MS);
 }
 
 function localFieldsFromCustomer(customer: CustomerFlowRecord): LocalRelationFields {
@@ -1170,9 +1211,9 @@ export function ConfirmPaymentDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Refresh Payment Status</DialogTitle>
+          <DialogTitle>Repair billing state</DialogTitle>
           <DialogDescription>
-            Refresh the Mollie payment, mandate, and subscription state for {customer.businessName}.
+            Repair the Mollie payment, mandate, and subscription state for {customer.businessName}.
           </DialogDescription>
         </DialogHeader>
         <form action={syncCustomerBillingStateAction}>
@@ -1182,7 +1223,7 @@ export function ConfirmPaymentDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit">Refresh from Mollie</Button>
+            <Button type="submit">Repair from Mollie</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -1264,6 +1305,93 @@ export function CustomerDrawer({
   onOpenArchiveCustomer: (customer: CustomerFlowRecord) => void;
   onOpenRestoreCustomer: (customer: CustomerFlowRecord) => void;
 }>) {
+  const router = useRouter();
+  const [repairError, setRepairError] = useState<string | null>(null);
+  const [isRepairing, setIsRepairing] = useState(false);
+
+  useEffect(() => {
+    const currentCustomer = customer;
+
+    if (!open || !currentCustomer) {
+      return;
+    }
+
+    if (!shouldAutoRepairCustomer(currentCustomer)) {
+      return;
+    }
+
+    const fingerprint = [
+      currentCustomer.lastSyncedAt ?? "never",
+      currentCustomer.eboekhoudenLinkStatus,
+      currentCustomer.latestSubscriptionStatus ?? "none",
+    ].join(":");
+    const customerId = currentCustomer.id;
+    const storageKey = getCustomerRepairStorageKey(currentCustomer, fingerprint);
+    const lastAttempt = Number(window.localStorage.getItem(storageKey) ?? "0");
+
+    if (Number.isFinite(lastAttempt) && Date.now() - lastAttempt < REPAIR_RETRY_AFTER_MS) {
+      return;
+    }
+
+    let active = true;
+    window.localStorage.setItem(storageKey, String(Date.now()));
+    setIsRepairing(true);
+    setRepairError(null);
+
+    async function repair() {
+      try {
+        const response = await fetch("/api/reliability/repair", {
+          body: JSON.stringify({
+            id: customerId,
+            kind: "customer",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        });
+        const body = (await response.json().catch(() => null)) as
+          | { error?: string; status?: string }
+          | null;
+
+        if (!response.ok) {
+          throw new Error(
+            body && typeof body.error === "string"
+              ? body.error
+              : "Failed to repair customer state.",
+          );
+        }
+
+        if (active && body?.status === "repaired") {
+          router.refresh();
+        }
+      } catch (repairError) {
+        if (active) {
+          setRepairError(
+            repairError instanceof Error
+              ? repairError.message
+              : "Failed to repair customer state.",
+          );
+        }
+      } finally {
+        if (active) {
+          setIsRepairing(false);
+        }
+      }
+    }
+
+    repair();
+
+    return () => {
+      active = false;
+    };
+  }, [customer, open, router]);
+
+  useEffect(() => {
+    setRepairError(null);
+    setIsRepairing(false);
+  }, [customer?.id]);
+
   if (!customer) {
     return null;
   }
@@ -1305,6 +1433,20 @@ export function CustomerDrawer({
         </SheetHeader>
 
         <div className="space-y-8">
+          {isRepairing ? (
+            <div className="flex items-center gap-2 rounded-md border p-4 text-sm text-muted-foreground">
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+              Repairing local customer graph from Mollie...
+            </div>
+          ) : null}
+
+          {repairError ? (
+            <Alert variant="destructive">
+              <AlertTitle>Repair failed</AlertTitle>
+              <AlertDescription>{repairError}</AlertDescription>
+            </Alert>
+          ) : null}
+
           <div className="space-y-4">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
               Personal details
@@ -1435,6 +1577,12 @@ export function CustomerDrawer({
                     <SubscriptionSummaryRow
                       label="Status"
                       value={getSubscriptionStatusBadge(customer.latestSubscriptionStatus)}
+                    />
+                    <SubscriptionSummaryRow
+                      label="Last synced"
+                      value={
+                        customer.lastSyncedAt ? formatDateTime(customer.lastSyncedAt) : "Not available"
+                      }
                     />
                     <SubscriptionSummaryRow
                       label="Future charges"

@@ -1,3 +1,5 @@
+import { revalidatePath } from "next/cache";
+
 import { writeAuditLog } from "@/lib/audit";
 import {
   createDueFirstPaymentInvoicesBatch,
@@ -15,6 +17,10 @@ import {
   retryUnsentFirstPaymentInvoiceEmailsBatch,
   retryUnsentRecurringInvoiceEmailsBatch,
 } from "@/lib/invoice-delivery";
+import {
+  repairStaleRecordsBatch,
+  repairWebhookEventsBatch,
+} from "@/lib/reliability/repair";
 
 function isAuthorized(request: Request) {
   const secrets = getAcceptedCronSecrets({
@@ -53,8 +59,28 @@ export async function POST(request: Request) {
 
   const mode = parseMode(request);
   const limit = parseLimit(request);
+  const repairLimit = Math.min(limit, 5);
+  const webhookRepairLimit = Math.min(repairLimit, 2);
+  const staleRepairLimit = Math.max(1, repairLimit - webhookRepairLimit);
 
   try {
+    const webhookRepairResult = await repairWebhookEventsBatch({
+      actor: { kind: "system" },
+      limit: webhookRepairLimit,
+      mode,
+    });
+    const staleRepairResult = await repairStaleRecordsBatch({
+      actor: { kind: "system" },
+      limit: staleRepairLimit,
+      mode,
+    });
+    if (webhookRepairResult.repairedCount > 0 || staleRepairResult.repairedCount > 0) {
+      revalidatePath("/");
+      revalidatePath("/customers");
+      revalidatePath("/notifications");
+      revalidatePath("/payments");
+      revalidatePath("/settings");
+    }
     const [safeFailedRecurringRetryQueue, safeFailedFirstPaymentRetryQueue] =
       await Promise.all([
         queueRetryForSafeFailedRecurringInvoicesBatch({
@@ -113,6 +139,8 @@ export async function POST(request: Request) {
           failedFirstPaymentRecoveryResult,
           failedRecurringRecoveryResult,
           firstPaymentCreateResult,
+          webhookRepairResult,
+          staleRepairResult,
           safeFailedFirstPaymentRetryQueue,
           safeFailedRecurringRetryQueue,
           recurringCreateResult,
@@ -129,8 +157,8 @@ export async function POST(request: Request) {
           firstPaymentCreateResult.createdCount === 0
             ? "failure"
             : "success",
-        summary:
-          "Processed recurring + first-payment invoice recovery/create/delivery automation through protected cron route.",
+      summary:
+          "Processed recurring + first-payment invoice recovery/create/delivery automation, webhook repair, and stale repair through protected cron route.",
       },
       undefined,
       { kind: "system" },
@@ -139,6 +167,8 @@ export async function POST(request: Request) {
     return Response.json({
       safeFailedFirstPaymentRetryQueue,
       safeFailedRecurringRetryQueue,
+      webhookRepairResult,
+      staleRepairResult,
       firstPaymentDeliveryRetry,
       failedFirstPaymentRecoveryResult,
       failedRecurringRecoveryResult,

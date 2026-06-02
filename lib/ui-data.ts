@@ -22,6 +22,7 @@ export type UiCustomerRecord = {
   email: string;
   hasValidMandate: boolean;
   id: string;
+  mollieCustomerId: string | null;
   latestPaymentAmountCurrency: string | null;
   latestPaymentAmountValue: string | null;
   latestPaymentCreatedAt: string | null;
@@ -53,6 +54,7 @@ export type UiCustomerRecord = {
   latestSubscriptionStopAfterCurrentPeriod: boolean | null;
   latestSubscriptionTermMode: "open_ended" | "fixed_term" | null;
   latestSubscriptionTotalPayments: number | null;
+  lastSyncedAt: string | null;
   mode: MollieMode;
   notes: string | null;
   phone: string | null;
@@ -69,6 +71,7 @@ export type UiPaymentRecord = {
   id: string;
   molliePaymentId: string | null;
   paidAt: string | null;
+  lastSyncedAt: string | null;
   reference: string;
   status: "pending" | "paid" | "failed" | "expired";
   type: "first" | "recurring";
@@ -151,6 +154,7 @@ export function toUiCustomerRecord(customer: CustomerOverview): UiCustomerRecord
     email: customer.email,
     hasValidMandate: customer.hasValidMandate,
     id: customer.id,
+    mollieCustomerId: customer.mollieCustomerId,
     latestPaymentAmountCurrency: customer.latestPaymentAmountCurrency,
     latestPaymentAmountValue: customer.latestPaymentAmountValue,
     latestPaymentCreatedAt: customer.latestPaymentCreatedAt,
@@ -187,6 +191,7 @@ export function toUiCustomerRecord(customer: CustomerOverview): UiCustomerRecord
     latestSubscriptionStopAfterCurrentPeriod: customer.latestSubscriptionStopAfterCurrentPeriod,
     latestSubscriptionTermMode: customer.latestSubscriptionTermMode,
     latestSubscriptionTotalPayments: customer.latestSubscriptionTotalPayments,
+    lastSyncedAt: customer.lastSyncedAt,
     mode: customer.mode,
     notes: customer.notes,
     phone: customer.phone,
@@ -210,6 +215,7 @@ export function toUiPaymentRecord(payment: PaymentOverview): UiPaymentRecord {
     id: payment.id,
     molliePaymentId: payment.molliePaymentId,
     paidAt: payment.paidAt,
+    lastSyncedAt: payment.lastSyncedAt,
     reference: payment.molliePaymentId ?? payment.id,
     status: mapPaymentStatus(payment.mollieStatus),
     type: payment.paymentType === "first" ? "first" : "recurring",

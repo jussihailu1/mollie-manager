@@ -1,6 +1,7 @@
 import { RefreshCw } from "lucide-react";
 
 import { BillingSettingsForm } from "@/app/(dashboard)/settings/billing-settings-form";
+import { InlineNotice } from "@/components/inline-notice";
 import {
   createDueFirstPaymentInvoicesAction,
   createDueRecurringInvoicesAction,
@@ -31,10 +32,13 @@ import {
   getInvoiceAutomationSnapshot,
 } from "@/lib/invoice-automation-metrics";
 import { getInvoiceDeliveryQueueSummary } from "@/lib/invoice-delivery";
+import { getReliabilitySnapshot } from "@/lib/reliability/data";
+import { env } from "@/lib/env";
 import { FormActionButton } from "@/components/form-action-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatDateTime } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage({
@@ -45,6 +49,7 @@ export default async function SettingsPage({
   const resolvedSearchParams = await searchParams;
   const error = getSingleSearchParam(resolvedSearchParams.error) ?? null;
   const notice = getSingleSearchParam(resolvedSearchParams.notice) ?? null;
+  const invoiceEmailOverrideTo = env.INVOICE_EMAIL_OVERRIDE_TO ?? null;
   const [billingSettings, selectedMode] = await Promise.all([
     ensureTenantBillingSettings(),
     getSelectedMollieMode(),
@@ -79,6 +84,7 @@ export default async function SettingsPage({
   const invoiceAutomationCronHeartbeat = await getInvoiceAutomationCronHeartbeat(
     selectedMode,
   );
+  const reliabilitySnapshot = await getReliabilitySnapshot({ mode: selectedMode });
   const [
     dueInvoiceSummary,
     dueFirstPaymentInvoiceSummary,
@@ -154,14 +160,29 @@ export default async function SettingsPage({
         </p>
       </div>
 
+      {invoiceEmailOverrideTo ? (
+        <InlineNotice
+          tone="warning"
+          title="Invoice email override active"
+          message={
+            <>
+              All invoice emails are currently being redirected to{" "}
+              <span className="font-medium">{invoiceEmailOverrideTo}</span> instead of the
+              actual client email address.
+            </>
+          }
+        />
+      ) : null}
+
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Mollie reconciliation</CardTitle>
+          <CardTitle className="text-lg">Mollie repair pass</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Run full sync pass against Mollie for current mode when local payment,
-            payment-link, or subscription state looks stale.
+            Run the explicit full Mollie repair pass for the current mode when local payment,
+            payment-link, or subscription state looks stale. This is not part of the passive
+            refresh flow.
           </p>
           <p className="text-sm text-muted-foreground">
             Current mode: <span className="font-medium text-foreground">{selectedMode}</span>.
@@ -169,10 +190,10 @@ export default async function SettingsPage({
           <form action={runReconciliationAction}>
             <input type="hidden" name="returnTo" value="/settings" />
             <FormActionButton
-              confirmMessage={`Run full ${selectedMode} reconciliation against Mollie now?`}
-              pendingLabel="Reconciling..."
+              confirmMessage={`Run the full ${selectedMode} Mollie repair pass now?`}
+              pendingLabel="Repairing..."
             >
-              Run reconciliation
+              Run repair pass
             </FormActionButton>
           </form>
         </CardContent>
@@ -350,6 +371,12 @@ export default async function SettingsPage({
               </p>
               <p className="text-sm text-muted-foreground">
                 Failed first-payment rows: {invoiceAutomationSnapshot.failedFirstPaymentCount} (recoverable: {invoiceAutomationSnapshot.failedFirstPaymentRecoverableCount}). Failed recurring rows: {invoiceAutomationSnapshot.failedRecurringCount} (recoverable: {invoiceAutomationSnapshot.failedRecurringRecoverableCount}).
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Webhooks received / processed: {reliabilitySnapshot.lastReceivedWebhookAt ? formatDateTime(reliabilitySnapshot.lastReceivedWebhookAt) : "never"} / {reliabilitySnapshot.lastProcessedWebhookAt ? formatDateTime(reliabilitySnapshot.lastProcessedWebhookAt) : "never"}.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Failed webhook events: {reliabilitySnapshot.failedWebhookCount}. Open alerts: {reliabilitySnapshot.openAlertCount}. Unresolved alerts: {reliabilitySnapshot.unresolvedAlertCount}.
               </p>
               <p className="text-sm text-muted-foreground">
                 Email retries due now (first-payment/recurring): {invoiceDeliveryQueueSummary.dueRetryFirstPaymentCount}/{invoiceDeliveryQueueSummary.dueRetryRecurringCount}. Permanent delivery failures (first-payment/recurring): {invoiceDeliveryQueueSummary.permanentFailureFirstPaymentCount}/{invoiceDeliveryQueueSummary.permanentFailureRecurringCount}.

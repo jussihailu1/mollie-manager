@@ -16,8 +16,21 @@ type LocalPaymentLookup = {
   eboekhoudenInvoiceNumber: string | null;
   id: string;
   invoiceState: PaymentDrawerData["invoiceState"];
+  invoiceCreatedAt: string | null;
+  invoiceDeliveryIntendedRecipient: string | null;
+  invoiceDeliveryRecipient: string | null;
+  invoiceRecipientOverridden: boolean;
+  invoiceSentAt: string | null;
+  invoiceSource: string | null;
+  invoiceTriggerAction: string | null;
+  invoiceTriggerActorEmail: string | null;
+  invoiceTriggerActorKind: "system" | "user" | null;
+  invoiceTriggerSource: string | null;
+  invoiceOwnerId: string | null;
+  invoiceOwnerType: PaymentDrawerData["invoice"]["ownerType"];
+  lastSyncedAt: string | null;
   molliePaymentId: string | null;
-  metadata: Record<string, unknown>;
+  invoiceMetadata: Record<string, unknown>;
 };
 
 function toLinkMap(links: Payment["_links"] | undefined) {
@@ -76,7 +89,7 @@ function extractInvoicePdfUrl(metadata: Record<string, unknown>) {
 }
 
 async function resolveInvoicePdfUrl(localPayment: LocalPaymentLookup) {
-  const metadataUrl = extractInvoicePdfUrl(localPayment.metadata);
+  const metadataUrl = extractInvoicePdfUrl(localPayment.invoiceMetadata);
   if (metadataUrl) {
     return metadataUrl;
   }
@@ -103,15 +116,42 @@ async function toPaymentDrawerData(
   payment: Payment,
 ): Promise<PaymentDrawerData> {
   const invoicePdfUrl = await resolveInvoicePdfUrl(localPayment);
+  const triggerKind: PaymentDrawerData["invoice"]["triggerKind"] =
+    localPayment.invoiceTriggerSource === "reconciled_existing"
+      ? "recovered_existing"
+      : localPayment.invoiceTriggerActorKind === "user"
+        ? "manual"
+        : localPayment.invoiceTriggerActorKind === "system"
+          ? "automation"
+          : "unknown";
 
   return {
     customerId: localPayment.customerId,
     customerName: localPayment.customerName,
     eboekhoudenInvoiceId: localPayment.eboekhoudenInvoiceId,
     eboekhoudenInvoiceNumber: localPayment.eboekhoudenInvoiceNumber,
+    invoice: {
+      createdAt: localPayment.invoiceCreatedAt,
+      createdByAction: localPayment.invoiceTriggerAction,
+      createdByActorEmail: localPayment.invoiceTriggerActorEmail,
+      createdByActorKind: localPayment.invoiceTriggerActorKind,
+      deliveryRecipient: localPayment.invoiceDeliveryRecipient,
+      eboekhoudenInvoiceId: localPayment.eboekhoudenInvoiceId,
+      eboekhoudenInvoiceNumber: localPayment.eboekhoudenInvoiceNumber,
+      intendedRecipient: localPayment.invoiceDeliveryIntendedRecipient,
+      invoicePdfUrl,
+      ownerId: localPayment.invoiceOwnerId,
+      ownerType: localPayment.invoiceOwnerType,
+      recipientOverridden: localPayment.invoiceRecipientOverridden,
+      sentAt: localPayment.invoiceSentAt,
+      source: localPayment.invoiceSource,
+      state: localPayment.invoiceState,
+      triggerKind,
+    },
     invoicePdfUrl,
     invoiceState: localPayment.invoiceState,
     localPaymentId: localPayment.id,
+    lastSyncedAt: localPayment.lastSyncedAt,
     molliePaymentId: payment.id,
     payment: {
       amount: {
@@ -184,17 +224,127 @@ export async function GET(request: NextRequest) {
 
   const selectedMode = await getSelectedMollieMode();
   const result = await getDb().execute<LocalPaymentLookup>(sql`
+      with invoice_context as (
+        select
+          p.id as payment_id,
+          case
+            when p.payment_type = 'recurring' and rbs.id is not null
+              then rbs.invoice_state::text
+            else p.invoice_state::text
+          end as invoice_state,
+          case
+            when p.payment_type = 'recurring' and rbs.id is not null
+              then rbs.invoice_created_at
+            else p.invoice_created_at
+          end as invoice_created_at,
+          case
+            when p.payment_type = 'recurring' and rbs.id is not null
+              then rbs.invoice_sent_at
+            else p.invoice_sent_at
+          end as invoice_sent_at,
+          case
+            when p.payment_type = 'recurring' and rbs.id is not null
+              then rbs.eboekhouden_invoice_id
+            else p.eboekhouden_invoice_id
+          end as eboekhouden_invoice_id,
+          case
+            when p.payment_type = 'recurring' and rbs.id is not null
+              then rbs.eboekhouden_invoice_number
+            else p.eboekhouden_invoice_number
+          end as eboekhouden_invoice_number,
+          case
+            when p.payment_type = 'recurring' and rbs.id is not null
+              then rbs.metadata
+            else p.metadata
+          end as invoice_metadata,
+          case
+            when p.payment_type = 'recurring' and rbs.id is not null
+              then rbs.id
+            else p.id
+          end as invoice_owner_id,
+          case
+            when p.payment_type = 'recurring' and rbs.id is not null
+              then 'recurring_schedule'
+            else 'payment'
+          end as invoice_owner_type,
+          case
+            when p.payment_type = 'recurring' and rbs.id is not null
+              then rbs.metadata ->> 'source'
+            else null
+          end as invoice_source,
+          case
+            when p.payment_type = 'recurring' and rbs.id is not null
+              then nullif(rbs.metadata ->> 'invoiceDeliveryRecipient', '')
+            else nullif(p.metadata ->> 'invoiceDeliveryRecipient', '')
+          end as invoice_delivery_recipient,
+          case
+            when p.payment_type = 'recurring' and rbs.id is not null
+              then nullif(rbs.metadata ->> 'invoiceIntendedRecipient', '')
+            else nullif(p.metadata ->> 'invoiceIntendedRecipient', '')
+          end as invoice_delivery_intended_recipient,
+          case
+            when p.payment_type = 'recurring' and rbs.id is not null
+              then coalesce((rbs.metadata ->> 'invoiceRecipientOverridden')::boolean, false)
+            else coalesce((p.metadata ->> 'invoiceRecipientOverridden')::boolean, false)
+          end as invoice_recipient_overridden
+        from payments p
+        left join recurring_billing_schedules rbs
+          on rbs.payment_id = p.id
+        where p.mode = ${selectedMode}
+          and (
+            (${paymentId || null}::text is not null and p.id = ${paymentId || null})
+            or (${molliePaymentId || null}::text is not null and p.mollie_payment_id = ${molliePaymentId || null})
+          )
+        limit 1
+      )
       select
         p.id,
-        p.invoice_state as "invoiceState",
-        p.eboekhouden_invoice_id as "eboekhoudenInvoiceId",
-        p.eboekhouden_invoice_number as "eboekhoudenInvoiceNumber",
-        p.metadata as "metadata",
+        p.last_synced_at as "lastSyncedAt",
         p.mollie_payment_id as "molliePaymentId",
         c.id as "customerId",
-        coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name, c.email) as "customerName"
+        coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name, c.email) as "customerName",
+        ic.invoice_state as "invoiceState",
+        ic.invoice_created_at as "invoiceCreatedAt",
+        ic.invoice_sent_at as "invoiceSentAt",
+        ic.eboekhouden_invoice_id as "eboekhoudenInvoiceId",
+        ic.eboekhouden_invoice_number as "eboekhoudenInvoiceNumber",
+        ic.invoice_metadata as "invoiceMetadata",
+        ic.invoice_owner_id as "invoiceOwnerId",
+        ic.invoice_owner_type as "invoiceOwnerType",
+        ic.invoice_source as "invoiceSource",
+        ic.invoice_delivery_recipient as "invoiceDeliveryRecipient",
+        ic.invoice_delivery_intended_recipient as "invoiceDeliveryIntendedRecipient",
+        ic.invoice_recipient_overridden as "invoiceRecipientOverridden",
+        creation_audit.action as "invoiceTriggerAction",
+        creation_audit.actor_email as "invoiceTriggerActorEmail",
+        creation_audit.actor_kind as "invoiceTriggerActorKind",
+        coalesce(
+          creation_audit.details ->> 'source',
+          creation_audit.details ->> 'invoiceRecoverySource'
+        ) as "invoiceTriggerSource"
       from payments p
+      inner join invoice_context ic on ic.payment_id = p.id
       left join customers c on c.id = p.customer_id and c.mode = p.mode
+      left join lateral (
+        select
+          al.action,
+          al.actor_email,
+          al.actor_kind,
+          al.details
+        from audit_logs al
+        where
+          al.entity_id = ic.invoice_owner_id
+          and (
+            (ic.invoice_owner_type = 'payment' and al.entity_type = 'payment')
+            or (
+              ic.invoice_owner_type = 'recurring_schedule'
+              and al.entity_type = 'recurring_billing_schedule'
+            )
+          )
+          and al.action in ('first_payment_invoice.create', 'recurring_invoice.create')
+        order by al.created_at desc
+        limit 1
+      ) creation_audit on true
       where p.mode = ${selectedMode}
         and (
           (${paymentId || null}::text is not null and p.id = ${paymentId || null})

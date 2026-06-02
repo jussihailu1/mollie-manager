@@ -1,8 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+  type ReactNode,
+} from "react";
 import {
   Bell,
   CreditCard,
@@ -14,6 +22,7 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  RefreshCw,
   Search,
   Settings,
   Sun,
@@ -36,6 +45,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
+import { getRouteRefreshIntervalMs } from "@/lib/freshness";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -173,6 +183,7 @@ export function OperationsShell({
   userName: string | null;
 }>) {
   const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const theme = useSyncExternalStore(
     subscribeToThemeChanges,
@@ -187,14 +198,37 @@ export function OperationsShell({
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [isSidebarMenuOpen, setIsSidebarMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isRefreshPending, startRefreshTransition] = useTransition();
   const [isModePending, startModeTransition] = useTransition();
   const [isLogoutPending, startLogoutTransition] = useTransition();
+  const lastRefreshAtRef = useRef(0);
   const unreadCount = recentAlerts.filter((alert) => !alert.read).length;
   const returnTo = getReturnTo(pathname, new URLSearchParams(searchParams.toString()));
   const isTestMode = selectedMode === "test";
   const userInitials = getUserInitials(userName, userEmail);
   const isSidebarVisuallyCollapsed = isSidebarCollapsed && !isSidebarHovered && !isSidebarMenuOpen;
   const shouldShowSidebarMenu = !isSidebarVisuallyCollapsed;
+
+  useEffect(() => {
+    lastRefreshAtRef.current = Date.now();
+  }, [pathname]);
+
+  const refreshCurrentView = useCallback(
+    (force = false) => {
+      const now = Date.now();
+      const cooldownMs = 10_000;
+
+      if (!force && now - lastRefreshAtRef.current < cooldownMs) {
+        return;
+      }
+
+      lastRefreshAtRef.current = now;
+      startRefreshTransition(() => {
+        router.refresh();
+      });
+    },
+    [router, startRefreshTransition],
+  );
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -208,6 +242,47 @@ export function OperationsShell({
 
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  useEffect(() => {
+    const intervalMs = getRouteRefreshIntervalMs(pathname);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshCurrentView(false);
+      }
+    };
+    const handleFocus = () => {
+      if (document.visibilityState === "visible") {
+        refreshCurrentView(false);
+      }
+    };
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        refreshCurrentView(true);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("pageshow", handlePageShow);
+
+    const intervalId =
+      intervalMs !== null
+        ? window.setInterval(() => {
+            if (document.visibilityState === "visible") {
+              refreshCurrentView(false);
+            }
+          }, intervalMs)
+        : null;
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("pageshow", handlePageShow);
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+      }
+    };
+  }, [pathname, refreshCurrentView]);
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -386,6 +461,18 @@ export function OperationsShell({
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => refreshCurrentView(true)}
+              title="Refresh current view"
+              disabled={isRefreshPending}
+            >
+              <RefreshCw className={cn("size-4 text-muted-foreground", isRefreshPending && "animate-spin")} />
+              <span className="sr-only">Refresh current view</span>
+            </Button>
+
             <Button
               type="button"
               variant="ghost"

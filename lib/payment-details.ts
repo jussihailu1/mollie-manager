@@ -12,15 +12,44 @@ export type PaymentInvoiceState =
   | "invoice_failed"
   | "skipped";
 
+export type PaymentInvoiceTriggerKind =
+  | "automation"
+  | "manual"
+  | "recovered_existing"
+  | "unknown";
+
+export type PaymentInvoiceOwnerType = "payment" | "recurring_schedule";
+
+export type PaymentInvoiceSummary = {
+  createdAt: string | null;
+  createdByAction: string | null;
+  createdByActorEmail: string | null;
+  createdByActorKind: "system" | "user" | null;
+  deliveryRecipient: string | null;
+  eboekhoudenInvoiceId: string | null;
+  eboekhoudenInvoiceNumber: string | null;
+  intendedRecipient: string | null;
+  invoicePdfUrl: string | null;
+  ownerId: string | null;
+  ownerType: PaymentInvoiceOwnerType;
+  recipientOverridden: boolean;
+  sentAt: string | null;
+  source: string | null;
+  state: PaymentInvoiceState;
+  triggerKind: PaymentInvoiceTriggerKind;
+};
+
 export type PaymentDrawerData = {
   customerId: string | null;
   customerName: string | null;
   eboekhoudenInvoiceId: string | null;
   eboekhoudenInvoiceNumber: string | null;
+  invoice: PaymentInvoiceSummary;
   invoicePdfUrl: string | null;
   invoiceState: PaymentInvoiceState;
   localPaymentId: string;
   molliePaymentId: string;
+  lastSyncedAt: string | null;
   payment: {
     amount: MollieAmountSnapshot;
     amountCaptured: MollieAmountSnapshot | null;
