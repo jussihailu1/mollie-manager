@@ -46,3 +46,5 @@ next-env.d.ts
 scripts/fix-kruispunt-subscription-start-date.mjs
 scripts/delete-specific-payment.mjs
 /.playwright-mcp
+
+.vercel

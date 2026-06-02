@@ -1,16 +1,37 @@
 import { RefreshCw } from "lucide-react";
 
 import { BillingSettingsForm } from "@/app/(dashboard)/settings/billing-settings-form";
-import { createDueRecurringInvoicesAction } from "@/lib/billing-actions";
-import { sendTestAlertAction } from "@/lib/reliability/actions";
+import {
+  createDueFirstPaymentInvoicesAction,
+  createDueRecurringInvoicesAction,
+  queueFailedFirstPaymentInvoiceRetriesAction,
+  queueFailedRecurringInvoiceRetriesAction,
+} from "@/lib/billing-actions";
+import {
+  runReconciliationAction,
+  sendTestAlertAction,
+} from "@/lib/reliability/actions";
 import {
   billingSettingsAreComplete,
   discoverEboekhoudenBillingSettings,
   ensureTenantBillingSettings,
 } from "@/lib/billing-settings";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
-import { getDueRecurringInvoiceQueueSummary } from "@/lib/eboekhouden/recurring-invoices";
+import {
+  getDueFirstPaymentInvoiceQueueSummary,
+  getFailedFirstPaymentInvoiceRetrySummary,
+} from "@/lib/eboekhouden/first-payment-invoices";
+import {
+  getDueRecurringInvoiceQueueSummary,
+  getFailedRecurringInvoiceRetrySummary,
+} from "@/lib/eboekhouden/recurring-invoices";
 import { getSingleSearchParam } from "@/lib/format";
+import {
+  getInvoiceAutomationCronHeartbeat,
+  getInvoiceAutomationSnapshot,
+} from "@/lib/invoice-automation-metrics";
+import { getInvoiceDeliveryQueueSummary } from "@/lib/invoice-delivery";
+import { FormActionButton } from "@/components/form-action-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,13 +76,60 @@ export default async function SettingsPage({
       !ledgers.some((ledger) => ledger.id === billingSettings.revenueLedgerId),
   );
   const billingSettingsComplete = billingSettingsAreComplete(billingSettings);
-  const dueInvoiceSummary = billingSettingsComplete
-    ? await getDueRecurringInvoiceQueueSummary(selectedMode)
-    : {
-        actionableCount: 0,
-        blockedCount: 0,
-        dueCount: 0,
-      };
+  const invoiceAutomationCronHeartbeat = await getInvoiceAutomationCronHeartbeat(
+    selectedMode,
+  );
+  const [
+    dueInvoiceSummary,
+    dueFirstPaymentInvoiceSummary,
+    failedRecurringRetrySummary,
+    failedFirstPaymentRetrySummary,
+    invoiceAutomationSnapshot,
+    invoiceDeliveryQueueSummary,
+  ] =
+    billingSettingsComplete
+    ? await Promise.all([
+        getDueRecurringInvoiceQueueSummary(selectedMode),
+        getDueFirstPaymentInvoiceQueueSummary(selectedMode),
+        getFailedRecurringInvoiceRetrySummary(selectedMode),
+        getFailedFirstPaymentInvoiceRetrySummary(selectedMode),
+        getInvoiceAutomationSnapshot(selectedMode),
+        getInvoiceDeliveryQueueSummary(selectedMode),
+      ])
+    : [
+        {
+          actionableCount: 0,
+          blockedCount: 0,
+          dueCount: 0,
+        },
+        {
+          actionableCount: 0,
+          blockedCount: 0,
+          dueCount: 0,
+        },
+        {
+          retryableCount: 0,
+          totalFailedCount: 0,
+        },
+        {
+          retryableCount: 0,
+          totalFailedCount: 0,
+        },
+        {
+          dueFirstPaymentPendingCount: 0,
+          dueRecurringPendingCount: 0,
+          failedFirstPaymentCount: 0,
+          failedFirstPaymentRecoverableCount: 0,
+          failedRecurringCount: 0,
+          failedRecurringRecoverableCount: 0,
+        },
+        {
+          dueRetryFirstPaymentCount: 0,
+          dueRetryRecurringCount: 0,
+          permanentFailureFirstPaymentCount: 0,
+          permanentFailureRecurringCount: 0,
+        },
+      ];
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-8">
@@ -85,6 +153,30 @@ export default async function SettingsPage({
           SMTP diagnostics, e-Boekhouden billing settings, and basic system actions.
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Mollie reconciliation</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Run full sync pass against Mollie for current mode when local payment,
+            payment-link, or subscription state looks stale.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Current mode: <span className="font-medium text-foreground">{selectedMode}</span>.
+          </p>
+          <form action={runReconciliationAction}>
+            <input type="hidden" name="returnTo" value="/settings" />
+            <FormActionButton
+              confirmMessage={`Run full ${selectedMode} reconciliation against Mollie now?`}
+              pendingLabel="Reconciling..."
+            >
+              Run reconciliation
+            </FormActionButton>
+          </form>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -121,8 +213,8 @@ export default async function SettingsPage({
         <CardContent className="space-y-5">
           <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
             e-Boekhouden will be the invoice and bookkeeping source. This app will
-            not ask e-Boekhouden to email invoices; customer email delivery stays
-            with the app SMTP flow for a later phase.
+            not ask e-Boekhouden to email invoices; customer invoice delivery is
+            handled by the app SMTP flow.
           </div>
 
           {billingDiscovery && "error" in billingDiscovery ? (
@@ -140,6 +232,35 @@ export default async function SettingsPage({
             invoiceTemplates={invoiceTemplates}
             ledgers={ledgers}
           />
+
+          <div className="rounded-xl border border-border p-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Create due first-payment invoices</p>
+                <p className="text-sm text-muted-foreground">
+                  Current mode: {selectedMode}. Ready now: {dueFirstPaymentInvoiceSummary.actionableCount}. Blocked by missing e-Boekhouden customer link: {dueFirstPaymentInvoiceSummary.blockedCount}.
+                </p>
+                {!billingSettingsComplete ? (
+                  <p className="text-sm text-muted-foreground">
+                    Finish the invoice template and revenue ledger settings before creating invoices.
+                  </p>
+                ) : null}
+              </div>
+
+              <form action={createDueFirstPaymentInvoicesAction}>
+                <input type="hidden" name="returnTo" value="/settings" />
+                <Button
+                  type="submit"
+                  disabled={
+                    !billingSettingsComplete ||
+                    dueFirstPaymentInvoiceSummary.actionableCount === 0
+                  }
+                >
+                  Create due first-payment invoices
+                </Button>
+              </form>
+            </div>
+          </div>
 
           <div className="rounded-xl border border-border p-4">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -164,6 +285,78 @@ export default async function SettingsPage({
                   Create due invoices
                 </Button>
               </form>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border p-4">
+            <div className="space-y-3">
+              <p className="text-sm font-medium">Queue controlled retry for failed first-payment invoices</p>
+              <p className="text-sm text-muted-foreground">
+                Current mode: {selectedMode}. Failed rows: {failedFirstPaymentRetrySummary.totalFailedCount}. Retry-safe rows: {failedFirstPaymentRetrySummary.retryableCount} (safe retry codes: FACT_014, FACT_VERWERK_004).
+              </p>
+              <form action={queueFailedFirstPaymentInvoiceRetriesAction} className="space-y-3">
+                <input type="hidden" name="returnTo" value="/settings" />
+                <label htmlFor="paymentIds" className="text-sm text-muted-foreground">
+                  Failed payment IDs (comma or newline separated)
+                </label>
+                <textarea
+                  id="paymentIds"
+                  name="paymentIds"
+                  className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  placeholder="d66c7b77-6d6f-4e95-bc09-70b5638fded1"
+                />
+                <Button
+                  type="submit"
+                  disabled={!billingSettingsComplete || failedFirstPaymentRetrySummary.retryableCount === 0}
+                >
+                  Queue safe failed first-payment retries
+                </Button>
+              </form>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border p-4">
+            <div className="space-y-3">
+              <p className="text-sm font-medium">Queue controlled retry for failed recurring invoices</p>
+              <p className="text-sm text-muted-foreground">
+                Current mode: {selectedMode}. Failed rows: {failedRecurringRetrySummary.totalFailedCount}. Retry-safe rows: {failedRecurringRetrySummary.retryableCount} (safe retry codes: FACT_014, FACT_VERWERK_004).
+              </p>
+              <form action={queueFailedRecurringInvoiceRetriesAction} className="space-y-3">
+                <input type="hidden" name="returnTo" value="/settings" />
+                <label htmlFor="scheduleIds" className="text-sm text-muted-foreground">
+                  Failed schedule IDs (comma or newline separated)
+                </label>
+                <textarea
+                  id="scheduleIds"
+                  name="scheduleIds"
+                  className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  placeholder="a136d64f-23a4-4633-ac74-60234b555618"
+                />
+                <Button
+                  type="submit"
+                  disabled={!billingSettingsComplete || failedRecurringRetrySummary.retryableCount === 0}
+                >
+                  Queue safe failed retries
+                </Button>
+              </form>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border p-4">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Automation health snapshot</p>
+              <p className="text-sm text-muted-foreground">
+                Current mode: {selectedMode}. Pending first-payment creates: {invoiceAutomationSnapshot.dueFirstPaymentPendingCount}. Pending recurring creates due now: {invoiceAutomationSnapshot.dueRecurringPendingCount}.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Failed first-payment rows: {invoiceAutomationSnapshot.failedFirstPaymentCount} (recoverable: {invoiceAutomationSnapshot.failedFirstPaymentRecoverableCount}). Failed recurring rows: {invoiceAutomationSnapshot.failedRecurringCount} (recoverable: {invoiceAutomationSnapshot.failedRecurringRecoverableCount}).
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Email retries due now (first-payment/recurring): {invoiceDeliveryQueueSummary.dueRetryFirstPaymentCount}/{invoiceDeliveryQueueSummary.dueRetryRecurringCount}. Permanent delivery failures (first-payment/recurring): {invoiceDeliveryQueueSummary.permanentFailureFirstPaymentCount}/{invoiceDeliveryQueueSummary.permanentFailureRecurringCount}.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Last automation cron run: {invoiceAutomationCronHeartbeat.lastCronRunAt ?? "never"} ({invoiceAutomationCronHeartbeat.lastCronRunOutcome ?? "n/a"}). Last success: {invoiceAutomationCronHeartbeat.lastCronSuccessAt ?? "never"}. Last failure: {invoiceAutomationCronHeartbeat.lastCronFailureAt ?? "never"}.
+              </p>
             </div>
           </div>
         </CardContent>

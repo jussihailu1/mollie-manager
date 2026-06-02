@@ -9,6 +9,10 @@ import type { MollieMode } from "@/lib/env";
 import { getMollieClient, getMollieWebhookUrl, isMollieConfigured } from "@/lib/mollie/client";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
 import {
+  createEboekhoudenInvoiceForFirstPayment,
+  normalizeFirstPaymentInvoiceStates,
+} from "@/lib/eboekhouden/first-payment-invoices";
+import {
   upsertRecurringBillingScheduleForPayment,
   upsertRecurringBillingScheduleForSubscription,
 } from "@/lib/recurring-billing-schedule";
@@ -1050,6 +1054,39 @@ export async function syncPaymentByMollieId(
           actor,
         );
 
+  if (paymentType === "first") {
+    await normalizeFirstPaymentInvoiceStates({
+      mode,
+      paymentId: localPaymentId,
+    });
+
+    if (payment.status === "paid") {
+      try {
+        await createEboekhoudenInvoiceForFirstPayment(localPaymentId, {
+          actor,
+        });
+      } catch (error) {
+        await writeAuditLog(
+          {
+            action: "first_payment_invoice.auto_create",
+            details: {
+              error: error instanceof Error ? error.message : String(error),
+              paymentId: localPaymentId,
+            },
+            entityId: localPaymentId,
+            entityType: "payment",
+            mode,
+            outcome: "failure",
+            summary:
+              "Automatic first-payment invoice create skipped or failed after paid sync.",
+          },
+          undefined,
+          actor,
+        );
+      }
+    }
+  }
+
   if (
     resolvedCustomerId &&
     paymentType === "first" &&
@@ -1144,6 +1181,7 @@ export async function syncSubscriptionByLocalId(
     options?.strictMode,
   );
   const resolvedSubscriptionId = localSubscription.id;
+  const normalizedFirstPayments: { id: string; isPaid: boolean }[] = [];
 
   await transaction(async (client) => {
     const localCustomer = {
@@ -1317,6 +1355,13 @@ export async function syncSubscriptionByLocalId(
           subscriptionId: localSubscription.id,
         });
       }
+
+      if (paymentType === "first") {
+        normalizedFirstPayments.push({
+          id: localPaymentId,
+          isPaid: payment.status === "paid",
+        });
+      }
     }
 
     await writeAuditLog(
@@ -1353,6 +1398,41 @@ export async function syncSubscriptionByLocalId(
         payment,
         subscriptionId: localSubscription.id,
       });
+    }
+  }
+
+  for (const firstPayment of normalizedFirstPayments) {
+    await normalizeFirstPaymentInvoiceStates({
+      mode: localSubscription.mode,
+      paymentId: firstPayment.id,
+    });
+
+    if (!firstPayment.isPaid) {
+      continue;
+    }
+
+    try {
+      await createEboekhoudenInvoiceForFirstPayment(firstPayment.id, {
+        actor,
+      });
+    } catch (error) {
+      await writeAuditLog(
+        {
+          action: "first_payment_invoice.auto_create",
+          details: {
+            error: error instanceof Error ? error.message : String(error),
+            paymentId: firstPayment.id,
+          },
+          entityId: firstPayment.id,
+          entityType: "payment",
+          mode: localSubscription.mode,
+          outcome: "failure",
+          summary:
+            "Automatic first-payment invoice create skipped or failed after subscription sync.",
+        },
+        undefined,
+        actor,
+      );
     }
   }
 

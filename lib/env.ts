@@ -66,6 +66,8 @@ const rawServerEnvSchema = z.object({
   SMTP_PASSWORD: optionalString,
   SMTP_FROM: optionalString,
   ALERT_EMAIL_TO: optionalEmail,
+  INVOICE_EMAIL_OVERRIDE_TO: optionalEmail,
+  INVOICE_CRON_SHARED_SECRET: optionalString,
   EBOEKHOUDEN_API_TOKEN: optionalString,
   EBOEKHOUDEN_API_SOURCE: z.string().trim().min(1).max(10).default("Kify"),
   SUBSCRIPTION_CANCELLATION_EMAIL: optionalEmail,

@@ -1,19 +1,43 @@
 import { checkDatabaseConnection } from "@/lib/db";
-import { env, getSetupStatus } from "@/lib/env";
+import { env, getSetupStatus, type MollieMode } from "@/lib/env";
+import {
+  getInvoiceAutomationCronHeartbeat,
+  getInvoiceAutomationSnapshot,
+} from "@/lib/invoice-automation-metrics";
+import { getInvoiceDeliveryQueueSummary } from "@/lib/invoice-delivery";
 import { isMollieConfigured } from "@/lib/mollie/client";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { getReliabilitySnapshot } from "@/lib/reliability/data";
 
-export async function GET() {
+function resolveMode(request: Request): MollieMode {
+  const mode = new URL(request.url).searchParams.get("mode");
+  if (mode === "live" || mode === "test") {
+    return mode;
+  }
+
+  return env.MOLLIE_DEFAULT_MODE;
+}
+
+export async function GET(request: Request) {
+  const mode = resolveMode(request);
   const setupStatus = getSetupStatus();
-  const [database, reliability] = await Promise.all([
+  const [
+    database,
+    reliability,
+    invoiceAutomation,
+    invoiceAutomationCron,
+    invoiceDeliveryQueue,
+  ] = await Promise.all([
     checkDatabaseConnection(),
-    getReliabilitySnapshot(),
+    getReliabilitySnapshot({ mode }),
+    getInvoiceAutomationSnapshot(mode),
+    getInvoiceAutomationCronHeartbeat(mode),
+    getInvoiceDeliveryQueueSummary(mode),
   ]);
 
   return Response.json({
     app: "Kify",
-    currentMode: env.MOLLIE_DEFAULT_MODE,
+    currentMode: mode,
     phase: "reliability",
     status:
       database.ok && Object.values(setupStatus).every((section) => section.ready)
@@ -25,6 +49,9 @@ export async function GET() {
       notificationsConfigured: notificationsAreConfigured(),
       mollieTestConfigured: isMollieConfigured("test"),
     },
+    invoiceAutomation,
+    invoiceAutomationCron,
+    invoiceDeliveryQueue,
     reliability,
     setupStatus,
     timestamp: new Date().toISOString(),

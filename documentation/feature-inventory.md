@@ -20,7 +20,8 @@ These items are still in the backend or planned scope, but they are not fully re
 - [ ] Detailed subscription table/history view is no longer a first-class screen.
 - [ ] Detailed customer history tables for payments, mandates, and subscriptions are no longer a first-class screen.
 - [ ] Platform readiness / integration diagnostics are no longer a dedicated screen.
-- [ ] Reconciliation and test-alert controls are no longer exposed in the active UI.
+- [ ] Test-alert control is no longer exposed in the active UI.
+- [x] Manual reconciliation control is exposed again from `/settings`, scoped to the currently selected Mollie mode.
 - [x] Fixed-term subscription support is implemented with `subscription_term_mode`, `total_payments`, derived `last_charge_date`, `service_end_at`, and `cancellation_effect`.
 - [x] The recurring onboarding flow now uses an app-hosted consent screen before Mollie checkout.
 - [x] The recurring onboarding flow now discloses cancellation-by-email terms to the customer.
@@ -34,7 +35,12 @@ These items are still in the backend or planned scope, but they are not fully re
 - [x] e-Boekhouden recurring invoice creation service exists for scheduled billing rows once tenant billing settings are complete.
 - [x] Operators can now manually create due recurring e-Boekhouden invoices from `/settings`, gated on complete billing settings and the selected Mollie mode.
 - [x] Due recurring invoice creation now claims schedule rows before the upstream API call, stores returned e-Boekhouden invoice id/number on success, and writes audit logs plus operator alerts for success/failure.
-- [ ] App-owned invoice email delivery is not implemented yet; SMTP exists for alerts and Resend remains a future replacement option.
+- [x] App-owned invoice email delivery is implemented for first-payment and recurring invoices, with SMTP override support via `INVOICE_EMAIL_OVERRIDE_TO` and recipient audit metadata.
+- [ ] Reconciliation pass needs explicit invoice-automation-safe mode (sync/normalize only, no unintended create/send side effects unless explicitly requested).
+- [ ] Reconciliation run output should include first-payment + recurring invoice-state deltas (`pending_invoice`, `invoice_failed`, `invoice_created`, `invoice_sent`) for operator review.
+- [ ] Reconciliation should expose explicit “invoice sync mode” controls in UI/ops (`sync-only` vs `sync+invoice-actions`) to avoid accidental duplicate-side-effect risk.
+- [ ] Reconciliation observability still needs tighter integration with invoice automation heartbeat/gate output (single operator view for stale sync + stale cron).
+- [ ] Reconciliation docs/runbook mapping should be finalized so operators know when to use reconciliation vs cron invoice automation vs safe requeue.
 
 ## Retained In Current UI
 

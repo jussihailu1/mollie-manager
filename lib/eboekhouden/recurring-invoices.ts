@@ -10,11 +10,17 @@ import {
 } from "@/lib/billing-settings";
 import { getDb, transaction } from "@/lib/db";
 import { createEboekhoudenInvoice, type EboekhoudenInvoice } from "@/lib/eboekhouden/client";
+import {
+  isSafeInvoiceRetryFailure,
+  SAFE_INVOICE_RETRY_FAILURE_CODES,
+} from "@/lib/eboekhouden/invoice-failure-retry";
+import { buildRecurringInvoiceReference } from "@/lib/eboekhouden/invoice-reference";
+import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
+import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { deliverAlertEmail, openAlert } from "@/lib/reliability/alerts";
 
 const DEFAULT_BATCH_SIZE = 25;
-
 type InvoiceActor = {
   email?: string | null;
   kind: "system" | "user";
@@ -39,12 +45,39 @@ type DueRecurringInvoiceQueueSummary = {
   dueCount: number;
 };
 
+type FailedRecurringInvoiceRetrySummary = {
+  retryableCount: number;
+  totalFailedCount: number;
+};
+
 type RecurringInvoiceBatchResult = {
   actionableCount: number;
   createdCount: number;
   failedCount: number;
   remainingActionableCount: number;
   skippedCount: number;
+};
+
+type FailedRecurringRetryBatchResult = {
+  queuedCount: number;
+  skippedCount: number;
+};
+
+type FailedRecurringRecoveryBatchResult = {
+  ambiguousCount: number;
+  recoveredCount: number;
+  scannedCount: number;
+};
+
+type FailedRecurringRecoveryCandidate = {
+  customerEmail: string;
+  customerId: string;
+  eboekhoudenRelationId: number;
+  invoiceSendDueDate: string;
+  mode: "live" | "test";
+  plannedCollectionDate: string;
+  scheduleId: string;
+  subscriptionId: string;
 };
 
 type AlertResult = {
@@ -95,8 +128,15 @@ function serializeErrorMessage(error: unknown) {
   return "Recurring invoice creation failed.";
 }
 
+function isFailureRetrySafe(errorMessage: string | null) {
+  return isSafeInvoiceRetryFailure(errorMessage);
+}
+
 function buildReference(candidate: ScheduledInvoiceCandidate) {
-  return `Subscription ${candidate.subscriptionId} / ${candidate.plannedCollectionDate}`;
+  return buildRecurringInvoiceReference({
+    plannedCollectionDate: candidate.plannedCollectionDate,
+    scheduleId: candidate.scheduleId,
+  });
 }
 
 async function getScheduledInvoiceCandidate(scheduleId: string) {
@@ -152,9 +192,11 @@ async function storeInvoiceCreationSuccess(input: {
   actor: InvoiceActor;
   candidate: ScheduledInvoiceCandidate;
   invoice: EboekhoudenInvoice;
+  source?: "created" | "reconciled_existing";
 }) {
   const invoiceId = input.invoice.id ? String(input.invoice.id) : null;
   const invoiceNumber = input.invoice.invoiceNumber ?? input.invoice.number ?? null;
+  const source = input.source ?? "created";
   const alertResult = await transaction<AlertResult>(async (tx) => {
     await tx.execute(sql`
       update recurring_billing_schedules
@@ -182,22 +224,40 @@ async function storeInvoiceCreationSuccess(input: {
           eboekhoudenInvoiceNumber: invoiceNumber,
           plannedCollectionDate: input.candidate.plannedCollectionDate,
           scheduleId: input.candidate.scheduleId,
+          source,
           subscriptionId: input.candidate.subscriptionId,
         },
         entityId: input.candidate.scheduleId,
         entityType: "recurring_billing_schedule",
         mode: input.candidate.mode,
         outcome: "success",
-        summary: "Created an e-Boekhouden recurring invoice for a due schedule row.",
+        summary:
+          source === "created"
+            ? "Created an e-Boekhouden recurring invoice for a due schedule row."
+            : "Recovered an existing e-Boekhouden recurring invoice for a due schedule row.",
       },
       tx,
       input.actor,
     );
 
+    await tx.execute(sql`
+      update alerts
+      set
+        status = 'resolved',
+        resolved_at = now(),
+        updated_at = now()
+      where status = 'open'
+        and payload ->> 'kind' = 'recurring_invoice_creation_failed'
+        and payload ->> 'scheduleId' = ${input.candidate.scheduleId}
+    `);
+
     return openAlert(
       {
         customerId: input.candidate.customerId,
-        message: `Created e-Boekhouden invoice ${invoiceNumber ?? invoiceId ?? "without returned number"} for the recurring billing row due on ${input.candidate.invoiceSendDueDate}. Automatic collection remains planned for ${input.candidate.plannedCollectionDate}.`,
+        message:
+          source === "created"
+            ? `Created e-Boekhouden invoice ${invoiceNumber ?? invoiceId ?? "without returned number"} for the recurring billing row due on ${input.candidate.invoiceSendDueDate}. Automatic collection remains planned for ${input.candidate.plannedCollectionDate}.`
+            : `Recovered existing e-Boekhouden invoice ${invoiceNumber ?? invoiceId ?? "without returned number"} for recurring billing row due on ${input.candidate.invoiceSendDueDate}. Automatic collection remains planned for ${input.candidate.plannedCollectionDate}.`,
         payload: {
           eboekhoudenInvoiceId: invoiceId,
           eboekhoudenInvoiceNumber: invoiceNumber,
@@ -205,10 +265,14 @@ async function storeInvoiceCreationSuccess(input: {
           mode: input.candidate.mode,
           plannedCollectionDate: input.candidate.plannedCollectionDate,
           scheduleId: input.candidate.scheduleId,
+          source,
         },
         severity: "info",
         subscriptionId: input.candidate.subscriptionId,
-        title: `Recurring invoice created for ${input.candidate.plannedCollectionDate}`,
+        title:
+          source === "created"
+            ? `Recurring invoice created for ${input.candidate.plannedCollectionDate}`
+            : `Recurring invoice recovered for ${input.candidate.plannedCollectionDate}`,
       },
       tx,
     );
@@ -219,6 +283,18 @@ async function storeInvoiceCreationSuccess(input: {
     invoiceId,
     invoiceNumber,
   };
+}
+
+function isReferenceAlreadyExistsError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error.message.includes("FACT_VERWERK_004") ||
+    error.message.includes("already exists") ||
+    error.message.includes("FACT_014")
+  );
 }
 
 async function storeInvoiceCreationFailure(input: {
@@ -362,6 +438,325 @@ export async function getDueRecurringInvoiceQueueSummary(
   };
 }
 
+export async function getFailedRecurringInvoiceRetrySummary(
+  mode: "live" | "test",
+): Promise<FailedRecurringInvoiceRetrySummary> {
+  const result = await getDb().execute<{
+    errorMessage: string | null;
+    scheduleId: string;
+  }>(sql`
+    select
+      rbs.id as "scheduleId",
+      (rbs.metadata ->> 'invoiceCreationError') as "errorMessage"
+    from recurring_billing_schedules rbs
+    where rbs.mode = ${mode}
+      and rbs.invoice_state = 'invoice_failed'
+      and rbs.eboekhouden_invoice_id is null
+      and rbs.eboekhouden_invoice_number is null
+  `);
+
+  let retryableCount = 0;
+  for (const row of result.rows) {
+    if (isFailureRetrySafe(row.errorMessage)) {
+      retryableCount += 1;
+    }
+  }
+
+  return {
+    retryableCount,
+    totalFailedCount: result.rows.length,
+  };
+}
+
+export async function queueRetryForFailedRecurringInvoice(input: {
+  actor: InvoiceActor;
+  mode: "live" | "test";
+  scheduleId: string;
+}): Promise<"queued" | "skipped"> {
+  const candidate = await getDb().execute<{
+    errorMessage: string | null;
+    scheduleId: string;
+  }>(sql`
+    select
+      rbs.id as "scheduleId",
+      (rbs.metadata ->> 'invoiceCreationError') as "errorMessage"
+    from recurring_billing_schedules rbs
+    where rbs.id = ${input.scheduleId}
+      and rbs.mode = ${input.mode}
+      and rbs.invoice_state = 'invoice_failed'
+      and rbs.eboekhouden_invoice_id is null
+      and rbs.eboekhouden_invoice_number is null
+    limit 1
+  `);
+  const row = candidate.rows[0];
+
+  if (!row || !isFailureRetrySafe(row.errorMessage)) {
+    return "skipped";
+  }
+
+  const result = await getDb().execute<{ id: string }>(sql`
+    update recurring_billing_schedules
+    set
+      invoice_state = 'pending_invoice',
+      invoice_failed_at = null,
+      metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
+        invoiceRetryQueuedAt: new Date().toISOString(),
+        invoiceRetryQueuedBy: input.actor.email ?? null,
+      })}::jsonb,
+      updated_at = now()
+    where id = ${input.scheduleId}
+      and mode = ${input.mode}
+      and invoice_state = 'invoice_failed'
+      and eboekhouden_invoice_id is null
+      and eboekhouden_invoice_number is null
+    returning id
+  `);
+
+  if (!result.rows[0]?.id) {
+    return "skipped";
+  }
+
+  await writeAuditLog(
+    {
+      action: "recurring_invoice.retry_queue",
+      details: {
+        allowedFailureCodes: SAFE_INVOICE_RETRY_FAILURE_CODES,
+        scheduleId: input.scheduleId,
+      },
+      entityId: input.scheduleId,
+      entityType: "recurring_billing_schedule",
+      mode: input.mode,
+      outcome: "success",
+      summary:
+        "Queued a controlled retry for a failed recurring invoice after safe failure-code check.",
+    },
+    undefined,
+    input.actor,
+  );
+
+  return "queued";
+}
+
+export async function queueRetryForFailedRecurringInvoicesBatch(input: {
+  actor: InvoiceActor;
+  mode: "live" | "test";
+  scheduleIds: string[];
+}): Promise<FailedRecurringRetryBatchResult> {
+  let queuedCount = 0;
+  let skippedCount = 0;
+
+  for (const scheduleId of input.scheduleIds) {
+    const status = await queueRetryForFailedRecurringInvoice({
+      actor: input.actor,
+      mode: input.mode,
+      scheduleId,
+    });
+
+    if (status === "queued") {
+      queuedCount += 1;
+      continue;
+    }
+
+    skippedCount += 1;
+  }
+
+  return {
+    queuedCount,
+    skippedCount,
+  };
+}
+
+export async function queueRetryForSafeFailedRecurringInvoicesBatch(input: {
+  actor: InvoiceActor;
+  limit?: number;
+  mode: "live" | "test";
+}) {
+  const failedRows = await getDb().execute<{
+    errorMessage: string | null;
+    scheduleId: string;
+  }>(sql`
+    select
+      rbs.id as "scheduleId",
+      (rbs.metadata ->> 'invoiceCreationError') as "errorMessage"
+    from recurring_billing_schedules rbs
+    where rbs.mode = ${input.mode}
+      and rbs.invoice_state = 'invoice_failed'
+      and rbs.eboekhouden_invoice_id is null
+      and rbs.eboekhouden_invoice_number is null
+    order by rbs.updated_at asc, rbs.created_at asc
+    limit ${Math.max(1, input.limit ?? DEFAULT_BATCH_SIZE)}
+  `);
+  const safeScheduleIds = failedRows.rows
+    .filter((row) => isFailureRetrySafe(row.errorMessage))
+    .map((row) => row.scheduleId);
+
+  if (safeScheduleIds.length === 0) {
+    return {
+      queuedCount: 0,
+      skippedCount: 0,
+    };
+  }
+
+  return queueRetryForFailedRecurringInvoicesBatch({
+    actor: input.actor,
+    mode: input.mode,
+    scheduleIds: safeScheduleIds,
+  });
+}
+
+async function listFailedRecurringRecoveryCandidates(
+  mode: "live" | "test",
+  limit: number,
+) {
+  const result = await getDb().execute<FailedRecurringRecoveryCandidate>(sql`
+    select
+      rbs.id as "scheduleId",
+      rbs.mode,
+      rbs.invoice_send_due_date::text as "invoiceSendDueDate",
+      rbs.planned_collection_date::text as "plannedCollectionDate",
+      rbs.subscription_id as "subscriptionId",
+      s.customer_id as "customerId",
+      c.email as "customerEmail",
+      c.eboekhouden_relation_id as "eboekhoudenRelationId"
+    from recurring_billing_schedules rbs
+    inner join subscriptions s on s.id = rbs.subscription_id
+    inner join customers c on c.id = s.customer_id and c.mode = rbs.mode
+    where rbs.mode = ${mode}
+      and rbs.invoice_state = 'invoice_failed'
+      and rbs.eboekhouden_invoice_id is null
+      and rbs.eboekhouden_invoice_number is null
+      and c.eboekhouden_relation_id is not null
+    order by rbs.updated_at asc, rbs.created_at asc
+    limit ${Math.max(1, limit)}
+  `);
+
+  return result.rows;
+}
+
+async function storeRecoveredFailedInvoiceSuccess(input: {
+  actor: InvoiceActor;
+  candidate: FailedRecurringRecoveryCandidate;
+  invoice: EboekhoudenInvoice;
+}) {
+  const invoiceId = input.invoice.id ? String(input.invoice.id) : null;
+  const invoiceNumber = input.invoice.invoiceNumber ?? input.invoice.number ?? null;
+  const result = await getDb().execute<{ id: string }>(sql`
+    update recurring_billing_schedules
+    set
+      invoice_state = 'invoice_created',
+      eboekhouden_invoice_id = ${invoiceId},
+      eboekhouden_invoice_number = ${invoiceNumber},
+      invoice_created_at = coalesce(invoice_created_at, now()),
+      invoice_failed_at = null,
+      metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
+        eboekhoudenInvoice: input.invoice,
+        invoiceRecoveredAt: new Date().toISOString(),
+        invoiceRecoverySource: "reconciled_existing",
+      })}::jsonb,
+      updated_at = now()
+    where id = ${input.candidate.scheduleId}
+      and invoice_state = 'invoice_failed'
+      and eboekhouden_invoice_id is null
+      and eboekhouden_invoice_number is null
+    returning id
+  `);
+
+  if (!result.rows[0]?.id) {
+    return null;
+  }
+
+  await writeAuditLog(
+    {
+      action: "recurring_invoice.recover_failed",
+      details: {
+        eboekhoudenInvoiceId: invoiceId,
+        eboekhoudenInvoiceNumber: invoiceNumber,
+        plannedCollectionDate: input.candidate.plannedCollectionDate,
+        scheduleId: input.candidate.scheduleId,
+        source: "reconciled_existing",
+      },
+      entityId: input.candidate.scheduleId,
+      entityType: "recurring_billing_schedule",
+      mode: input.candidate.mode,
+      outcome: "success",
+      summary:
+        "Recovered failed recurring invoice row by reconciling existing e-Boekhouden invoice.",
+    },
+    undefined,
+    input.actor,
+  );
+
+  return {
+    invoiceId,
+    invoiceNumber,
+  };
+}
+
+export async function recoverFailedRecurringInvoicesBatch(input: {
+  actor: InvoiceActor;
+  limit?: number;
+  mode: "live" | "test";
+}): Promise<FailedRecurringRecoveryBatchResult> {
+  const candidates = await listFailedRecurringRecoveryCandidates(
+    input.mode,
+    input.limit ?? DEFAULT_BATCH_SIZE,
+  );
+  let recoveredCount = 0;
+  let ambiguousCount = 0;
+
+  for (const candidate of candidates) {
+    const reference = buildRecurringInvoiceReference({
+      plannedCollectionDate: candidate.plannedCollectionDate,
+      scheduleId: candidate.scheduleId,
+    });
+    const existing = await findExistingEboekhoudenInvoiceByReference({
+      date: candidate.invoiceSendDueDate,
+      reference,
+      relationId: candidate.eboekhoudenRelationId,
+    });
+
+    if (existing.status === "ambiguous") {
+      ambiguousCount += 1;
+      continue;
+    }
+
+    if (existing.status !== "found") {
+      continue;
+    }
+
+    const recovered = await storeRecoveredFailedInvoiceSuccess({
+      actor: input.actor,
+      candidate,
+      invoice: existing.invoice,
+    });
+
+    if (!recovered) {
+      continue;
+    }
+
+    recoveredCount += 1;
+    await deliverCustomerInvoiceEmail({
+      actor: input.actor,
+      customerEmail: candidate.customerEmail,
+      customerId: candidate.customerId,
+      eboekhoudenInvoiceId: recovered.invoiceId,
+      eboekhoudenInvoiceNumber: recovered.invoiceNumber,
+      eboekhoudenInvoicePdfUrl: existing.invoice.urlPdfFile ?? null,
+      entityId: candidate.scheduleId,
+      invoiceType: "recurring",
+      mode: candidate.mode,
+      plannedCollectionDate: candidate.plannedCollectionDate,
+      subscriptionId: candidate.subscriptionId,
+    });
+  }
+
+  return {
+    ambiguousCount,
+    recoveredCount,
+    scannedCount: candidates.length,
+  };
+}
+
 export async function createEboekhoudenInvoiceForSchedule(
   scheduleId: string,
   options?: {
@@ -410,7 +805,50 @@ export async function createEboekhoudenInvoiceForSchedule(
     };
   }
 
+  const reference = buildReference(candidate);
+
   try {
+    const existing = await findExistingEboekhoudenInvoiceByReference({
+      date: candidate.invoiceSendDueDate,
+      reference,
+      relationId: candidate.eboekhoudenRelationId,
+    });
+
+    if (existing.status === "ambiguous") {
+      throw new Error(
+        `Ambiguous e-Boekhouden invoice match for reference ${reference}; manual review required.`,
+      );
+    }
+
+    if (existing.status === "found") {
+      const storedRecoveredInvoice = await storeInvoiceCreationSuccess({
+        actor,
+        candidate,
+        invoice: existing.invoice,
+        source: "reconciled_existing",
+      });
+      await deliverCustomerInvoiceEmail({
+        actor,
+        customerEmail: candidate.customerEmail,
+        customerId: candidate.customerId,
+        eboekhoudenInvoiceId: storedRecoveredInvoice.invoiceId,
+        eboekhoudenInvoiceNumber: storedRecoveredInvoice.invoiceNumber,
+        eboekhoudenInvoicePdfUrl: existing.invoice.urlPdfFile ?? null,
+        entityId: candidate.scheduleId,
+        invoiceType: "recurring",
+        mode: candidate.mode,
+        plannedCollectionDate: candidate.plannedCollectionDate,
+        subscriptionId: candidate.subscriptionId,
+      });
+
+      return {
+        invoiceId: storedRecoveredInvoice.invoiceId,
+        invoiceNumber: storedRecoveredInvoice.invoiceNumber,
+        scheduleId,
+        status: "created",
+      };
+    }
+
     const invoice = await createEboekhoudenInvoice({
       date: candidate.invoiceSendDueDate,
       inExVat: "EX",
@@ -424,7 +862,7 @@ export async function createEboekhoudenInvoiceForSchedule(
         },
       ],
       print: false,
-      reference: buildReference(candidate),
+      reference,
       relationId: candidate.eboekhoudenRelationId,
       templateId: settings!.invoiceTemplateId!,
       termOfPayment: daysBetween(
@@ -437,6 +875,19 @@ export async function createEboekhoudenInvoiceForSchedule(
       candidate,
       invoice,
     });
+    await deliverCustomerInvoiceEmail({
+      actor,
+      customerEmail: candidate.customerEmail,
+      customerId: candidate.customerId,
+      eboekhoudenInvoiceId: storedInvoice.invoiceId,
+      eboekhoudenInvoiceNumber: storedInvoice.invoiceNumber,
+      eboekhoudenInvoicePdfUrl: invoice.urlPdfFile ?? null,
+      entityId: candidate.scheduleId,
+      invoiceType: "recurring",
+      mode: candidate.mode,
+      plannedCollectionDate: candidate.plannedCollectionDate,
+      subscriptionId: candidate.subscriptionId,
+    });
 
     return {
       invoiceId: storedInvoice.invoiceId,
@@ -445,6 +896,43 @@ export async function createEboekhoudenInvoiceForSchedule(
       status: "created",
     };
   } catch (error) {
+    if (isReferenceAlreadyExistsError(error)) {
+      const existing = await findExistingEboekhoudenInvoiceByReference({
+        date: candidate.invoiceSendDueDate,
+        reference,
+        relationId: candidate.eboekhoudenRelationId,
+      });
+
+      if (existing.status === "found") {
+        const storedRecoveredInvoice = await storeInvoiceCreationSuccess({
+          actor,
+          candidate,
+          invoice: existing.invoice,
+          source: "reconciled_existing",
+        });
+        await deliverCustomerInvoiceEmail({
+          actor,
+          customerEmail: candidate.customerEmail,
+          customerId: candidate.customerId,
+          eboekhoudenInvoiceId: storedRecoveredInvoice.invoiceId,
+          eboekhoudenInvoiceNumber: storedRecoveredInvoice.invoiceNumber,
+          eboekhoudenInvoicePdfUrl: existing.invoice.urlPdfFile ?? null,
+          entityId: candidate.scheduleId,
+          invoiceType: "recurring",
+          mode: candidate.mode,
+          plannedCollectionDate: candidate.plannedCollectionDate,
+          subscriptionId: candidate.subscriptionId,
+        });
+
+        return {
+          invoiceId: storedRecoveredInvoice.invoiceId,
+          invoiceNumber: storedRecoveredInvoice.invoiceNumber,
+          scheduleId,
+          status: "created",
+        };
+      }
+    }
+
     const errorMessage = await storeInvoiceCreationFailure({
       actor,
       candidate,

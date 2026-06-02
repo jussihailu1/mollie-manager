@@ -72,6 +72,11 @@ async function getFallbackIpv6Transport() {
 }
 
 export async function sendPlainEmail(input: {
+  attachments?: Array<{
+    content: Buffer;
+    contentType?: string;
+    filename: string;
+  }>;
   html?: string;
   subject: string;
   text: string;
@@ -84,6 +89,60 @@ export async function sendPlainEmail(input: {
     to: config.ALERT_EMAIL_TO,
   };
   const message = {
+    attachments: input.attachments,
+    html: input.html,
+    subject: input.subject,
+    text: input.text,
+  };
+
+  try {
+    await sendNotificationEmailWithTransport({
+      envelope,
+      message,
+      transport: transporter,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "";
+    const isTimeoutError = /timeout|etimedout/i.test(errorMessage);
+
+    if (!isTimeoutError) {
+      throw error;
+    }
+
+    const ipv6Transport = await getFallbackIpv6Transport();
+
+    if (!ipv6Transport) {
+      throw error;
+    }
+
+    await sendNotificationEmailWithTransport({
+      envelope,
+      message,
+      transport: ipv6Transport,
+    });
+  }
+}
+
+export async function sendEmailTo(input: {
+  attachments?: Array<{
+    content: Buffer;
+    contentType?: string;
+    filename: string;
+  }>;
+  html?: string;
+  subject: string;
+  text: string;
+  to: string;
+}) {
+  const config = getNotificationConfig();
+  const transporter = getTransport();
+
+  const envelope = {
+    from: config.SMTP_FROM,
+    to: input.to,
+  };
+  const message = {
+    attachments: input.attachments,
     html: input.html,
     subject: input.subject,
     text: input.text,

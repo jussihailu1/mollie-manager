@@ -59,8 +59,11 @@ export type EboekhoudenCreateInvoiceInput = {
 };
 
 export type EboekhoudenInvoice = {
+  date?: string | null;
   id?: number;
   invoiceNumber?: string | null;
+  reference?: string | null;
+  relationId?: number | null;
   number?: string | null;
   urlPdfFile?: string | null;
 };
@@ -348,6 +351,35 @@ export async function createEboekhoudenInvoice(
     body: JSON.stringify(payload),
     method: "POST",
   });
+}
+
+export async function getEboekhoudenInvoice(id: number) {
+  return requestEboekhouden<EboekhoudenInvoice>(`/v1/invoice/${id}`);
+}
+
+export async function listEboekhoudenInvoices(options?: {
+  date?: string;
+  invoiceNumber?: string;
+  limit?: number;
+  offset?: number;
+  relationId?: number;
+}) {
+  const params = new URLSearchParams();
+  params.set("limit", String(Math.min(Math.max(options?.limit ?? 100, 1), 2000)));
+  params.set("offset", String(Math.max(options?.offset ?? 0, 0)));
+  if (options?.invoiceNumber) {
+    params.set("invoiceNumber", options.invoiceNumber);
+  }
+  if (typeof options?.relationId === "number") {
+    params.set("relationId", String(options.relationId));
+  }
+  if (options?.date) {
+    params.set("date", options.date);
+  }
+
+  return requestEboekhouden<EboekhoudenListResponse<EboekhoudenInvoice>>(
+    `/v1/invoice?${params.toString()}`,
+  );
 }
 
 export async function createEboekhoudenRelation(

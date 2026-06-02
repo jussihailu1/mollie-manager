@@ -10,6 +10,11 @@ describe("alert email delivery integration", () => {
     let composeCalled = false;
     let markCalledWith: string | null = null;
     const sendMailPayloads: Array<{
+      attachments?: Array<{
+        content: Buffer;
+        contentType?: string;
+        filename: string;
+      }>;
       from: string;
       html?: string;
       subject: string;
@@ -54,6 +59,11 @@ describe("alert email delivery integration", () => {
             message,
             transport: {
               sendMail: async (payload: {
+                attachments?: Array<{
+                  content: Buffer;
+                  contentType?: string;
+                  filename: string;
+                }>;
                 from: string;
                 html?: string;
                 subject: string;

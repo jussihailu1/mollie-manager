@@ -111,6 +111,16 @@ export const recurringBillingInvoiceStateEnum = pgEnum(
   ],
 );
 
+export const paymentInvoiceStateEnum = pgEnum("payment_invoice_state", [
+  "not_applicable",
+  "pending_invoice",
+  "invoice_creating",
+  "invoice_created",
+  "invoice_sent",
+  "invoice_failed",
+  "skipped",
+]);
+
 export const invoiceEmailDeliveryModeEnum = pgEnum(
   "invoice_email_delivery_mode",
   ["app_smtp", "eboekhouden", "none"],
@@ -425,6 +435,23 @@ export const payments = pgTable(
     )
       .notNull()
       .default("not_applicable"),
+    invoiceState: paymentInvoiceStateEnum("invoice_state")
+      .notNull()
+      .default("not_applicable"),
+    eboekhoudenInvoiceId: text("eboekhouden_invoice_id"),
+    eboekhoudenInvoiceNumber: text("eboekhouden_invoice_number"),
+    invoiceCreatedAt: timestamp("invoice_created_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    invoiceSentAt: timestamp("invoice_sent_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    invoiceFailedAt: timestamp("invoice_failed_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
     collectionReviewRequiredAt: timestamp("collection_review_required_at", {
       mode: "string",
       withTimezone: true,
@@ -478,6 +505,11 @@ export const payments = pgTable(
     index("payments_recurring_collection_state_idx").on(
       table.paymentType,
       table.recurringCollectionState,
+    ),
+    index("payments_invoice_state_idx").on(
+      table.mode,
+      table.paymentType,
+      table.invoiceState,
     ),
   ],
 );
