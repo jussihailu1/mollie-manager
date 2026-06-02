@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowUpRight,
   ExternalLink,
+  FileText,
+  FileXCorner,
   LoaderCircle,
 } from "lucide-react";
 
@@ -12,6 +14,14 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Sheet,
   SheetContent,
@@ -175,6 +185,7 @@ export function PaymentDrawer({
   const [details, setDetails] = useState<PaymentDrawerData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const [showMore, setShowMore] = useState(false);
 
   useEffect(() => {
@@ -183,6 +194,7 @@ export function PaymentDrawer({
     }
 
     setShowMore(false);
+    setIsInvoiceDialogOpen(false);
 
     let active = true;
     const params = new URLSearchParams();
@@ -241,6 +253,9 @@ export function PaymentDrawer({
 
   const drawerTitle = details?.molliePaymentId ?? payment?.reference ?? "Payment details";
   const mollieDashboardUrl = details?.payment.links.dashboard ?? null;
+  const hasInvoice =
+    details?.invoiceState === "invoice_created" || details?.invoiceState === "invoice_sent";
+  const invoiceDownloadUrl = details?.invoicePdfUrl ?? null;
 
   const linkEntries = useMemo(
     () => Object.entries(details?.payment.links ?? {}),
@@ -281,6 +296,7 @@ export function PaymentDrawer({
                         target="_blank"
                         rel="noreferrer"
                         aria-label="Open payment in Mollie"
+                        title="Open payment in Mollie"
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                       </a>
@@ -296,6 +312,37 @@ export function PaymentDrawer({
             <ValueRow
               label="Amount"
               value={<AmountValue amount={details?.payment.amount ?? null} />}
+            />
+            <ValueRow
+              label="Invoice"
+              value={
+                hasInvoice ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    className="shrink-0"
+                    onClick={() => setIsInvoiceDialogOpen(true)}
+                    aria-label="Invoice exists"
+                    title="Invoice exists"
+                  >
+                    <FileText />
+                  </Button>
+                ) : (
+                  <span title="Invoice not ready yet">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      className="shrink-0 text-muted-foreground opacity-60 hover:bg-transparent hover:text-muted-foreground"
+                      disabled
+                      aria-label="Invoice not ready yet"
+                    >
+                      <FileXCorner />
+                    </Button>
+                  </span>
+                )
+              }
             />
             <ValueRow
               label="Description"
@@ -332,6 +379,33 @@ export function PaymentDrawer({
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           ) : null}
+
+          <Dialog open={isInvoiceDialogOpen} onOpenChange={setIsInvoiceDialogOpen}>
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Invoice exists</DialogTitle>
+                <DialogDescription>
+                  This payment already has an e-Boekhouden invoice.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="justify-center sm:justify-center">
+                {invoiceDownloadUrl ? (
+                  <Button asChild className="!bg-foreground !text-background hover:!bg-foreground/90 hover:!text-background">
+                    <a
+                      href={invoiceDownloadUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="!bg-foreground !text-background hover:!bg-foreground/90 hover:!text-background"
+                    >
+                      Download invoice
+                    </a>
+                  </Button>
+                ) : (
+                  <Button disabled>Download invoice</Button>
+                )}
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {details ? (
             <>

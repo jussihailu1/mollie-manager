@@ -3,9 +3,22 @@ export type MollieAmountSnapshot = {
   value: string;
 };
 
+export type PaymentInvoiceState =
+  | "not_applicable"
+  | "pending_invoice"
+  | "invoice_creating"
+  | "invoice_created"
+  | "invoice_sent"
+  | "invoice_failed"
+  | "skipped";
+
 export type PaymentDrawerData = {
   customerId: string | null;
   customerName: string | null;
+  eboekhoudenInvoiceId: string | null;
+  eboekhoudenInvoiceNumber: string | null;
+  invoicePdfUrl: string | null;
+  invoiceState: PaymentInvoiceState;
   localPaymentId: string;
   molliePaymentId: string;
   payment: {

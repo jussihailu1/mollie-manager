@@ -5,14 +5,19 @@ import type Payment from "@mollie/api-client/dist/types/data/payments/Payment";
 import { requireViewerSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
+import { getEboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import type { PaymentDrawerData } from "@/lib/payment-details";
 import { getMollieClient } from "@/lib/mollie/client";
 
 type LocalPaymentLookup = {
   customerId: string | null;
   customerName: string | null;
+  eboekhoudenInvoiceId: string | null;
+  eboekhoudenInvoiceNumber: string | null;
   id: string;
+  invoiceState: PaymentDrawerData["invoiceState"];
   molliePaymentId: string | null;
+  metadata: Record<string, unknown>;
 };
 
 function toLinkMap(links: Payment["_links"] | undefined) {
@@ -49,13 +54,63 @@ function toAmountSnapshot(
   };
 }
 
-function toPaymentDrawerData(
+function extractInvoicePdfUrl(metadata: Record<string, unknown>) {
+  const invoiceDocumentUrl = metadata.invoiceDocumentUrl;
+  if (typeof invoiceDocumentUrl === "string" && invoiceDocumentUrl.trim()) {
+    return invoiceDocumentUrl;
+  }
+
+  const eboekhoudenInvoice = metadata.eboekhoudenInvoice;
+  if (
+    eboekhoudenInvoice &&
+    typeof eboekhoudenInvoice === "object" &&
+    !Array.isArray(eboekhoudenInvoice)
+  ) {
+    const nestedUrl = (eboekhoudenInvoice as Record<string, unknown>).urlPdfFile;
+    if (typeof nestedUrl === "string" && nestedUrl.trim()) {
+      return nestedUrl;
+    }
+  }
+
+  return null;
+}
+
+async function resolveInvoicePdfUrl(localPayment: LocalPaymentLookup) {
+  const metadataUrl = extractInvoicePdfUrl(localPayment.metadata);
+  if (metadataUrl) {
+    return metadataUrl;
+  }
+
+  if (!localPayment.eboekhoudenInvoiceId) {
+    return null;
+  }
+
+  const invoiceId = Number(localPayment.eboekhoudenInvoiceId);
+  if (!Number.isInteger(invoiceId) || invoiceId <= 0) {
+    return null;
+  }
+
+  try {
+    const invoice = await getEboekhoudenInvoice(invoiceId);
+    return invoice.urlPdfFile ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function toPaymentDrawerData(
   localPayment: LocalPaymentLookup,
   payment: Payment,
-): PaymentDrawerData {
+): Promise<PaymentDrawerData> {
+  const invoicePdfUrl = await resolveInvoicePdfUrl(localPayment);
+
   return {
     customerId: localPayment.customerId,
     customerName: localPayment.customerName,
+    eboekhoudenInvoiceId: localPayment.eboekhoudenInvoiceId,
+    eboekhoudenInvoiceNumber: localPayment.eboekhoudenInvoiceNumber,
+    invoicePdfUrl,
+    invoiceState: localPayment.invoiceState,
     localPaymentId: localPayment.id,
     molliePaymentId: payment.id,
     payment: {
@@ -131,6 +186,10 @@ export async function GET(request: NextRequest) {
   const result = await getDb().execute<LocalPaymentLookup>(sql`
       select
         p.id,
+        p.invoice_state as "invoiceState",
+        p.eboekhouden_invoice_id as "eboekhoudenInvoiceId",
+        p.eboekhouden_invoice_number as "eboekhoudenInvoiceNumber",
+        p.metadata as "metadata",
         p.mollie_payment_id as "molliePaymentId",
         c.id as "customerId",
         coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name, c.email) as "customerName"
@@ -168,7 +227,7 @@ export async function GET(request: NextRequest) {
       localPayment.molliePaymentId,
     );
 
-    return Response.json(toPaymentDrawerData(localPayment, payment));
+    return Response.json(await toPaymentDrawerData(localPayment, payment));
   } catch {
     return Response.json(
       {
