@@ -1,5 +1,8 @@
 # Recurring Billing Policy
 
+Status: canonical
+Audience: product and engineering
+
 ## Purpose
 
 Canonical current-state policy for recurring invoice timing, direct-debit notice, failed collection handling, and the EUR 0.01 `mandate_only` flow.
@@ -10,12 +13,12 @@ This file is normative for implementation. Keep it aligned with code changes.
 
 This policy governs the customer-visible recurring billing flow that sits on top of the subscription contract.
 
-This file does not replace `documentation/subscription-policy.md`.
+This file does not replace `subscription-policy.md`.
 
 Use this split:
 
-- `documentation/subscription-policy.md`: subscription terms, consent, cancellation disclosure, term mode, service-end semantics
-- `documentation/recurring-billing-policy.md`: recurring invoice notice timing, direct-debit collection handling, failed collection handling, mandate-only setup behavior
+- `subscription-policy.md`: subscription terms, consent, cancellation disclosure, term mode, service-end semantics
+- `recurring-billing-policy.md`: recurring invoice notice timing, direct-debit collection handling, failed collection handling, mandate-only setup behavior
 
 Do not treat accounting configuration as policy. The following belong in tenant billing settings, not here:
 

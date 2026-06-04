@@ -1,5 +1,8 @@
 # Subscription Roadmap
 
+Status: future direction
+Audience: product and engineering
+
 ## Purpose
 
 Future-state notes for subscription-platform evolution. This file is not the current implementation spec.

@@ -1,12 +1,15 @@
 # Subscription Policy
 
+Status: canonical
+Audience: product and engineering
+
 ## Purpose
 
 Canonical current-state policy for subscription term handling, consent, cancellation disclosure, and future-safe data modeling.
 
 This file is normative for implementation. Keep it aligned with code changes.
 
-Customer-visible recurring invoice timing, direct-debit notice, failed collection handling, and the EUR 0.01 mandate-setup flow are defined separately in `documentation/recurring-billing-policy.md`.
+Customer-visible recurring invoice timing, direct-debit notice, failed collection handling, and the EUR 0.01 mandate-setup flow are defined separately in `recurring-billing-policy.md`.
 
 ## Canonical Terms
 
@@ -60,7 +63,7 @@ Customer-visible recurring invoice timing, direct-debit notice, failed collectio
   - cancellation method
   - cancellation email address
   - links or references to terms and privacy content
-- If the recurring billing notice timing is part of the customer promise, the terms shown must also include the recurring invoice timing and automatic collection framing defined in `documentation/recurring-billing-policy.md`.
+- If the recurring billing notice timing is part of the customer promise, the terms shown must also include the recurring invoice timing and automatic collection framing defined in `recurring-billing-policy.md`.
 - The customer must actively accept the required consent checkboxes.
 - Consent evidence must be stored with a snapshot of the shown terms.
 - The mandate-establishing first payment remains part of the flow, but the customer-facing entrypoint should become the app-hosted consent screen rather than a raw Mollie checkout URL.

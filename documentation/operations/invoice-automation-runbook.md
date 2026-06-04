@@ -1,5 +1,8 @@
 # Invoice Automation Runbook
 
+Status: active operations runbook
+Audience: operators and developers
+
 ## Purpose
 
 Production ops checklist for automated invoice creation + app-owned customer invoice email delivery.
@@ -61,11 +64,16 @@ Invoice creation truth remains upstream:
 
 Use these to confirm scheduler liveness without checking platform logs first.
 
-## Suggested Schedule
+## Current Scheduler State In Repo
 
-- Run every 15 minutes.
-- Start with `mode=test` until verified.
-- Then enable `mode=live`.
+`vercel.json` currently configures:
+
+- path: `/api/cron/recurring-invoices`
+- schedule: `0 3 * * *`
+
+That means the repo currently schedules the automation once daily at 03:00.
+
+If you need a more frequent cadence, change `vercel.json` deliberately and keep this runbook aligned with that change.
 
 ## Evidence Command
 
@@ -167,9 +175,7 @@ This command returns a single JSON report with:
 
 ## Scheduler Wiring
 
-- Vercel deployments can use [`vercel.json`](../vercel.json) cron config:
-  - path: `/api/cron/recurring-invoices`
-  - cadence: every 15 minutes
+- Vercel deployments use [`vercel.json`](../../vercel.json) cron config.
 - The cron route accepts both `POST` and `GET`.
 - Auth accepts either:
   - `Authorization: Bearer <INVOICE_CRON_SHARED_SECRET>`

@@ -1,12 +1,30 @@
 # Documentation
 
-This folder is the durable project handoff for future development sessions.
+This folder contains the active documentation for the project plus an archive of superseded notes.
 
-- `ai-handoff.md`: product goals, locked decisions, implementation status, codebase map, important constraints, and the current next work item.
-- `v0-mcp-setup.md`: how this repo should be used with v0 MCP.
-- `v0-project-rules.md`: project rules to paste into the v0 project.
-- `v0-ui-brief.md`: focused UI direction for future v0 generation work.
-- `invoice-automation-runbook.md`: production runbook for automated invoice creation and protected cron delivery flow.
-- `invoice-automation-handoff.md`: current invoice automation scope, rules, and handoff context.
+## Canonical Docs
 
-Keep these docs aligned with the current repository state before each rollout step.
+These are the active sources of truth:
+
+- `architecture/overview.md`: current implementation shape and code map
+- `development/setup.md`: local setup and environment guidance
+- `development/commands-and-checks.md`: common developer and ops commands
+- `product/feature-inventory.md`: active implementation inventory and development backlog
+- `product/subscription-policy.md`: canonical subscription-policy rules
+- `product/recurring-billing-policy.md`: canonical recurring billing rules
+- `product/subscription-roadmap.md`: future-facing product direction only
+- `operations/invoice-automation-runbook.md`: invoice automation operations runbook
+- `integrations/mollie.md`: Mollie integration boundaries and mode rules
+- `integrations/eboekhouden.md`: e-Boekhouden integration boundaries and invoice rules
+
+## Archive
+
+- `archive/`: handoff notes, implementation plans, and superseded context kept for history only
+
+## Rules
+
+- Product rules live under `product/`.
+- Operational procedures live under `operations/`.
+- Technical structure lives under `architecture/`, `development/`, and `integrations/`.
+- Archived docs are not authoritative.
+- If two docs disagree, the canonical active doc wins over anything in `archive/`.

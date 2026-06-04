@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mollie Manager
 
-## Getting Started
+Mollie Manager is an internal backoffice for managing Mollie subscription onboarding, recurring billing operations, invoice creation, and reliability workflows.
 
-First, run the development server:
+This app is built for a single operator. Mollie remains the payment source of truth. e-Boekhouden remains the invoice and accounting source of truth. The local PostgreSQL database is the operational layer that ties onboarding, reconciliation, alerts, audit logging, and invoice automation together.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Core Workflow
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+1. Create or import a customer.
+2. Create a first-payment link.
+3. Send the customer through the hosted consent flow.
+4. Let Mollie establish the mandate and complete the first payment.
+5. Sync customer, mandate, payment, and subscription state.
+6. Manage recurring billing, invoice creation, alerts, and repair flows.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Stack
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Next.js 16 App Router
+- React 19
+- NextAuth v5 beta with Google sign-in allowlist
+- PostgreSQL
+- Drizzle ORM and Drizzle migrations
+- Mollie API
+- e-Boekhouden REST API
+- Nodemailer for alert and invoice delivery
+- Tailwind CSS v4 and shadcn/ui
 
-## Learn More
+## Main Areas
 
-To learn more about Next.js, take a look at the following resources:
+- `app/`: routes, API endpoints, and server-rendered UI surfaces
+- `components/`: app components and `components/ui/*` primitives
+- `lib/`: auth, billing, onboarding, Mollie, e-Boekhouden, reliability, and formatting logic
+- `db/`: Drizzle schema, generated migrations, and migration metadata
+- `scripts/`: database, readiness, backlog, and invoice-automation operations scripts
+- `documentation/`: project docs, policies, runbooks, and archived notes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Local Start
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Copy `.env.example` to `.env` and fill in the required values.
+2. Apply database migrations:
+   `npm run db:apply`
+3. Start the dev server:
+   `npm run dev`
+4. Open `http://localhost:3000`
 
-## Deploy on Vercel
+Useful checks:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `npm run lint`
+- `npm run typecheck`
+- `npm run test:node`
+- `npm run build`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Documentation
+
+Start with [documentation/README.md](documentation/README.md).
+
+The most important active docs are:
+
+- [documentation/architecture/overview.md](documentation/architecture/overview.md)
+- [documentation/development/setup.md](documentation/development/setup.md)
+- [documentation/product/feature-inventory.md](documentation/product/feature-inventory.md)
+- [documentation/product/subscription-policy.md](documentation/product/subscription-policy.md)
+- [documentation/product/recurring-billing-policy.md](documentation/product/recurring-billing-policy.md)
+- [documentation/operations/invoice-automation-runbook.md](documentation/operations/invoice-automation-runbook.md)
+
+## Notes
+
+- This repo uses newer Next.js APIs. If framework behavior looks off, check the relevant docs under `node_modules/next/dist/docs/` before making framework-level changes.
+- In `APP_ENV=test`, live Mollie mode is intentionally blocked even if live credentials are present.
