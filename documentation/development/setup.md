@@ -71,6 +71,7 @@ Main env groups:
 
 - Normal app access uses Google sign-in and a single allowed email address.
 - `AUTH_ALLOWED_EMAIL` is enforced in the NextAuth sign-in callback.
+- `AUTH_SECRET` is required at runtime; the app now fails closed if it is missing.
 - `APP_ENV=test` can use the test bypass flags for local verification without normal Google login.
 - In `APP_ENV=test`, live Mollie mode is disabled by design.
 
@@ -83,4 +84,4 @@ Main env groups:
 
 ## Next.js Note
 
-This repo uses newer Next.js behavior than older training data assumes. If framework APIs, route behavior, or conventions look unusual, check the relevant docs under `node_modules/next/dist/docs/` before making framework-level changes.
+This repo uses `next@16` and `next-auth@5 beta`. Do not proactively read `node_modules/next/dist/docs/`. Only consult the specific relevant file there if you are changing framework-level behavior and the current API semantics are uncertain.

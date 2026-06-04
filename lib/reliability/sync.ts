@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { writeAuditLog } from "@/lib/audit";
 import { getDb, transaction, type DbClient, type DbTransaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
-import { getMollieClient, getMollieWebhookUrl, isMollieConfigured } from "@/lib/mollie/client";
+import { getMollieClient, isMollieConfigured } from "@/lib/mollie/client";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
 import {
   createEboekhoudenInvoiceForFirstPayment,
@@ -495,11 +495,6 @@ function buildPaymentLinkMetadata(
     reusable: paymentLink.reusable ?? false,
     sequenceType: paymentLink.sequenceType,
     source: "subscription_onboarding",
-    webhookUrl:
-      paymentLink.webhookUrl ??
-      (typeof existingMetadata.webhookUrl === "string"
-        ? existingMetadata.webhookUrl
-        : null),
   };
 }
 
@@ -974,7 +969,6 @@ export async function syncPaymentByMollieId(
                 : null,
             redirectUrl: payment.redirectUrl ?? null,
             statusReason: serializeStatusReason(payment.statusReason),
-            webhookUrl: getMollieWebhookUrl(),
           })}::jsonb,
           ${payment.createdAt}::timestamptz,
           now(),

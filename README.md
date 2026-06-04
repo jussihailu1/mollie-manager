@@ -65,5 +65,6 @@ The most important active docs are:
 
 ## Notes
 
-- This repo uses newer Next.js APIs. If framework behavior looks off, check the relevant docs under `node_modules/next/dist/docs/` before making framework-level changes.
+- This repo uses `next@16` and `next-auth@5 beta`. Do not proactively read `node_modules/next/dist/docs/`. Only consult the specific relevant file there if you are changing framework-level behavior and the current API semantics are uncertain.
+- `AUTH_SECRET` is required in every deployed environment; the app now fails closed if it is missing.
 - In `APP_ENV=test`, live Mollie mode is intentionally blocked even if live credentials are present.

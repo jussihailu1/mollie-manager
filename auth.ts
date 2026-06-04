@@ -7,8 +7,11 @@ import { env, getSetupStatus } from "@/lib/env";
 const setupStatus = getSetupStatus();
 const authIsReady = setupStatus.auth.ready;
 const allowedEmail = env.AUTH_ALLOWED_EMAIL?.toLowerCase();
-const authSecret =
-  env.AUTH_SECRET ?? "setup-required-auth-secret-change-me-00000000";
+const authSecret = env.AUTH_SECRET;
+
+if (!authSecret) {
+  throw new Error("AUTH_SECRET is missing.");
+}
 
 const authConfig = {
   debug: env.NODE_ENV === "development",

@@ -1181,7 +1181,6 @@ export async function createFirstPaymentAction(formData: FormData) {
               reusable: paymentLink.reusable ?? false,
               sequenceType: paymentLink.sequenceType ?? SequenceType.first,
               source: "subscription_onboarding",
-              webhookUrl,
             })}::jsonb,
             coalesce(${paymentLink.createdAt ?? null}::timestamptz, now()),
             now(),

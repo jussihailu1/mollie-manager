@@ -1,6 +1,6 @@
 # Track A: Onboarding Hardening Plan
 
-Status: active implementation plan
+Status: active implementation plan, pass 1 completed
 Audience: engineering and product
 Related docs:
 
@@ -18,6 +18,22 @@ Primary goal:
 Secondary goal:
 
 - improve the operator share-link workflow at the same time so the hardening work also delivers product value
+
+## Current Status
+
+Implemented in the first pass:
+
+- redirect notices now stay generic
+- consent tokens are no longer written into audit details
+- `payment_links.metadata` no longer duplicates the active consent token
+- the customer drawer return flow now preserves focus and gives operators a copyable hosted-link path
+- helper and test coverage were added for the consent-link URL and notice behavior
+
+Still open:
+
+- decide whether `latestConsentToken` should remain selected into broad customer overview queries
+- decide whether a hashed lookup-token model is worth a follow-up pass
+- keep the remaining hardening tracks sequenced after this pass
 
 ## Why Start Here
 
@@ -53,13 +69,13 @@ Out of scope for this track:
 
 - token generation: [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1124>)
 - token persisted in dedicated consent table: [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1219>)
-- token also persisted in `payment_links.metadata`: [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1181>)
+- token no longer duplicated in `payment_links.metadata` after pass 1
 
 ### Token exposure to operators and logs
 
-- token written into audit details: [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1237>)
+- token no longer written into audit details after pass 1
 - audit write path: [lib/audit.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/audit.ts:45>)
-- token exposed in redirect notice query string: [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1255>)
+- token no longer exposed in redirect notice query string after pass 1
 - notices are displayed in customers workspace: [components/customers-workspace.tsx](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/components/customers-workspace.tsx:314>)
 
 ### Token consumption and UI reuse
@@ -68,6 +84,7 @@ Out of scope for this track:
 - token used by hosted return page: [app/subscribe/[token]/return/page.tsx](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/app/subscribe/[token]/return/page.tsx:42>)
 - operator-facing latest token selection: [lib/onboarding/data.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/data.ts:249>)
 - operator-facing absolute URL derivation: [lib/ui-data.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/ui-data.ts:125>)
+- operator-facing drawer copy flow: [components/customer-flow-dialogs.tsx](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/components/customer-flow-dialogs.tsx:964>)
 
 ## Implementation Strategy
 
@@ -88,6 +105,12 @@ Changes:
 3. Stop writing `consentToken` into audit log details.
 4. Stop writing `consentToken` into `payment_links.metadata` unless a concrete runtime dependency proves it is required.
 5. Keep `subscription_onboarding_consents.consent_token` as the canonical lookup source for now.
+
+Status:
+
+- completed
+- the canonical token remains in the dedicated consent table
+- the operator copy/open flow now uses the customer drawer instead of a token-bearing notice
 
 Primary files:
 
@@ -145,6 +168,11 @@ Changes:
    - no-token-in-notice behavior
    - customer UI URL derivation from canonical consent storage
 3. Decide whether a follow-up should convert the stored lookup token into a hashed token model.
+
+Status:
+
+- partially open
+- the URL and notice helpers are covered now, but the broader token ownership question still needs a decision
 
 Primary files:
 

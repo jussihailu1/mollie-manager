@@ -54,9 +54,11 @@ Canonical policy docs:
 Reference: `../development/codebase-review.md`
 
 - [ ] Remove consent-token leakage from redirect notices, audit logs, and non-essential metadata while improving the operator share-link workflow
+  Status: pass 1 is complete; the remaining follow-up is to review token ownership scope and decide whether a hashed lookup-token model is worth it.
   Reference: `../development/track-a-onboarding-hardening-plan.md`
 - [ ] Split public health/liveness from authenticated operator diagnostics and reduce operational detail exposed anonymously
 - [ ] Stop persisting secret-bearing webhook URLs into generic metadata and reduce secret sprawl
+  Status: the metadata persistence path has been removed; the remaining work is to narrow the runtime exposure and finish the public health split.
 - [ ] Harden invoice PDF fetch and attachment handling with trusted-host, timeout, and size controls
 - [ ] Add integration coverage for consent, webhook sync, first-payment invoice creation, recurring invoice delivery retry, and repair flows
 - [ ] Refactor oversized billing/orchestration modules into smaller policy, state-transition, and integration units

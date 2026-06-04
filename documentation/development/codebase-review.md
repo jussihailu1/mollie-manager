@@ -30,6 +30,22 @@ The current issues are concentrated in three areas:
 
 Development should continue, but the next feature pass should be combined with targeted hardening so the app does not accumulate risk faster than functionality.
 
+## Status Update
+
+Since this review was first written, the first onboarding hardening pass has been implemented.
+
+Implemented so far:
+
+- redirect notices no longer carry the hosted consent link
+- consent tokens are no longer written into audit details
+- `payment_links.metadata` no longer duplicates the active consent token
+- secret-bearing webhook URLs are no longer written into payment metadata
+- auth now fails closed when `AUTH_SECRET` is missing
+- the operator flow now returns to the customer drawer with a copyable hosted link surface
+- helper and test coverage were added for the new consent-link utilities
+
+The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as partially mitigated rather than fully open.
+
 ## Validation Snapshot
 
 The following checks passed during the review:
@@ -41,29 +57,31 @@ The following checks passed during the review:
 
 ## Priority Findings
 
-### P1: Consent token leakage across UI, metadata, and audit logs
+### P1: Consent token handling was too loose; the highest-risk leak paths are now mitigated
 
-The hosted customer consent token is currently treated too loosely for a bearer-style token.
+The hosted customer consent token was previously treated too loosely for a bearer-style token. The highest-risk leak paths have now been reduced, but the canonical token still exists in dedicated storage and is still used to derive operator-facing consent links.
 
 Observed paths:
 
 - generated in [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1124>)
-- stored in `payment_links.metadata` in [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1181>)
 - stored in `subscription_onboarding_consents` in [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1219>)
-- written into audit details in [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1237>) through [lib/audit.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/audit.ts:45>)
-- pushed into the operator redirect notice query string in [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1255>) via [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:166>)
+- derived into operator-facing UI data in [lib/ui-data.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/ui-data.ts:125>)
+- surfaced through the customer drawer copy flow in [components/customer-flow-dialogs.tsx](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/components/customer-flow-dialogs.tsx:964>)
+- no longer written into audit details in [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1227>) through [lib/audit.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/audit.ts:45>)
+- no longer pushed into the operator redirect notice query string in [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1247>) via [lib/onboarding/consent-link.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/consent-link.ts:1>)
 
 Why this is unhealthy:
 
-- query-string transport leaks into browser history, screenshots, logs, and referrers
+- query-string transport was a real leak path and should stay removed
 - audit logs should not persist active customer-facing bearer tokens
-- the token is duplicated across multiple storage surfaces without clear need
+- the remaining token exposure should stay constrained to the canonical consent table and intentionally derived operator UI
 
 Recommended direction:
 
-- stop placing consent links in redirect notices and replace with a copy-on-demand operator control
-- redact or remove consent tokens from audit details
-- remove token duplication from generic metadata unless it is strictly required
+- keep the redirect notice generic and continue using the drawer-based copy flow
+- keep the audit redaction in place
+- keep token duplication out of generic metadata unless a concrete dependency reappears
+- review whether `latestConsentToken` should remain in broad customer overview data or move behind a narrower operator-only fetch path
 - consider storing only a hashed lookup token if the flow can support it
 
 ### P1: Invoice PDF delivery path allows unsafe server-side fetches
@@ -92,27 +110,27 @@ Recommended direction:
 - require PDF content type before attachment
 - treat metadata URLs as hints, not truth
 
-### P1: Webhook secret is embedded in URLs and then propagated into stored metadata
+### P1: Webhook secret is still embedded in outbound URLs, but the metadata leak path is gone
 
-The shared webhook secret is appended as a query parameter and reused broadly.
+The shared webhook secret is appended as a query parameter for Mollie webhook calls. The previous persistence path into generic metadata has been removed.
 
 Observed paths:
 
 - webhook URL builder in [lib/mollie/client.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/mollie/client.ts:40>)
 - request validation in [app/api/webhooks/mollie/route.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/app/api/webhooks/mollie/route.ts:88>)
 - onboarding use in [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1125>)
-- persistence into metadata in [lib/reliability/sync.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/sync.ts:498>) and [lib/reliability/sync.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/sync.ts:977>)
+- the previous persistence path into payment metadata has been removed in [lib/reliability/sync.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/sync.ts>)
 
 Why this is unhealthy:
 
 - secrets in URLs are easy to leak through logs and operational tooling
-- secret-bearing URLs are being persisted in data that is not secret-scoped
-- the same secret now has unnecessary storage and observability surface area
+- the secret still exists in process memory while outbound Mollie calls are assembled
+- any future metadata reintroduction would recreate a leak path
 
 Recommended direction:
 
-- remove the secret from persisted metadata
-- minimize where the fully signed webhook URL exists in process memory and storage
+- keep the secret out of persisted metadata
+- minimize where the fully signed webhook URL exists in process memory and logs
 - reassess whether the webhook verification model can be made less leak-prone
 
 ### P2: Public `/api/health` exposes internal operating state
@@ -144,9 +162,9 @@ Recommended direction:
 - split into public liveness and authenticated operator diagnostics
 - keep the detailed reliability snapshot behind operator auth or cron auth
 
-### P2: Auth fails open under missing-secret misconfiguration
+### P2: Auth now fails closed on missing-secret misconfiguration
 
-Authentication uses a known fallback secret if `AUTH_SECRET` is absent.
+Authentication now throws if `AUTH_SECRET` is absent.
 
 Observed path:
 
@@ -154,13 +172,13 @@ Observed path:
 
 Why this is unhealthy:
 
-- auth-sensitive environments should fail closed on missing secret
-- a known fallback reduces the margin for operational mistakes
+- this item is now mitigated in code
+- keep the setup check aligned with runtime auth behavior
 
 Recommended direction:
 
-- throw on missing `AUTH_SECRET` outside narrowly defined local/test cases
-- make setup failures obvious rather than survivable
+- keep `AUTH_SECRET` required in every deployed environment
+- fail setup early rather than relying on a fallback secret
 
 ### P2: Core business logic is too concentrated
 
