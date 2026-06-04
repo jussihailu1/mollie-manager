@@ -28,6 +28,7 @@ import {
 } from "@/lib/eboekhouden/relation-mapping";
 import { getMollieClient, getMollieWebhookUrl } from "@/lib/mollie/client";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
+import { buildConsentLinkCreatedNotice } from "@/lib/onboarding/consent-link";
 import { getCustomerDetail } from "@/lib/onboarding/data";
 import { syncPaymentLinkByMollieId } from "@/lib/reliability/sync";
 import { buildSubscriptionConsentReturnUrl } from "@/lib/subscription-consent";
@@ -1244,7 +1245,7 @@ export async function createFirstPaymentAction(formData: FormData) {
     revalidatePath("/customers");
     revalidatePath("/payments");
     redirectWithMessage(returnTo, {
-      notice: "First payment consent link created. Open the customer drawer to copy the hosted link.",
+      notice: buildConsentLinkCreatedNotice(),
     });
   } catch (error) {
     unstable_rethrow(error);

@@ -8,6 +8,7 @@ import type {
   PaymentOverview,
 } from "@/lib/onboarding/data";
 import type { AlertInboxItem, AuditActivityItem } from "@/lib/reliability/data";
+import { buildConsentLinkUrl } from "@/lib/onboarding/consent-link";
 
 export type UiCustomerRecord = {
   address: string | null;
@@ -138,7 +139,7 @@ function mapAlertType(alert: AlertInboxItem): UiNotificationRecord["type"] {
 
 export function toUiCustomerRecord(customer: CustomerOverview): UiCustomerRecord {
   const latestConsentUrl = customer.latestConsentToken
-    ? new URL(`/subscribe/${customer.latestConsentToken}`, env.APP_URL).toString()
+    ? buildConsentLinkUrl(customer.latestConsentToken, env.APP_URL)
     : null;
 
   return {

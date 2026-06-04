@@ -31,6 +31,7 @@ import {
   linkEboekhoudenRelationAction,
   syncCustomerBillingStateAction,
 } from "@/lib/onboarding/actions";
+import { buildConsentLinkReturnTo } from "@/lib/onboarding/consent-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -961,12 +962,11 @@ export function CreatePaymentLinkDialog({
   const selectedCustomer =
     customer ?? customers.find((item) => item.id === selectedCustomerId) ?? null;
   const returnTo = selectedCustomer
-    ? (() => {
-        const params = new URLSearchParams(searchParams.toString());
-        params.set("focus", selectedCustomer.id);
-        const search = params.toString();
-        return search ? `${pathname}?${search}` : pathname;
-      })()
+    ? buildConsentLinkReturnTo({
+        customerId: selectedCustomer.id,
+        pathname,
+        search: searchParams.toString(),
+      })
     : pathname;
 
   const filteredCustomers = useMemo(() => {
