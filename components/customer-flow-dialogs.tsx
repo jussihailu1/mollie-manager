@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -935,6 +935,7 @@ export function CreatePaymentLinkDialog({
   onOpenChange: (open: boolean) => void;
 }>) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [step, setStep] = useState<"select_customer" | "payment_details">(
     customer ? "payment_details" : "select_customer",
   );
@@ -959,6 +960,14 @@ export function CreatePaymentLinkDialog({
 
   const selectedCustomer =
     customer ?? customers.find((item) => item.id === selectedCustomerId) ?? null;
+  const returnTo = selectedCustomer
+    ? (() => {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set("focus", selectedCustomer.id);
+        const search = params.toString();
+        return search ? `${pathname}?${search}` : pathname;
+      })()
+    : pathname;
 
   const filteredCustomers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -1039,7 +1048,7 @@ export function CreatePaymentLinkDialog({
         {step === "payment_details" && selectedCustomer ? (
           <form className="space-y-4 py-4" action={createFirstPaymentAction}>
             <input type="hidden" name="customerId" value={selectedCustomer.id} />
-            <input type="hidden" name="returnTo" value={pathname} />
+            <input type="hidden" name="returnTo" value={returnTo} />
 
             {!customer ? (
               <div className="mb-4 flex items-center justify-between rounded-md bg-muted p-3">

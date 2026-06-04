@@ -38,7 +38,6 @@ import {
   type BillingInterval,
 } from "@/lib/subscription-policy";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
-import { env } from "@/lib/env";
 
 const createCustomerSchema = z.object({
   address: z.string().trim().max(240).optional(),
@@ -207,11 +206,6 @@ function normalizeOptionalDateInput(value: string | undefined) {
   }
 
   return normalizeDateInput(value, "Service end date");
-}
-
-function buildConsentUrl(token: string) {
-  const url = new URL(`/subscribe/${token}`, env.APP_URL);
-  return url.toString();
 }
 
 function validateFixedTermInput(input: {
@@ -1178,7 +1172,6 @@ export async function createFirstPaymentAction(formData: FormData) {
             ${paymentLink.expiresAt ?? null}::timestamptz,
             ${JSON.stringify({
               allowedMethods: paymentLink.allowedMethods ?? [PaymentMethod.ideal],
-              consentToken,
               latestPaymentId: null,
               latestPaymentStatus: null,
               mollieCustomerId,
@@ -1234,7 +1227,6 @@ export async function createFirstPaymentAction(formData: FormData) {
         {
           action: "payment_link.first.create",
           details: {
-            consentToken,
             localPaymentLinkId,
             molliePaymentLinkId: paymentLink.id,
           },
@@ -1252,7 +1244,7 @@ export async function createFirstPaymentAction(formData: FormData) {
     revalidatePath("/customers");
     revalidatePath("/payments");
     redirectWithMessage(returnTo, {
-      notice: `First payment consent link created. Share ${buildConsentUrl(consentToken)} with the customer.`,
+      notice: "First payment consent link created. Open the customer drawer to copy the hosted link.",
     });
   } catch (error) {
     unstable_rethrow(error);

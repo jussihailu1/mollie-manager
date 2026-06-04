@@ -49,6 +49,18 @@ Canonical policy docs:
 - [ ] Expose safer, clearer operator controls for webhook replay and repair flows
 - [ ] Decide whether subscriptions need a dedicated operations workspace again or should stay embedded in customer workflows
 
+## Cross-Cutting Hardening Work
+
+Reference: `../development/codebase-review.md`
+
+- [ ] Remove consent-token leakage from redirect notices, audit logs, and non-essential metadata while improving the operator share-link workflow
+  Reference: `../development/track-a-onboarding-hardening-plan.md`
+- [ ] Split public health/liveness from authenticated operator diagnostics and reduce operational detail exposed anonymously
+- [ ] Stop persisting secret-bearing webhook URLs into generic metadata and reduce secret sprawl
+- [ ] Harden invoice PDF fetch and attachment handling with trusted-host, timeout, and size controls
+- [ ] Add integration coverage for consent, webhook sync, first-payment invoice creation, recurring invoice delivery retry, and repair flows
+- [ ] Refactor oversized billing/orchestration modules into smaller policy, state-transition, and integration units
+
 ## Deferred Or Later
 
 - [ ] per-subscription policy overrides
