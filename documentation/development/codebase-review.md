@@ -40,7 +40,7 @@ Implemented so far:
 - consent tokens are no longer written into audit details
 - `payment_links.metadata` no longer duplicates the active consent token
 - secret-bearing webhook URLs are no longer written into payment metadata
-- auth now fails closed when `AUTH_SECRET` is missing
+- auth now fails closed when `AUTH_SECRET` is missing and is covered by a focused test
 - the operator flow now returns to the customer drawer with a copyable hosted link surface
 - helper and test coverage were added for the new consent-link utilities
 
