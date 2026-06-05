@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 
-import { getMollieWebhookConfig } from "@/lib/env";
+import type { MollieMode } from "@/lib/env";
 import { getDb } from "@/lib/db";
 import {
   syncPaymentByMollieId,
@@ -11,6 +11,8 @@ import {
 type ExistingResourceMode = {
   mode: "live" | "test";
 };
+
+const supportedResourceIdPattern = /^(tr|sub|pl)_[A-Za-z0-9]+$/;
 
 function serializeError(error: unknown) {
   if (error instanceof Error) {
@@ -55,28 +57,47 @@ async function parseWebhookRequest(request: Request) {
   };
 }
 
-async function processWebhookResource(resourceId: string) {
+async function processWebhookResource(
+  resourceId: string,
+  preferredMode: MollieMode | null,
+) {
   if (resourceId.startsWith("tr_")) {
     return syncPaymentByMollieId(resourceId, {
       actor: {
         kind: "system",
       },
+      preferredMode: preferredMode ?? undefined,
+      requireManagedResource: true,
+      strictMode: Boolean(preferredMode),
     });
   }
 
   if (resourceId.startsWith("sub_")) {
+    if (!preferredMode) {
+      throw new Error("Subscription webhook is not linked to a managed local resource.");
+    }
+
     return syncSubscriptionByMollieId(resourceId, {
       actor: {
         kind: "system",
       },
+      preferredMode,
+      strictMode: true,
     });
   }
 
   if (resourceId.startsWith("pl_")) {
+    if (!preferredMode) {
+      throw new Error("Payment-link webhook is not linked to a managed local resource.");
+    }
+
     return syncPaymentLinkByMollieId(resourceId, {
       actor: {
         kind: "system",
       },
+      preferredMode,
+      requireManagedResource: true,
+      strictMode: true,
     });
   }
 
@@ -84,15 +105,6 @@ async function processWebhookResource(resourceId: string) {
 }
 
 export async function POST(request: Request) {
-  const webhookConfig = getMollieWebhookConfig();
-  const secret = new URL(request.url).searchParams.get("secret");
-
-  if (secret !== webhookConfig.MOLLIE_WEBHOOK_SHARED_SECRET) {
-    return new Response("Unauthorized", {
-      status: 401,
-    });
-  }
-
   const parsed = await parseWebhookRequest(request);
 
   if (!parsed.resourceId) {
@@ -101,8 +113,14 @@ export async function POST(request: Request) {
     });
   }
 
+  if (!supportedResourceIdPattern.test(parsed.resourceId)) {
+    return new Response("Unsupported resource id", {
+      status: 400,
+    });
+  }
+
   const webhookEventId = crypto.randomUUID();
-  const existingMode =
+  const existingModeResult =
     (
       await getDb().execute<ExistingResourceMode>(sql`
           select mode
@@ -118,7 +136,7 @@ export async function POST(request: Request) {
           where mollie_payment_link_id = ${parsed.resourceId}
           limit 1
         `)
-    ).rows[0]?.mode ?? "test";
+    ).rows[0]?.mode ?? null;
 
   await getDb().execute(sql`
       insert into webhook_events (
@@ -132,7 +150,7 @@ export async function POST(request: Request) {
         processing_status
       ) values (
         ${webhookEventId},
-        ${existingMode},
+        ${existingModeResult ?? "test"},
         ${parsed.resourceType ?? null},
         ${parsed.resourceId},
         ${parsed.resourceType ?? "mollie-webhook"},
@@ -143,7 +161,10 @@ export async function POST(request: Request) {
     `);
 
   try {
-    const result = await processWebhookResource(parsed.resourceId);
+    const result = await processWebhookResource(
+      parsed.resourceId,
+      existingModeResult,
+    );
 
     await getDb().execute(sql`
         update webhook_events

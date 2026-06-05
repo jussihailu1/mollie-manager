@@ -35,7 +35,6 @@ Main env groups:
   - `MOLLIE_TEST_API_KEY`
   - `MOLLIE_LIVE_API_KEY`
   - `MOLLIE_WEBHOOK_PUBLIC_BASE_URL`
-  - `MOLLIE_WEBHOOK_SHARED_SECRET`
 - Notifications and invoice delivery:
   - `SMTP_HOST`
   - `SMTP_PORT`

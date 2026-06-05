@@ -40,6 +40,7 @@ Implemented so far:
 - consent tokens are no longer written into audit details
 - `payment_links.metadata` no longer duplicates the active consent token
 - secret-bearing webhook URLs are no longer written into payment metadata
+- newly generated Mollie webhook URLs no longer include a shared secret
 - the payment drawer no longer returns or renders the raw Mollie webhook callback URL
 - auth now fails closed when `AUTH_SECRET` is missing and is covered by a focused test
 - latest consent tokens no longer ride in broad customer overview payloads
@@ -116,9 +117,9 @@ Recommended direction:
 - keep the payment-drawer attachment status visible for operator debugging
 - expose the same attachment/source status in broader ops surfaces only if it becomes operationally necessary
 
-### P1: Webhook secret is still embedded in outbound URLs, but the metadata and operator leak paths are gone
+### P1: Webhook callback URLs are now secret-free and constrained by managed-resource checks
 
-The shared webhook secret is still appended as a query parameter for Mollie webhook calls. The previous persistence path into generic metadata has been removed, and the operator payment drawer no longer returns the raw callback URL to the client.
+New Mollie webhook callback URLs no longer append the shared secret. Webhook intake treats the request as an untrusted signal, stores the event, re-fetches current Mollie state, and only processes resources that resolve back to managed local app state.
 
 Observed paths:
 
@@ -128,18 +129,19 @@ Observed paths:
 - the previous persistence path into payment metadata has been removed in [lib/reliability/sync.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/sync.ts>)
 - raw webhook URL display is now replaced by non-secret status in [app/api/payments/mollie/route.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/app/api/payments/mollie/route.ts:211>) and [components/payment-drawer.tsx](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/components/payment-drawer.tsx:731>)
 
-Why this is unhealthy:
+Why the previous design was unhealthy:
 
 - secrets in URLs are easy to leak through logs and operational tooling
-- the secret still exists in process memory while outbound Mollie calls are assembled
+- the secret existed in process memory while outbound Mollie calls were assembled
 - any future metadata reintroduction would recreate a leak path
 
 Recommended direction:
 
+- keep generated webhook URLs secret-free
 - keep the secret out of persisted metadata
 - keep the secret out of client-visible operator payloads
-- minimize where the fully signed webhook URL exists in process memory and logs
-- reassess whether the webhook verification model can be made less leak-prone
+- keep webhook processing tied to managed local resources
+- rely on scheduled reconciliation and repair for missed or rejected webhook signals
 
 ### P2: `/api/health` now splits public liveness from authenticated diagnostics
 

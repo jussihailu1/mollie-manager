@@ -37,9 +37,10 @@ The app stores local operational state, but payment, mandate, and subscription t
 ## Webhooks
 
 - Webhook URL is built from `MOLLIE_WEBHOOK_PUBLIC_BASE_URL`
-- A shared secret is appended and checked by the app
+- Webhook URLs do not include shared secrets
 - Webhook events are stored locally before processing
 - Processing re-fetches current Mollie state instead of trusting the webhook payload blindly
+- Payment and payment-link webhooks must resolve back to managed local app state before processing
 
 ## Operational Rules
 
@@ -56,4 +57,3 @@ The app stores local operational state, but payment, mandate, and subscription t
 - `MOLLIE_ORGANIZATION_ID`
 - `MOLLIE_PROFILE_ID`
 - `MOLLIE_WEBHOOK_PUBLIC_BASE_URL`
-- `MOLLIE_WEBHOOK_SHARED_SECRET`

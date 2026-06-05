@@ -97,5 +97,6 @@ Important entities:
 - Keep Mollie payment truth separate from e-Boekhouden invoice truth.
 - Use claim-before-upstream-call patterns for invoice creation to prevent duplicates.
 - Treat webhooks as signals that trigger re-fetch and reconciliation.
+- Keep webhook callback URLs secret-free; intake should validate that resources resolve to managed local state.
 - Keep test and live mode separation explicit at both env and record level.
 - Treat invoice document URLs as hints; only trusted e-Boekhouden PDF hosts should be displayed or fetched.

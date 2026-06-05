@@ -873,6 +873,7 @@ export async function syncPaymentByMollieId(
   options?: {
     actor?: SyncActor;
     preferredMode?: MollieMode;
+    requireManagedResource?: boolean;
     strictMode?: boolean;
     syncPaymentLinks?: boolean;
   },
@@ -891,6 +892,11 @@ export async function syncPaymentByMollieId(
     payment.subscriptionId,
   );
   const resolvedCustomerId = localCustomer?.id ?? localSubscription?.customerId ?? null;
+
+  if (options?.requireManagedResource && !resolvedCustomerId) {
+    throw new Error("Payment webhook is not linked to a managed local resource.");
+  }
+
   const paymentType = resolvePaymentType(payment);
   const recurringCollectionState = getRecurringCollectionState(payment);
   const collectionReviewRequiredAt = getReviewRequiredAt(recurringCollectionState);
@@ -1107,6 +1113,7 @@ export async function syncPaymentLinkByMollieId(
   options?: {
     actor?: SyncActor;
     preferredMode?: MollieMode;
+    requireManagedResource?: boolean;
     strictMode?: boolean;
   },
 ) {
@@ -1120,6 +1127,11 @@ export async function syncPaymentLinkByMollieId(
   );
   const payments = await collectPaymentLinkPayments(paymentLink);
   const existingPaymentLink = await getLocalPaymentLinkByMollieId(mode, paymentLink.id);
+
+  if (options?.requireManagedResource && !existingPaymentLink) {
+    throw new Error("Payment-link webhook is not linked to a managed local resource.");
+  }
+
   const localCustomer = await getLocalCustomerByMollieId(mode, paymentLink.customerId);
   const localPaymentLinkId = await upsertPaymentLinkFromMollie(
     mode,

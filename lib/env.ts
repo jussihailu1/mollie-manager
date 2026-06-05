@@ -140,7 +140,7 @@ const mollieLiveConfigSchema = z.object({
 
 const mollieWebhookConfigSchema = z.object({
   MOLLIE_WEBHOOK_PUBLIC_BASE_URL: z.string().url(),
-  MOLLIE_WEBHOOK_SHARED_SECRET: z.string().min(16),
+  MOLLIE_WEBHOOK_SHARED_SECRET: z.string().min(16).optional(),
 });
 
 const eboekhoudenConfigSchema = z.object({
@@ -187,9 +187,6 @@ export function getSetupStatus() {
     env.MOLLIE_WEBHOOK_PUBLIC_BASE_URL
       ? null
       : "MOLLIE_WEBHOOK_PUBLIC_BASE_URL is missing.",
-    env.MOLLIE_WEBHOOK_SHARED_SECRET
-      ? null
-      : "MOLLIE_WEBHOOK_SHARED_SECRET is missing.",
   ].filter((value): value is string => value !== null);
 
   const notificationIssues = [
