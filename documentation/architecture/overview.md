@@ -53,7 +53,7 @@ Legacy redirect routes still exist for compatibility:
 ## Important API Endpoints
 
 - `/api/auth/[...nextauth]`: NextAuth handler
-- `/api/health`: setup, reliability, and invoice-automation health snapshot
+- `/api/health`: minimal public liveness plus auth-gated setup, reliability, and invoice-automation diagnostics
 - `/api/webhooks/mollie`: webhook intake and replayable event storage
 - `/api/cron/recurring-invoices`: protected repair, invoice, and delivery automation entrypoint
 - `/api/eboekhouden/relations`: relation lookup, detail, and linking support

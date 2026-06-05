@@ -65,7 +65,12 @@ function buildCheck(name, pass, details) {
 }
 
 async function run() {
-  const healthBefore = await fetchJson(`${appUrl}/api/health?mode=${mode}`);
+  const healthHeaders = {
+    Authorization: `Bearer ${cronSecret}`,
+  };
+  const healthBefore = await fetchJson(`${appUrl}/api/health?mode=${mode}`, {
+    headers: healthHeaders,
+  });
   const cronResult = await fetchJson(
     `${appUrl}/api/cron/recurring-invoices?mode=${mode}&limit=${Math.max(1, Math.trunc(limit))}`,
     {
@@ -75,7 +80,9 @@ async function run() {
       method: "POST",
     },
   );
-  const healthAfter = await fetchJson(`${appUrl}/api/health?mode=${mode}`);
+  const healthAfter = await fetchJson(`${appUrl}/api/health?mode=${mode}`, {
+    headers: healthHeaders,
+  });
 
   const afterAutomation = healthAfter.invoiceAutomation ?? {};
   const afterDeliveryQueue = healthAfter.invoiceDeliveryQueue ?? {};

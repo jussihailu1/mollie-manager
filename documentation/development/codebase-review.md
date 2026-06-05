@@ -43,7 +43,7 @@ Implemented so far:
 - auth now fails closed when `AUTH_SECRET` is missing and is covered by a focused test
 - latest consent tokens no longer ride in broad customer overview payloads
 - the operator flow now returns to the customer drawer with a copyable hosted link surface
-- helper and test coverage were added for the new consent-link utilities and the narrowed consent scope
+- helper and test coverage were added for the new consent-link utilities, the narrowed consent scope, and the health-route visibility split
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as partially mitigated rather than fully open.
 
@@ -135,9 +135,9 @@ Recommended direction:
 - minimize where the fully signed webhook URL exists in process memory and logs
 - reassess whether the webhook verification model can be made less leak-prone
 
-### P2: Public `/api/health` exposes internal operating state
+### P2: `/api/health` now splits public liveness from authenticated diagnostics
 
-The health route has no access control and returns internal readiness and reliability state.
+The health route now returns a minimal public liveness response by default, while the detailed reliability snapshot requires the cron bearer secret.
 
 Observed path:
 
@@ -153,7 +153,7 @@ Returned data includes:
 - invoice queue state
 - cron heartbeat history
 
-Why this is unhealthy:
+Why this was unhealthy:
 
 - it gives unauthenticated observers a clean map of internal operations
 - it is more than a basic liveness endpoint
@@ -161,8 +161,8 @@ Why this is unhealthy:
 
 Recommended direction:
 
-- split into public liveness and authenticated operator diagnostics
-- keep the detailed reliability snapshot behind operator auth or cron auth
+- keep the public response minimal
+- keep the detailed reliability snapshot behind cron auth or operator auth
 
 ### P2: Auth now fails closed on missing-secret misconfiguration
 

@@ -55,14 +55,19 @@ Invoice creation truth remains upstream:
 
 ## Liveness Signals
 
-`/api/health?mode=<test|live>` now includes:
+`/api/health` is now split:
+
+- public requests get a minimal liveness payload only
+- detailed diagnostics require `Authorization: Bearer <INVOICE_CRON_SHARED_SECRET>` or `Authorization: Bearer <CRON_SECRET>`
+
+Authenticated `/api/health?mode=<test|live>` includes:
 
 - `invoiceAutomationCron.lastCronRunAt`
 - `invoiceAutomationCron.lastCronRunOutcome`
 - `invoiceAutomationCron.lastCronSuccessAt`
 - `invoiceAutomationCron.lastCronFailureAt`
 
-Use these to confirm scheduler liveness without checking platform logs first.
+Use these authenticated diagnostics to confirm scheduler liveness without checking platform logs first.
 
 ## Current Scheduler State In Repo
 

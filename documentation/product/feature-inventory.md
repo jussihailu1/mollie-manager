@@ -57,6 +57,7 @@ Reference: `../development/codebase-review.md`
   Status: pass 1 is complete; the broad customer overview payload is now token-free and the remaining follow-up is to decide whether a hashed lookup-token model is worth it.
   Reference: `../development/track-a-onboarding-hardening-plan.md`
 - [ ] Split public health/liveness from authenticated operator diagnostics and reduce operational detail exposed anonymously
+  Status: `/api/health` now returns minimal public liveness by default; the remaining work is to consolidate richer diagnostics into a clearer operator surface.
 - [ ] Stop persisting secret-bearing webhook URLs into generic metadata and reduce secret sprawl
   Status: the metadata persistence path has been removed; the remaining work is to narrow the runtime exposure and finish the public health split.
 - [ ] Harden invoice PDF fetch and attachment handling with trusted-host, timeout, and size controls
