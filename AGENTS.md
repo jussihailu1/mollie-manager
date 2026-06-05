@@ -1,7 +1,8 @@
 <!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
+# Next.js Version Note
 
-Only IF Next.js is not behaving as expected, only then read this section.
+This repo uses `next@16` and `next-auth@5 beta`.
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
+Do not proactively read `node_modules/next/dist/docs/`.
+Only consult the specific relevant file there if you are changing framework-level behavior and the current API semantics are uncertain.
 <!-- END:nextjs-agent-rules -->
