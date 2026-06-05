@@ -26,12 +26,12 @@ Implemented in the first pass:
 - redirect notices now stay generic
 - consent tokens are no longer written into audit details
 - `payment_links.metadata` no longer duplicates the active consent token
+- latest consent links are now resolved through a narrower authenticated endpoint instead of broad customer overview payloads
 - the customer drawer return flow now preserves focus and gives operators a copyable hosted-link path
-- helper and test coverage were added for the consent-link URL and notice behavior
+- helper and test coverage were added for the consent-link URL, notice behavior, and narrowed consent scope
 
 Still open:
 
-- decide whether `latestConsentToken` should remain selected into broad customer overview queries
 - decide whether a hashed lookup-token model is worth a follow-up pass
 - keep the remaining hardening tracks sequenced after this pass
 
@@ -161,18 +161,18 @@ Objective:
 
 Changes:
 
-1. Review whether `latestConsentToken` should remain selected into general customer overview queries or move behind a narrower operator-only fetch path.
+1. Review whether a hashed lookup-token model is worth a follow-up pass.
 2. Add tests around:
    - consent-link creation result shape
    - audit detail redaction
    - no-token-in-notice behavior
-   - customer UI URL derivation from canonical consent storage
+   - customer UI URL derivation from canonical consent storage via the authenticated consent-link endpoint
 3. Decide whether a follow-up should convert the stored lookup token into a hashed token model.
 
 Status:
 
 - partially open
-- the URL and notice helpers are covered now, but the broader token ownership question still needs a decision
+- the URL and notice helpers are covered now, and the broader broad-overview token exposure has been removed
 
 Primary files:
 

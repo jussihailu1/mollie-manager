@@ -54,7 +54,7 @@ Canonical policy docs:
 Reference: `../development/codebase-review.md`
 
 - [ ] Remove consent-token leakage from redirect notices, audit logs, and non-essential metadata while improving the operator share-link workflow
-  Status: pass 1 is complete; the remaining follow-up is to review token ownership scope and decide whether a hashed lookup-token model is worth it.
+  Status: pass 1 is complete; the broad customer overview payload is now token-free and the remaining follow-up is to decide whether a hashed lookup-token model is worth it.
   Reference: `../development/track-a-onboarding-hardening-plan.md`
 - [ ] Split public health/liveness from authenticated operator diagnostics and reduce operational detail exposed anonymously
 - [ ] Stop persisting secret-bearing webhook URLs into generic metadata and reduce secret sprawl

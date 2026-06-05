@@ -1,6 +1,5 @@
 import "server-only";
 
-import { env } from "@/lib/env";
 import type { MollieMode } from "@/lib/env";
 import type {
   CustomerOverview,
@@ -8,7 +7,6 @@ import type {
   PaymentOverview,
 } from "@/lib/onboarding/data";
 import type { AlertInboxItem, AuditActivityItem } from "@/lib/reliability/data";
-import { buildConsentLinkUrl } from "@/lib/onboarding/consent-link";
 
 export type UiCustomerRecord = {
   address: string | null;
@@ -35,7 +33,6 @@ export type UiCustomerRecord = {
   latestFirstPaymentLinkStatus: string | null;
   latestFirstPaymentLinkUrl: string | null;
   latestConsentAcceptedAt: string | null;
-  latestConsentUrl: string | null;
   latestFirstPaymentMode: "real_installment" | "mandate_only" | null;
   latestFirstPaymentPaidAt: string | null;
   latestFirstPaymentStatus: string | null;
@@ -138,10 +135,6 @@ function mapAlertType(alert: AlertInboxItem): UiNotificationRecord["type"] {
 }
 
 export function toUiCustomerRecord(customer: CustomerOverview): UiCustomerRecord {
-  const latestConsentUrl = customer.latestConsentToken
-    ? buildConsentLinkUrl(customer.latestConsentToken, env.APP_URL)
-    : null;
-
   return {
     address: customer.address,
     businessName: customer.businessName,
@@ -172,7 +165,6 @@ export function toUiCustomerRecord(customer: CustomerOverview): UiCustomerRecord
     latestFirstPaymentLinkStatus: customer.latestFirstPaymentLinkStatus,
     latestFirstPaymentLinkUrl: customer.latestFirstPaymentLinkUrl,
     latestConsentAcceptedAt: customer.latestConsentAcceptedAt,
-    latestConsentUrl,
     latestFirstPaymentMode: customer.latestFirstPaymentMode,
     latestFirstPaymentPaidAt: customer.latestFirstPaymentPaidAt,
     latestFirstPaymentStatus: customer.latestFirstPaymentStatus,

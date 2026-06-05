@@ -5,6 +5,8 @@ import { cache } from "react";
 
 import type { DashboardModeFilter } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
+import { env } from "@/lib/env";
+import { buildConsentLinkUrl } from "@/lib/onboarding/consent-link";
 
 export type CustomerOverview = {
   address: string | null;
@@ -33,7 +35,6 @@ export type CustomerOverview = {
   latestFirstPaymentLinkStatus: string | null;
   latestFirstPaymentLinkUrl: string | null;
   latestConsentAcceptedAt: string | null;
-  latestConsentToken: string | null;
   latestFirstPaymentMode: "real_installment" | "mandate_only" | null;
   latestFirstPaymentPaidAt: string | null;
   latestFirstPaymentStatus: string | null;
@@ -246,7 +247,6 @@ const listCustomersByMode = cache(async (
         latest_payment_link.id as "latestFirstPaymentLinkId",
         latest_payment_link.checkout_url as "latestFirstPaymentLinkUrl",
         latest_payment_link.mollie_status as "latestFirstPaymentLinkStatus",
-        latest_consent.consent_token as "latestConsentToken",
         latest_consent.accepted_at as "latestConsentAcceptedAt",
         latest_consent.first_payment_mode as "latestFirstPaymentMode",
         latest_mandate.id as "latestMandateId",
@@ -396,7 +396,6 @@ export const getCustomerDetail = cache(async (
             latest_payment_link.id as "latestFirstPaymentLinkId",
             latest_payment_link.checkout_url as "latestFirstPaymentLinkUrl",
             latest_payment_link.mollie_status as "latestFirstPaymentLinkStatus",
-            latest_consent.consent_token as "latestConsentToken",
             latest_consent.accepted_at as "latestConsentAcceptedAt",
             latest_consent.first_payment_mode as "latestFirstPaymentMode",
             latest_mandate.id as "latestMandateId",
@@ -599,6 +598,26 @@ export const getCustomerDetail = cache(async (
     subscriptions: subscriptionsResult.rows,
   } satisfies CustomerDetail;
 });
+
+export async function getLatestConsentLinkUrl(
+  customerId: string,
+  mode: DashboardModeFilter = "all",
+) {
+  const modeParam = toModeParam(mode);
+  const result = await getDb().execute<{ consentToken: string }>(sql`
+      select
+        soc.consent_token as "consentToken"
+      from subscription_onboarding_consents soc
+      where soc.customer_id = ${customerId}
+        and (${modeParam}::mollie_mode is null or soc.mode = ${modeParam})
+      order by soc.created_at desc
+      limit 1
+    `);
+
+  const consentToken = result.rows[0]?.consentToken ?? null;
+
+  return consentToken ? buildConsentLinkUrl(consentToken, env.APP_URL) : null;
+}
 
 const listSubscriptionsByMode = cache(async (mode: DashboardModeFilter) => {
   const modeParam = toModeParam(mode);

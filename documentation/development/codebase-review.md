@@ -41,8 +41,9 @@ Implemented so far:
 - `payment_links.metadata` no longer duplicates the active consent token
 - secret-bearing webhook URLs are no longer written into payment metadata
 - auth now fails closed when `AUTH_SECRET` is missing and is covered by a focused test
+- latest consent tokens no longer ride in broad customer overview payloads
 - the operator flow now returns to the customer drawer with a copyable hosted link surface
-- helper and test coverage were added for the new consent-link utilities
+- helper and test coverage were added for the new consent-link utilities and the narrowed consent scope
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as partially mitigated rather than fully open.
 
@@ -59,13 +60,13 @@ The following checks passed during the review:
 
 ### P1: Consent token handling was too loose; the highest-risk leak paths are now mitigated
 
-The hosted customer consent token was previously treated too loosely for a bearer-style token. The highest-risk leak paths have now been reduced, but the canonical token still exists in dedicated storage and is still used to derive operator-facing consent links.
+The hosted customer consent token was previously treated too loosely for a bearer-style token. The highest-risk leak paths have now been reduced, and the token is no longer selected into broad customer overview payloads. The canonical token still exists in dedicated storage and is now read only by a narrower authenticated consent-link endpoint to derive operator-facing consent links.
 
 Observed paths:
 
 - generated in [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1124>)
 - stored in `subscription_onboarding_consents` in [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1219>)
-- derived into operator-facing UI data in [lib/ui-data.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/ui-data.ts:125>)
+- read by the authenticated consent-link endpoint in [app/api/customer-consent-link/route.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/app/api/customer-consent-link/route.ts:1>) through [lib/onboarding/data.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/data.ts:602>)
 - surfaced through the customer drawer copy flow in [components/customer-flow-dialogs.tsx](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/components/customer-flow-dialogs.tsx:964>)
 - no longer written into audit details in [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1227>) through [lib/audit.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/audit.ts:45>)
 - no longer pushed into the operator redirect notice query string in [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1247>) via [lib/onboarding/consent-link.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/consent-link.ts:1>)
@@ -75,13 +76,14 @@ Why this is unhealthy:
 - query-string transport was a real leak path and should stay removed
 - audit logs should not persist active customer-facing bearer tokens
 - the remaining token exposure should stay constrained to the canonical consent table and intentionally derived operator UI
+- the broad customer overview path should stay token-free
 
 Recommended direction:
 
 - keep the redirect notice generic and continue using the drawer-based copy flow
 - keep the audit redaction in place
 - keep token duplication out of generic metadata unless a concrete dependency reappears
-- review whether `latestConsentToken` should remain in broad customer overview data or move behind a narrower operator-only fetch path
+- keep latest consent token lookup behind the narrower authenticated endpoint
 - consider storing only a hashed lookup token if the flow can support it
 
 ### P1: Invoice PDF delivery path allows unsafe server-side fetches

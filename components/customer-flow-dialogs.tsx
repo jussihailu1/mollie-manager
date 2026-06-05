@@ -102,7 +102,6 @@ export type CustomerFlowRecord = {
   latestFirstPaymentLinkStatus: string | null;
   latestFirstPaymentLinkUrl: string | null;
   latestConsentAcceptedAt: string | null;
-  latestConsentUrl: string | null;
   latestFirstPaymentMode: "real_installment" | "mandate_only" | null;
   latestFirstPaymentPaidAt: string | null;
   latestFirstPaymentStatus: string | null;
@@ -1317,6 +1316,9 @@ export function CustomerDrawer({
   const router = useRouter();
   const [repairError, setRepairError] = useState<string | null>(null);
   const [isRepairing, setIsRepairing] = useState(false);
+  const [latestConsentUrl, setLatestConsentUrl] = useState<string | null>(null);
+  const [isConsentLinkLoading, setIsConsentLinkLoading] = useState(false);
+  const currentCustomerId = customer?.id ?? null;
 
   useEffect(() => {
     const currentCustomer = customer;
@@ -1401,6 +1403,65 @@ export function CustomerDrawer({
     setIsRepairing(false);
   }, [customer?.id]);
 
+  useEffect(() => {
+    const customerId = currentCustomerId;
+
+    if (!open || !customerId) {
+      setLatestConsentUrl(null);
+      setIsConsentLinkLoading(false);
+      return;
+    }
+
+    const resolvedCustomerId = customerId;
+
+    let active = true;
+    setLatestConsentUrl(null);
+    setIsConsentLinkLoading(true);
+
+    async function loadConsentLink() {
+      try {
+        const consentLinkUrl = new URL("/api/customer-consent-link", window.location.origin);
+        consentLinkUrl.searchParams.set("customerId", resolvedCustomerId);
+        const response = await fetch(consentLinkUrl.toString(), {
+          cache: "no-store",
+        });
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string; latestConsentUrl?: string | null }
+          | null;
+
+        if (!response.ok) {
+          throw new Error(
+            payload && typeof payload.error === "string"
+              ? payload.error
+              : "Failed to load hosted consent link.",
+          );
+        }
+
+        if (active) {
+          setLatestConsentUrl(
+            payload && typeof payload.latestConsentUrl === "string"
+              ? payload.latestConsentUrl
+              : null,
+          );
+        }
+      } catch {
+        if (active) {
+          setLatestConsentUrl(null);
+        }
+      } finally {
+        if (active) {
+          setIsConsentLinkLoading(false);
+        }
+      }
+    }
+
+    loadConsentLink();
+
+    return () => {
+      active = false;
+    };
+  }, [currentCustomerId, open]);
+
   if (!customer) {
     return null;
   }
@@ -1427,6 +1488,13 @@ export function CustomerDrawer({
     customer.latestSubscriptionId ||
       customer.latestFirstPaymentMode ||
       customer.latestConsentAcceptedAt,
+  );
+  const hasConsentLinkSection = Boolean(
+    latestConsentUrl ||
+      isConsentLinkLoading ||
+      customer.latestFirstPaymentMode ||
+      customer.latestConsentAcceptedAt ||
+      customer.latestFirstPaymentPaidAt,
   );
 
   return (
@@ -1709,20 +1777,22 @@ export function CustomerDrawer({
             </>
           ) : null}
 
-          {showOnboardingSections &&
-          (customer.latestConsentUrl ||
-            customer.latestConsentAcceptedAt ||
-            customer.latestFirstPaymentPaidAt) ? (
+          {showOnboardingSections && hasConsentLinkSection ? (
             <>
               <Separator />
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                   Payment context
                 </h3>
-                {customer.latestConsentUrl ? (
+                {isConsentLinkLoading ? (
+                  <p className="text-sm text-muted-foreground">
+                    Loading hosted consent link...
+                  </p>
+                ) : null}
+                {latestConsentUrl ? (
                   <div className="space-y-2">
                     <Label>Hosted consent link</Label>
-                    <CopyField value={customer.latestConsentUrl} />
+                    <CopyField value={latestConsentUrl} />
                   </div>
                 ) : null}
                 {customer.latestConsentAcceptedAt ? (
