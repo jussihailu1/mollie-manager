@@ -1,3 +1,5 @@
+import type { InvoicePdfAttachmentStatus } from "@/lib/invoice-pdf";
+
 export type MollieAmountSnapshot = {
   currency: string;
   value: string;
@@ -26,6 +28,7 @@ export type PaymentInvoiceSummary = {
   createdByActorEmail: string | null;
   createdByActorKind: "system" | "user" | null;
   deliveryRecipient: string | null;
+  documentAttachmentStatus: InvoicePdfAttachmentStatus | null;
   eboekhoudenInvoiceId: string | null;
   eboekhoudenInvoiceNumber: string | null;
   intendedRecipient: string | null;

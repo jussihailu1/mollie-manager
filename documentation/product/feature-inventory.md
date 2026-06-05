@@ -61,7 +61,7 @@ Reference: `../development/codebase-review.md`
 - [ ] Stop persisting secret-bearing webhook URLs into generic metadata and reduce secret sprawl
   Status: the metadata persistence path is gone and the payment drawer no longer exposes the raw Mollie webhook callback URL; the remaining work is to reduce outbound signed-URL exposure in the webhook design itself.
 - [ ] Harden invoice PDF fetch and attachment handling with trusted-host, timeout, and size controls
-  Status: trusted e-Boekhouden-only URL handling plus redirect, timeout, and size controls are now in place; the remaining work is clearer operator visibility into attachment/source status.
+  Status: trusted e-Boekhouden-only URL handling, redirect/timeout/size controls, and payment-drawer attachment status are now in place; the remaining work is broader ops-surface visibility only if it proves necessary.
 - [ ] Add integration coverage for consent, webhook sync, first-payment invoice creation, recurring invoice delivery retry, and repair flows
 - [ ] Refactor oversized billing/orchestration modules into smaller policy, state-transition, and integration units
 

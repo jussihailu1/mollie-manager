@@ -17,4 +17,13 @@ describe("payment drawer webhook scope", () => {
     assert.match(source, /Webhook Callback/);
     assert.match(source, /Configured in Mollie and hidden in this UI\./);
   });
+
+  it("surfaces invoice attachment status without exposing raw metadata", () => {
+    const routeSource = readFileSync(resolve("app/api/payments/mollie/route.ts"), "utf8");
+    const drawerSource = readFileSync(resolve("components/payment-drawer.tsx"), "utf8");
+
+    assert.match(routeSource, /invoiceDocumentAttachmentStatus/);
+    assert.match(drawerSource, /Attachment Delivery/);
+    assert.match(drawerSource, /formatInvoiceAttachmentStatus/);
+  });
 });

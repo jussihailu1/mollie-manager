@@ -45,6 +45,7 @@ Implemented so far:
 - latest consent tokens no longer ride in broad customer overview payloads
 - the operator flow now returns to the customer drawer with a copyable hosted link surface
 - invoice PDF URLs are now trust-gated before operator display or email use, and attachment fetches now enforce redirect, timeout, and size controls
+- invoice attachment outcome is now surfaced in the payment drawer instead of being buried in raw metadata
 - helper and test coverage were added for the new consent-link utilities, the narrowed consent scope, the health-route visibility split, and the invoice PDF guardrails
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as partially mitigated rather than fully open.
@@ -112,7 +113,8 @@ Recommended direction:
 - keep allowing only trusted e-Boekhouden-origin document hosts
 - keep fetch timeout and maximum response size enforcement in place
 - keep treating metadata URLs as hints, not truth
-- expose attachment/source status more clearly in operator surfaces if attachment diagnostics become a recurring support issue
+- keep the payment-drawer attachment status visible for operator debugging
+- expose the same attachment/source status in broader ops surfaces only if it becomes operationally necessary
 
 ### P1: Webhook secret is still embedded in outbound URLs, but the metadata and operator leak paths are gone
 

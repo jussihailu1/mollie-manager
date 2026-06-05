@@ -205,6 +205,31 @@ function formatInvoiceOwnerType(
   return value === "recurring_schedule" ? "Recurring schedule" : "Payment row";
 }
 
+function formatInvoiceAttachmentStatus(
+  value: PaymentDrawerData["invoice"]["documentAttachmentStatus"],
+) {
+  switch (value) {
+    case "attached":
+      return "Attached to the email.";
+    case "download_failed":
+      return "Email sent without attachment because the PDF download failed.";
+    case "invalid_content_type":
+      return "Email sent without attachment because the upstream file was not a PDF.";
+    case "invalid_pdf":
+      return "Email sent without attachment because the downloaded file was not a valid PDF.";
+    case "missing_url":
+      return "Email sent without attachment because no invoice document URL was available.";
+    case "timeout":
+      return "Email sent without attachment because the PDF download timed out.";
+    case "too_large":
+      return "Email sent without attachment because the PDF exceeded the size limit.";
+    case "untrusted_url":
+      return "Email sent without attachment because the upstream document URL was not trusted.";
+    default:
+      return "-";
+  }
+}
+
 function shouldAutoRepairPayment(
   payment: PaymentRecord,
   details: PaymentDrawerData | null,
@@ -495,6 +520,10 @@ export function PaymentDrawer({
                   label="Invoice Number"
                   value={details.invoice.eboekhoudenInvoiceNumber ?? "-"}
                 />
+                <ValueRow
+                  label="Attachment Delivery"
+                  value={formatInvoiceAttachmentStatus(details.invoice.documentAttachmentStatus)}
+                />
               </>
             ) : null}
             <ValueRow
@@ -592,6 +621,10 @@ export function PaymentDrawer({
                   <ValueRow
                     label="Recipient overridden"
                     value={details.invoice.recipientOverridden ? "Yes" : "No"}
+                  />
+                  <ValueRow
+                    label="Email attachment"
+                    value={formatInvoiceAttachmentStatus(details.invoice.documentAttachmentStatus)}
                   />
                   <ValueRow
                     label="Audit actor"

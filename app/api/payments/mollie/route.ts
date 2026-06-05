@@ -95,6 +95,26 @@ function extractInvoicePdfUrl(metadata: Record<string, unknown>) {
   return null;
 }
 
+function extractInvoiceAttachmentStatus(
+  metadata: Record<string, unknown>,
+): PaymentDrawerData["invoice"]["documentAttachmentStatus"] {
+  const status = metadata.invoiceDocumentAttachmentStatus;
+
+  switch (status) {
+    case "attached":
+    case "download_failed":
+    case "invalid_content_type":
+    case "invalid_pdf":
+    case "missing_url":
+    case "timeout":
+    case "too_large":
+    case "untrusted_url":
+      return status;
+    default:
+      return null;
+  }
+}
+
 async function resolveInvoicePdfUrl(localPayment: LocalPaymentLookup) {
   const metadataUrl = extractInvoicePdfUrl(localPayment.invoiceMetadata);
   if (metadataUrl) {
@@ -123,6 +143,9 @@ async function toPaymentDrawerData(
   payment: Payment,
 ): Promise<PaymentDrawerData> {
   const invoicePdfUrl = await resolveInvoicePdfUrl(localPayment);
+  const documentAttachmentStatus = extractInvoiceAttachmentStatus(
+    localPayment.invoiceMetadata,
+  );
   const triggerKind: PaymentDrawerData["invoice"]["triggerKind"] =
     localPayment.invoiceTriggerSource === "reconciled_existing"
       ? "recovered_existing"
@@ -143,6 +166,7 @@ async function toPaymentDrawerData(
       createdByActorEmail: localPayment.invoiceTriggerActorEmail,
       createdByActorKind: localPayment.invoiceTriggerActorKind,
       deliveryRecipient: localPayment.invoiceDeliveryRecipient,
+      documentAttachmentStatus,
       eboekhoudenInvoiceId: localPayment.eboekhoudenInvoiceId,
       eboekhoudenInvoiceNumber: localPayment.eboekhoudenInvoiceNumber,
       intendedRecipient: localPayment.invoiceDeliveryIntendedRecipient,
