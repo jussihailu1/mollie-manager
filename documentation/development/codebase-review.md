@@ -40,6 +40,7 @@ Implemented so far:
 - consent tokens are no longer written into audit details
 - `payment_links.metadata` no longer duplicates the active consent token
 - secret-bearing webhook URLs are no longer written into payment metadata
+- the payment drawer no longer returns or renders the raw Mollie webhook callback URL
 - auth now fails closed when `AUTH_SECRET` is missing and is covered by a focused test
 - latest consent tokens no longer ride in broad customer overview payloads
 - the operator flow now returns to the customer drawer with a copyable hosted link surface
@@ -113,9 +114,9 @@ Recommended direction:
 - keep treating metadata URLs as hints, not truth
 - expose attachment/source status more clearly in operator surfaces if attachment diagnostics become a recurring support issue
 
-### P1: Webhook secret is still embedded in outbound URLs, but the metadata leak path is gone
+### P1: Webhook secret is still embedded in outbound URLs, but the metadata and operator leak paths are gone
 
-The shared webhook secret is appended as a query parameter for Mollie webhook calls. The previous persistence path into generic metadata has been removed.
+The shared webhook secret is still appended as a query parameter for Mollie webhook calls. The previous persistence path into generic metadata has been removed, and the operator payment drawer no longer returns the raw callback URL to the client.
 
 Observed paths:
 
@@ -123,6 +124,7 @@ Observed paths:
 - request validation in [app/api/webhooks/mollie/route.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/app/api/webhooks/mollie/route.ts:88>)
 - onboarding use in [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1125>)
 - the previous persistence path into payment metadata has been removed in [lib/reliability/sync.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/sync.ts>)
+- raw webhook URL display is now replaced by non-secret status in [app/api/payments/mollie/route.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/app/api/payments/mollie/route.ts:211>) and [components/payment-drawer.tsx](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/components/payment-drawer.tsx:731>)
 
 Why this is unhealthy:
 
@@ -133,6 +135,7 @@ Why this is unhealthy:
 Recommended direction:
 
 - keep the secret out of persisted metadata
+- keep the secret out of client-visible operator payloads
 - minimize where the fully signed webhook URL exists in process memory and logs
 - reassess whether the webhook verification model can be made less leak-prone
 

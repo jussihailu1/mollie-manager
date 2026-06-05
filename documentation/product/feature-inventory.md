@@ -59,7 +59,7 @@ Reference: `../development/codebase-review.md`
 - [ ] Split public health/liveness from authenticated operator diagnostics and reduce operational detail exposed anonymously
   Status: `/api/health` now returns minimal public liveness by default; the remaining work is to consolidate richer diagnostics into a clearer operator surface.
 - [ ] Stop persisting secret-bearing webhook URLs into generic metadata and reduce secret sprawl
-  Status: the metadata persistence path has been removed; the remaining work is to narrow the runtime exposure and finish the public health split.
+  Status: the metadata persistence path is gone and the payment drawer no longer exposes the raw Mollie webhook callback URL; the remaining work is to reduce outbound signed-URL exposure in the webhook design itself.
 - [ ] Harden invoice PDF fetch and attachment handling with trusted-host, timeout, and size controls
   Status: trusted e-Boekhouden-only URL handling plus redirect, timeout, and size controls are now in place; the remaining work is clearer operator visibility into attachment/source status.
 - [ ] Add integration coverage for consent, webhook sync, first-payment invoice creation, recurring invoice delivery retry, and repair flows

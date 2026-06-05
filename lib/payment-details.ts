@@ -97,6 +97,6 @@ export type PaymentDrawerData = {
       message: string;
     } | null;
     subscriptionId: string | null;
-    webhookUrl: string | null;
+    webhookUrlStatus: "hidden" | "missing";
   };
 };

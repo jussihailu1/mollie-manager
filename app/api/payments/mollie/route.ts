@@ -208,7 +208,7 @@ async function toPaymentDrawerData(
       status: payment.status,
       statusReason: payment.statusReason ?? null,
       subscriptionId: payment.subscriptionId ?? null,
-      webhookUrl: payment.webhookUrl ?? null,
+      webhookUrlStatus: payment.webhookUrl ? "hidden" : "missing",
     },
   };
 }

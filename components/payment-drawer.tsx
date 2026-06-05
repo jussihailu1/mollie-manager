@@ -728,7 +728,14 @@ export function PaymentDrawer({
                   <Section title="URLs">
                     <ValueRow label="Redirect URL" value={renderUnknownValue(details.payment.redirectUrl)} />
                     <ValueRow label="Cancel URL" value={renderUnknownValue(details.payment.cancelUrl)} />
-                    <ValueRow label="Webhook URL" value={renderUnknownValue(details.payment.webhookUrl)} />
+                    <ValueRow
+                      label="Webhook Callback"
+                      value={
+                        details.payment.webhookUrlStatus === "hidden"
+                          ? "Configured in Mollie and hidden in this UI."
+                          : "-"
+                      }
+                    />
                   </Section>
 
                   {linkEntries.length > 0 ? (
