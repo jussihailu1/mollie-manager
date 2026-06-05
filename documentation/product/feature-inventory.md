@@ -61,6 +61,7 @@ Reference: `../development/codebase-review.md`
 - [ ] Stop persisting secret-bearing webhook URLs into generic metadata and reduce secret sprawl
   Status: the metadata persistence path has been removed; the remaining work is to narrow the runtime exposure and finish the public health split.
 - [ ] Harden invoice PDF fetch and attachment handling with trusted-host, timeout, and size controls
+  Status: trusted e-Boekhouden-only URL handling plus redirect, timeout, and size controls are now in place; the remaining work is clearer operator visibility into attachment/source status.
 - [ ] Add integration coverage for consent, webhook sync, first-payment invoice creation, recurring invoice delivery retry, and repair flows
 - [ ] Refactor oversized billing/orchestration modules into smaller policy, state-transition, and integration units
 

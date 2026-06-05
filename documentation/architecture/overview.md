@@ -70,6 +70,7 @@ Legacy redirect routes still exist for compatibility:
 - `lib/eboekhouden/*`: relation linking, invoice creation, reconcile, and retry logic
 - `lib/reliability/*`: sync, alerts, repairs, and reporting
 - `lib/invoice-delivery*.ts`: invoice email delivery and retry logic
+- `lib/invoice-pdf.ts`: trusted invoice document URL normalization and attachment fetch guardrails
 
 ## Data Model Notes
 
@@ -97,3 +98,4 @@ Important entities:
 - Use claim-before-upstream-call patterns for invoice creation to prevent duplicates.
 - Treat webhooks as signals that trigger re-fetch and reconciliation.
 - Keep test and live mode separation explicit at both env and record level.
+- Treat invoice document URLs as hints; only trusted e-Boekhouden PDF hosts should be displayed or fetched.

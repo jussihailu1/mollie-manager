@@ -44,8 +44,8 @@ Existing SMTP env remains required for app delivery:
 5. Retries unsent recurring invoice emails where invoice already exists upstream.
 6. Retries unsent first-payment invoice emails where invoice already exists upstream.
 7. Sends invoice document in app email:
-   - PDF attachment when `urlPdfFile` can be downloaded.
-   - fallback safe link when PDF download is unavailable.
+   - PDF attachment when a trusted `https://*.e-boekhouden.nl` document URL can be downloaded within the attachment limits.
+   - fallback safe link when attachment download is unavailable, oversized, times out, or the upstream URL is not trusted.
 
 Invoice creation truth remains upstream:
 

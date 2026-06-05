@@ -43,7 +43,8 @@ Implemented so far:
 - auth now fails closed when `AUTH_SECRET` is missing and is covered by a focused test
 - latest consent tokens no longer ride in broad customer overview payloads
 - the operator flow now returns to the customer drawer with a copyable hosted link surface
-- helper and test coverage were added for the new consent-link utilities, the narrowed consent scope, and the health-route visibility split
+- invoice PDF URLs are now trust-gated before operator display or email use, and attachment fetches now enforce redirect, timeout, and size controls
+- helper and test coverage were added for the new consent-link utilities, the narrowed consent scope, the health-route visibility split, and the invoice PDF guardrails
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as partially mitigated rather than fully open.
 
@@ -86,9 +87,9 @@ Recommended direction:
 - keep latest consent token lookup behind the narrower authenticated endpoint
 - consider storing only a hashed lookup token if the flow can support it
 
-### P1: Invoice PDF delivery path allows unsafe server-side fetches
+### P1: Invoice PDF delivery path is now constrained to trusted document sources
 
-The app resolves invoice document URLs from mutable metadata and then fetches them server-side for email attachments.
+The app no longer trusts arbitrary invoice document URLs. It now normalizes invoice PDF links to trusted `https://*.e-boekhouden.nl` hosts, keeps untrusted links out of the payment drawer and outgoing emails, and caps attachment fetch redirects, time, and size.
 
 Observed paths:
 
@@ -97,7 +98,7 @@ Observed paths:
 - delivery-time URL resolution in [lib/invoice-delivery.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/invoice-delivery.ts:139>)
 - direct fetch in [lib/invoice-delivery.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/invoice-delivery.ts:169>)
 
-Why this is unhealthy:
+Why this was unhealthy:
 
 - no allowlist for expected hosts
 - no timeout enforcement
@@ -107,10 +108,10 @@ Why this is unhealthy:
 
 Recommended direction:
 
-- allow only trusted e-Boekhouden-origin document hosts
-- enforce fetch timeout and maximum response size
-- require PDF content type before attachment
-- treat metadata URLs as hints, not truth
+- keep allowing only trusted e-Boekhouden-origin document hosts
+- keep fetch timeout and maximum response size enforcement in place
+- keep treating metadata URLs as hints, not truth
+- expose attachment/source status more clearly in operator surfaces if attachment diagnostics become a recurring support issue
 
 ### P1: Webhook secret is still embedded in outbound URLs, but the metadata leak path is gone
 

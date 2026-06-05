@@ -6,6 +6,7 @@ import { requireViewerSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
 import { getEboekhoudenInvoice } from "@/lib/eboekhouden/client";
+import { normalizeTrustedInvoicePdfUrl } from "@/lib/invoice-pdf";
 import type { PaymentDrawerData } from "@/lib/payment-details";
 import { getMollieClient } from "@/lib/mollie/client";
 
@@ -70,7 +71,10 @@ function toAmountSnapshot(
 function extractInvoicePdfUrl(metadata: Record<string, unknown>) {
   const invoiceDocumentUrl = metadata.invoiceDocumentUrl;
   if (typeof invoiceDocumentUrl === "string" && invoiceDocumentUrl.trim()) {
-    return invoiceDocumentUrl;
+    const trustedUrl = normalizeTrustedInvoicePdfUrl(invoiceDocumentUrl);
+    if (trustedUrl) {
+      return trustedUrl;
+    }
   }
 
   const eboekhoudenInvoice = metadata.eboekhoudenInvoice;
@@ -81,7 +85,10 @@ function extractInvoicePdfUrl(metadata: Record<string, unknown>) {
   ) {
     const nestedUrl = (eboekhoudenInvoice as Record<string, unknown>).urlPdfFile;
     if (typeof nestedUrl === "string" && nestedUrl.trim()) {
-      return nestedUrl;
+      const trustedUrl = normalizeTrustedInvoicePdfUrl(nestedUrl);
+      if (trustedUrl) {
+        return trustedUrl;
+      }
     }
   }
 
@@ -105,7 +112,7 @@ async function resolveInvoicePdfUrl(localPayment: LocalPaymentLookup) {
 
   try {
     const invoice = await getEboekhoudenInvoice(invoiceId);
-    return invoice.urlPdfFile ?? null;
+    return normalizeTrustedInvoicePdfUrl(invoice.urlPdfFile ?? null);
   } catch {
     return null;
   }

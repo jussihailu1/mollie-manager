@@ -12,6 +12,10 @@ import {
   MAX_DELIVERY_ATTEMPTS,
   toInvoiceDeliveryAttemptCount,
 } from "@/lib/invoice-delivery-retry";
+import {
+  buildTrustedInvoicePdfAttachment,
+  normalizeTrustedInvoicePdfUrl,
+} from "@/lib/invoice-pdf";
 import { sendEmailTo } from "@/lib/notifications/email";
 import { deliverAlertEmail, openAlert } from "@/lib/reliability/alerts";
 
@@ -140,8 +144,11 @@ async function resolveInvoicePdfUrl(input: {
   eboekhoudenInvoiceId: string | null;
   eboekhoudenInvoicePdfUrl?: string | null;
 }) {
-  if (input.eboekhoudenInvoicePdfUrl) {
-    return input.eboekhoudenInvoicePdfUrl;
+  const trustedMetadataUrl = normalizeTrustedInvoicePdfUrl(
+    input.eboekhoudenInvoicePdfUrl,
+  );
+  if (trustedMetadataUrl) {
+    return trustedMetadataUrl;
   }
 
   if (!input.eboekhoudenInvoiceId) {
@@ -154,39 +161,7 @@ async function resolveInvoicePdfUrl(input: {
   }
 
   const invoice = await getEboekhoudenInvoice(numericInvoiceId);
-  return invoice.urlPdfFile ?? null;
-}
-
-async function buildInvoicePdfAttachment(input: {
-  invoiceNumber: string;
-  invoicePdfUrl: string | null;
-}) {
-  if (!input.invoicePdfUrl) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(input.invoicePdfUrl, {
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const bytes = await response.arrayBuffer();
-    if (bytes.byteLength === 0) {
-      return null;
-    }
-
-    return {
-      content: Buffer.from(bytes),
-      contentType: "application/pdf",
-      filename: `factuur-${input.invoiceNumber}.pdf`,
-    };
-  } catch {
-    return null;
-  }
+  return normalizeTrustedInvoicePdfUrl(invoice.urlPdfFile ?? null);
 }
 
 async function storeDeliverySuccess(input: {
@@ -464,13 +439,13 @@ export async function deliverCustomerInvoiceEmail(input: DeliveryInput) {
     eboekhoudenInvoiceId: input.eboekhoudenInvoiceId,
     eboekhoudenInvoicePdfUrl: input.eboekhoudenInvoicePdfUrl,
   });
-  const attachment = await buildInvoicePdfAttachment({
+  const attachmentResult = await buildTrustedInvoicePdfAttachment({
     invoiceNumber,
     invoicePdfUrl,
   });
   const finalRecipient = env.INVOICE_EMAIL_OVERRIDE_TO ?? input.customerEmail;
   const content = buildEmailContent({
-    invoicePdfUrl,
+    invoicePdfUrl: attachmentResult.trustedInvoicePdfUrl,
     invoiceNumber,
     invoiceType: input.invoiceType,
     plannedCollectionDate: input.plannedCollectionDate,
@@ -478,7 +453,9 @@ export async function deliverCustomerInvoiceEmail(input: DeliveryInput) {
 
   try {
     await sendEmailTo({
-      attachments: attachment ? [attachment] : undefined,
+      attachments: attachmentResult.attachment
+        ? [attachmentResult.attachment]
+        : undefined,
       subject: content.subject,
       text: content.text,
       to: finalRecipient,
@@ -496,8 +473,9 @@ export async function deliverCustomerInvoiceEmail(input: DeliveryInput) {
         invoiceDeliveryNextRetryAt: null,
         invoiceDeliveryPermanentFailure: false,
         invoiceDeliveryRecipient: finalRecipient,
-        invoiceDocumentAttached: attachment ? true : false,
-        invoiceDocumentUrl: invoicePdfUrl,
+        invoiceDocumentAttached: attachmentResult.attachment ? true : false,
+        invoiceDocumentAttachmentStatus: attachmentResult.attachmentStatus,
+        invoiceDocumentUrl: attachmentResult.trustedInvoicePdfUrl,
         invoiceDeliveryStatus: "sent",
         invoiceIntendedRecipient: input.customerEmail,
         invoiceRecipientOverridden: env.INVOICE_EMAIL_OVERRIDE_TO ? true : false,
