@@ -54,7 +54,7 @@ Canonical policy docs:
 Reference: `../development/codebase-review.md`
 
 - [ ] Remove consent-token leakage from redirect notices, audit logs, and non-essential metadata while improving the operator share-link workflow
-  Status: pass 1 is complete; the broad customer overview payload is now token-free and the remaining follow-up is to decide whether a hashed lookup-token model is worth it.
+  Status: the hashed lookup-token follow-up is implemented. Canonical lookup uses a hash, operator link regeneration uses encrypted recovery, and a one-time backfill script removes legacy plaintext rows after the schema migration.
   Reference: `../development/track-a-onboarding-hardening-plan.md`
 - [ ] Split public health/liveness from authenticated operator diagnostics and reduce operational detail exposed anonymously
   Status: `/api/health` now returns minimal public liveness by default; the remaining work is to consolidate richer diagnostics into a clearer operator surface.

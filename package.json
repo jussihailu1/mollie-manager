@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "db:apply": "node scripts/db-apply.mjs",
+    "db:backfill-consent-tokens": "node --import tsx scripts/backfill-consent-token-storage.ts",
     "db:check-raw": "node scripts/db-check-raw.mjs",
     "ops:invoice-check": "node scripts/invoice-automation-check.mjs",
     "ops:invoice-gate": "node scripts/invoice-automation-gate.mjs",

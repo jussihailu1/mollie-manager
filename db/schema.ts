@@ -676,7 +676,9 @@ export const subscriptionOnboardingConsents = pgTable(
     mode: mollieModeEnum("mode").notNull(),
     customerId: text("customer_id").notNull(),
     paymentLinkId: text("payment_link_id").notNull(),
-    consentToken: text("consent_token").notNull(),
+    consentToken: text("consent_token"),
+    consentTokenHash: text("consent_token_hash"),
+    consentTokenCiphertext: text("consent_token_ciphertext"),
     firstPaymentMode: firstPaymentModeEnum("first_payment_mode").notNull(),
     termsVersion: text("terms_version").notNull(),
     requiredCheckboxKeys: jsonb("required_checkbox_keys")
@@ -724,9 +726,19 @@ export const subscriptionOnboardingConsents = pgTable(
     unique("subscription_onboarding_consents_consent_token_key").on(
       table.consentToken,
     ),
+    unique("subscription_onboarding_consents_consent_token_hash_key").on(
+      table.consentTokenHash,
+    ),
     unique("subscription_onboarding_consents_mode_payment_link_id_key").on(
       table.mode,
       table.paymentLinkId,
+    ),
+    check(
+      "subscription_onboarding_consents_token_storage_check",
+      sql`(
+        (${table.consentTokenHash} is null and ${table.consentTokenCiphertext} is null and ${table.consentToken} is not null)
+        or (${table.consentTokenHash} is not null and ${table.consentTokenCiphertext} is not null)
+      )`,
     ),
     index("subscription_onboarding_consents_customer_idx").on(
       table.customerId,

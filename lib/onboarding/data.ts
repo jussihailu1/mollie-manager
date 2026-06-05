@@ -7,6 +7,10 @@ import type { DashboardModeFilter } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
 import { env } from "@/lib/env";
 import { buildConsentLinkUrl } from "@/lib/onboarding/consent-link";
+import {
+  buildConsentTokenStorage,
+  resolveStoredConsentToken,
+} from "@/lib/onboarding/consent-token-storage";
 
 export type CustomerOverview = {
   address: string | null;
@@ -604,9 +608,17 @@ export async function getLatestConsentLinkUrl(
   mode: DashboardModeFilter = "all",
 ) {
   const modeParam = toModeParam(mode);
-  const result = await getDb().execute<{ consentToken: string }>(sql`
+  const result = await getDb().execute<{
+    consentId: string;
+    consentToken: string | null;
+    consentTokenCiphertext: string | null;
+    consentTokenHash: string | null;
+  }>(sql`
       select
-        soc.consent_token as "consentToken"
+        soc.id as "consentId",
+        soc.consent_token as "consentToken",
+        soc.consent_token_ciphertext as "consentTokenCiphertext",
+        soc.consent_token_hash as "consentTokenHash"
       from subscription_onboarding_consents soc
       where soc.customer_id = ${customerId}
         and (${modeParam}::mollie_mode is null or soc.mode = ${modeParam})
@@ -614,9 +626,42 @@ export async function getLatestConsentLinkUrl(
       limit 1
     `);
 
-  const consentToken = result.rows[0]?.consentToken ?? null;
+  const latestConsent = result.rows[0];
 
-  return consentToken ? buildConsentLinkUrl(consentToken, env.APP_URL) : null;
+  if (!latestConsent) {
+    return null;
+  }
+
+  const consentToken = resolveStoredConsentToken(latestConsent);
+
+  if (!consentToken) {
+    return null;
+  }
+
+  if (
+    latestConsent.consentToken ||
+    !latestConsent.consentTokenHash ||
+    !latestConsent.consentTokenCiphertext
+  ) {
+    const storage = buildConsentTokenStorage(consentToken);
+
+    await getDb().execute(sql`
+      update subscription_onboarding_consents
+      set
+        consent_token = null,
+        consent_token_hash = ${storage.consentTokenHash},
+        consent_token_ciphertext = ${storage.consentTokenCiphertext},
+        updated_at = now()
+      where id = ${latestConsent.consentId}
+        and (
+          consent_token is not null
+          or consent_token_hash is null
+          or consent_token_ciphertext is null
+        )
+    `);
+  }
+
+  return buildConsentLinkUrl(consentToken, env.APP_URL);
 }
 
 const listSubscriptionsByMode = cache(async (mode: DashboardModeFilter) => {

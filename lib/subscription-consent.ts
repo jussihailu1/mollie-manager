@@ -8,6 +8,11 @@ import { z } from "zod";
 import { getDb } from "@/lib/db";
 import { env } from "@/lib/env";
 import {
+  buildConsentTokenStorage,
+  hashConsentToken,
+  resolveStoredConsentToken,
+} from "@/lib/onboarding/consent-token-storage";
+import {
   buildRecurringBillingConsentSnapshot,
 } from "@/lib/recurring-billing-policy";
 
@@ -62,6 +67,7 @@ export type SubscriptionConsentRecord = {
   acceptedCheckboxKeys: string[];
   businessName: string | null;
   checkoutUrl: string | null;
+  consentId: string;
   consentToken: string;
   customerId: string;
   firstPaymentMode: "real_installment" | "mandate_only";
@@ -106,6 +112,44 @@ export function buildSubscriptionConsentReturnUrl(token: string) {
   return new URL(buildSubscriptionConsentReturnPath(token), env.APP_URL).toString();
 }
 
+type StoredConsentTokenRow = {
+  consentId: string;
+  consentToken: string | null;
+  consentTokenCiphertext: string | null;
+  consentTokenHash: string | null;
+};
+
+async function ensureStoredConsentToken(row: StoredConsentTokenRow) {
+  const consentToken = resolveStoredConsentToken(row);
+
+  if (!consentToken) {
+    return null;
+  }
+
+  if (row.consentTokenHash && row.consentTokenCiphertext && !row.consentToken) {
+    return consentToken;
+  }
+
+  const storage = buildConsentTokenStorage(consentToken);
+
+  await getDb().execute(sql`
+    update subscription_onboarding_consents
+    set
+      consent_token = null,
+      consent_token_hash = ${storage.consentTokenHash},
+      consent_token_ciphertext = ${storage.consentTokenCiphertext},
+      updated_at = now()
+    where id = ${row.consentId}
+      and (
+        consent_token is not null
+        or consent_token_hash is null
+        or consent_token_ciphertext is null
+      )
+  `);
+
+  return consentToken;
+}
+
 export async function getSubscriptionConsentByToken(token: string) {
   const parsedToken = consentTokenSchema.safeParse(token);
 
@@ -113,12 +157,17 @@ export async function getSubscriptionConsentByToken(token: string) {
     return null;
   }
 
+  const consentTokenHash = hashConsentToken(parsedToken.data);
+
   const result = await getDb().execute<{
     acceptedAt: string | null;
     acceptedCheckboxKeys: unknown;
     businessName: string | null;
     checkoutUrl: string | null;
-    consentToken: string;
+    consentId: string;
+    consentToken: string | null;
+    consentTokenCiphertext: string | null;
+    consentTokenHash: string | null;
     customerId: string;
     firstPaymentMode: "real_installment" | "mandate_only";
     mode: "test" | "live";
@@ -128,10 +177,13 @@ export async function getSubscriptionConsentByToken(token: string) {
     termsVersion: string;
   }>(sql`
     select
+      soc.id as "consentId",
       soc.mode,
       soc.customer_id as "customerId",
       soc.payment_link_id as "paymentLinkId",
       soc.consent_token as "consentToken",
+      soc.consent_token_ciphertext as "consentTokenCiphertext",
+      soc.consent_token_hash as "consentTokenHash",
       soc.first_payment_mode as "firstPaymentMode",
       soc.terms_version as "termsVersion",
       soc.required_checkbox_keys as "requiredCheckboxKeys",
@@ -143,7 +195,15 @@ export async function getSubscriptionConsentByToken(token: string) {
     from subscription_onboarding_consents soc
     inner join payment_links pl on pl.id = soc.payment_link_id and pl.mode = soc.mode
     inner join customers c on c.id = soc.customer_id and c.mode = soc.mode
-    where soc.consent_token = ${parsedToken.data}
+    where
+      soc.consent_token_hash = ${consentTokenHash}
+      or soc.consent_token = ${parsedToken.data}
+    order by
+      case
+        when soc.consent_token_hash = ${consentTokenHash} then 0
+        else 1
+      end,
+      soc.created_at desc
     limit 1
   `);
 
@@ -159,6 +219,12 @@ export async function getSubscriptionConsentByToken(token: string) {
     throw new Error("Stored consent snapshot is invalid.");
   }
 
+  const storedConsentToken = await ensureStoredConsentToken(row);
+
+  if (!storedConsentToken) {
+    return null;
+  }
+
   return {
     acceptedAt: row.acceptedAt,
     acceptedCheckboxKeys: Array.isArray(row.acceptedCheckboxKeys)
@@ -166,7 +232,8 @@ export async function getSubscriptionConsentByToken(token: string) {
       : [],
     businessName: row.businessName,
     checkoutUrl: row.checkoutUrl,
-    consentToken: row.consentToken,
+    consentId: row.consentId,
+    consentToken: storedConsentToken,
     customerId: row.customerId,
     firstPaymentMode: row.firstPaymentMode,
     mode: row.mode,
@@ -186,11 +253,15 @@ export async function getSubscriptionOnboardingReturnRecord(token: string) {
     return null;
   }
 
+  const consentTokenHash = hashConsentToken(parsedToken.data);
+
   const result = await getDb().execute<{
     acceptedAt: string | null;
     businessName: string | null;
     consentId: string;
-    consentToken: string;
+    consentToken: string | null;
+    consentTokenCiphertext: string | null;
+    consentTokenHash: string | null;
     firstPaymentMode: "real_installment" | "mandate_only";
     firstPaymentStatus: string | null;
     paymentLinkStatus: string | null;
@@ -199,6 +270,8 @@ export async function getSubscriptionOnboardingReturnRecord(token: string) {
     select
       soc.id as "consentId",
       soc.consent_token as "consentToken",
+      soc.consent_token_ciphertext as "consentTokenCiphertext",
+      soc.consent_token_hash as "consentTokenHash",
       soc.accepted_at as "acceptedAt",
       soc.first_payment_mode as "firstPaymentMode",
       pl.mollie_status as "paymentLinkStatus",
@@ -218,7 +291,15 @@ export async function getSubscriptionOnboardingReturnRecord(token: string) {
       order by s.created_at desc
       limit 1
     ) created_subscription on true
-    where soc.consent_token = ${parsedToken.data}
+    where
+      soc.consent_token_hash = ${consentTokenHash}
+      or soc.consent_token = ${parsedToken.data}
+    order by
+      case
+        when soc.consent_token_hash = ${consentTokenHash} then 0
+        else 1
+      end,
+      soc.created_at desc
     limit 1
   `);
 
@@ -228,7 +309,16 @@ export async function getSubscriptionOnboardingReturnRecord(token: string) {
     return null;
   }
 
-  return row satisfies SubscriptionOnboardingReturnRecord;
+  const storedConsentToken = await ensureStoredConsentToken(row);
+
+  if (!storedConsentToken) {
+    return null;
+  }
+
+  return {
+    ...row,
+    consentToken: storedConsentToken,
+  } satisfies SubscriptionOnboardingReturnRecord;
 }
 
 export async function acceptSubscriptionConsentAction(formData: FormData) {
@@ -294,7 +384,7 @@ export async function acceptSubscriptionConsentAction(formData: FormData) {
       accepted_ip = ${acceptedIp},
       accepted_user_agent = ${acceptedUserAgent},
       updated_at = now()
-    where consent_token = ${consent.consentToken}
+    where id = ${consent.consentId}
       and accepted_at is null
   `);
 

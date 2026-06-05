@@ -15,6 +15,7 @@ Audience: developers and operators
 ## Database
 
 - `npm run db:apply`: apply Drizzle migrations
+- `npm run db:backfill-consent-tokens`: erase legacy plaintext consent tokens after the hashed-token migration is applied
 - `npm run db:migrate`: alias for `db:apply`
 - `npm run db:generate`: generate Drizzle migration files from schema changes
 - `npm run db:smoke`: basic database smoke check

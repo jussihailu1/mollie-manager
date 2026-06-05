@@ -1,6 +1,6 @@
 # Track A: Onboarding Hardening Plan
 
-Status: active implementation plan, pass 1 completed
+Status: active implementation plan, consent-token redesign implemented
 Audience: engineering and product
 Related docs:
 
@@ -29,10 +29,12 @@ Implemented in the first pass:
 - latest consent links are now resolved through a narrower authenticated endpoint instead of broad customer overview payloads
 - the customer drawer return flow now preserves focus and gives operators a copyable hosted-link path
 - helper and test coverage were added for the consent-link URL, notice behavior, and narrowed consent scope
+- canonical consent lookup now uses `consent_token_hash`
+- operator link regeneration now uses encrypted token recovery instead of plaintext canonical storage
+- a one-time backfill script is available to erase legacy plaintext consent tokens after the schema migration
 
 Still open:
 
-- decide whether a hashed lookup-token model is worth a follow-up pass
 - keep the remaining hardening tracks sequenced after this pass
 
 ## Why Start Here
@@ -161,18 +163,18 @@ Objective:
 
 Changes:
 
-1. Review whether a hashed lookup-token model is worth a follow-up pass.
+1. Keep the hashed lookup model and encrypted operator recovery path in place.
 2. Add tests around:
    - consent-link creation result shape
    - audit detail redaction
    - no-token-in-notice behavior
-   - customer UI URL derivation from canonical consent storage via the authenticated consent-link endpoint
-3. Decide whether a follow-up should convert the stored lookup token into a hashed token model.
+   - customer UI URL derivation from hashed/encrypted consent storage via the authenticated consent-link endpoint
+3. Run the one-time plaintext backfill script after the schema migration during rollout.
 
 Status:
 
-- partially open
-- the URL and notice helpers are covered now, and the broader broad-overview token exposure has been removed
+- implemented
+- the remaining rollout step is running `npm run db:backfill-consent-tokens` after the schema migration
 
 Primary files:
 
@@ -185,7 +187,8 @@ Acceptance criteria:
 
 - the token has one clearly documented canonical storage path
 - the operator workflow is covered by executable tests at the right seams
-- a later hashed-token migration is optional, not urgent
+- canonical consent lookup no longer depends on plaintext token storage
+- operator link regeneration still works without reintroducing plaintext as the canonical DB field
 
 ## Suggested Task Breakdown
 

@@ -39,6 +39,8 @@ Implemented so far:
 - redirect notices no longer carry the hosted consent link
 - consent tokens are no longer written into audit details
 - `payment_links.metadata` no longer duplicates the active consent token
+- consent lookup now uses a hashed token with encrypted recovery for the authenticated operator copy flow
+- a one-time backfill script now exists to erase legacy plaintext consent tokens after the schema migration
 - secret-bearing webhook URLs are no longer written into payment metadata
 - newly generated Mollie webhook URLs no longer include a shared secret
 - the payment drawer no longer returns or renders the raw Mollie webhook callback URL
@@ -49,7 +51,7 @@ Implemented so far:
 - invoice attachment outcome is now surfaced in the payment drawer instead of being buried in raw metadata
 - helper and test coverage were added for the new consent-link utilities, the narrowed consent scope, the health-route visibility split, and the invoice PDF guardrails
 
-The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as partially mitigated rather than fully open.
+The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as materially mitigated rather than still open.
 
 ## Validation Snapshot
 
@@ -62,24 +64,26 @@ The following checks passed during the review:
 
 ## Priority Findings
 
-### P1: Consent token handling was too loose; the highest-risk leak paths are now mitigated
+### P1: Consent token handling was too loose; the highest-risk leak paths and the main at-rest exposure are now mitigated
 
-The hosted customer consent token was previously treated too loosely for a bearer-style token. The highest-risk leak paths have now been reduced, and the token is no longer selected into broad customer overview payloads. The canonical token still exists in dedicated storage and is now read only by a narrower authenticated consent-link endpoint to derive operator-facing consent links.
+The hosted customer consent token was previously treated too loosely for a bearer-style token. The highest-risk leak paths have now been reduced, the token is no longer selected into broad customer overview payloads, and canonical lookup no longer depends on a plaintext token stored in the consent row.
 
 Observed paths:
 
 - generated in [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1124>)
 - stored in `subscription_onboarding_consents` in [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1219>)
 - read by the authenticated consent-link endpoint in [app/api/customer-consent-link/route.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/app/api/customer-consent-link/route.ts:1>) through [lib/onboarding/data.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/data.ts:602>)
+- hashed/encrypted token storage helper in [lib/onboarding/consent-token-storage.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/consent-token-storage.ts:1>)
 - surfaced through the customer drawer copy flow in [components/customer-flow-dialogs.tsx](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/components/customer-flow-dialogs.tsx:964>)
 - no longer written into audit details in [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1227>) through [lib/audit.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/audit.ts:45>)
 - no longer pushed into the operator redirect notice query string in [lib/onboarding/actions.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/actions.ts:1247>) via [lib/onboarding/consent-link.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/consent-link.ts:1>)
+- legacy plaintext cleanup script in [scripts/backfill-consent-token-storage.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/scripts/backfill-consent-token-storage.ts:1>)
 
 Why this is unhealthy:
 
 - query-string transport was a real leak path and should stay removed
 - audit logs should not persist active customer-facing bearer tokens
-- the remaining token exposure should stay constrained to the canonical consent table and intentionally derived operator UI
+- database-only exposure should not reveal active consent links when authenticated operator recovery can use encrypted storage instead
 - the broad customer overview path should stay token-free
 
 Recommended direction:
@@ -88,7 +92,8 @@ Recommended direction:
 - keep the audit redaction in place
 - keep token duplication out of generic metadata unless a concrete dependency reappears
 - keep latest consent token lookup behind the narrower authenticated endpoint
-- consider storing only a hashed lookup token if the flow can support it
+- keep plaintext `consent_token` as migration-only fallback, not canonical storage
+- run the backfill script after deploy so legacy rows stop carrying the raw token
 
 ### P1: Invoice PDF delivery path is now constrained to trusted document sources
 

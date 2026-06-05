@@ -29,6 +29,10 @@ import {
 import { getMollieClient, getMollieWebhookUrl } from "@/lib/mollie/client";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
 import { buildConsentLinkCreatedNotice } from "@/lib/onboarding/consent-link";
+import {
+  buildConsentTokenStorage,
+  createConsentToken,
+} from "@/lib/onboarding/consent-token-storage";
 import { getCustomerDetail } from "@/lib/onboarding/data";
 import { syncPaymentLinkByMollieId } from "@/lib/reliability/sync";
 import { buildSubscriptionConsentReturnUrl } from "@/lib/subscription-consent";
@@ -1116,7 +1120,8 @@ export async function createFirstPaymentAction(formData: FormData) {
     const mollie = getMollieClient(selectedMode);
     const localPaymentLinkId = crypto.randomUUID();
     const localConsentId = crypto.randomUUID();
-    const consentToken = crypto.randomUUID().replaceAll("-", "");
+    const consentToken = createConsentToken();
+    const consentTokenStorage = buildConsentTokenStorage(consentToken);
     const webhookUrl = getMollieWebhookUrl();
     const redirectUrl = buildSubscriptionConsentReturnUrl(consentToken);
     const paymentLink = await mollie.paymentLinks.create({
@@ -1194,6 +1199,8 @@ export async function createFirstPaymentAction(formData: FormData) {
             customer_id,
             payment_link_id,
             consent_token,
+            consent_token_hash,
+            consent_token_ciphertext,
             first_payment_mode,
             terms_version,
             required_checkbox_keys,
@@ -1209,7 +1216,9 @@ export async function createFirstPaymentAction(formData: FormData) {
             ${selectedMode},
             ${customer.id},
             ${localPaymentLinkId},
-            ${consentToken},
+            null,
+            ${consentTokenStorage.consentTokenHash},
+            ${consentTokenStorage.consentTokenCiphertext},
             ${parsed.data.firstPaymentMode},
             ${tenantPolicy.termsVersion},
             ${JSON.stringify([...REQUIRED_CONSENT_CHECKBOX_KEYS])}::jsonb,
