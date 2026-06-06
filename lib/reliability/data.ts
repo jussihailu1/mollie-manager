@@ -156,6 +156,20 @@ export async function listRecentWebhookEvents(options?: {
   return listRecentWebhookEventsByMode(options?.mode ?? "all");
 }
 
+export async function listFailedWebhookEvents(options?: {
+  limit?: number;
+  mode?: DashboardModeFilter;
+}) {
+  const events = await listRecentWebhookEventsByMode(options?.mode ?? "all");
+  const limit = Math.max(1, Math.min(options?.limit ?? 8, 20));
+
+  return events
+    .filter(
+      (event) => event.processingStatus === "failed" && typeof event.resourceId === "string",
+    )
+    .slice(0, limit);
+}
+
 const getReliabilitySnapshotByMode = cache(async (mode: DashboardModeFilter) => {
   const modeParam = toModeParam(mode);
   const result = await getDb().execute<ReliabilitySnapshot>(sql`

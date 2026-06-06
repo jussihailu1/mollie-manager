@@ -35,6 +35,7 @@ const updateAlertStatusSchema = redirectSchema.extend({
 type StoredWebhookEvent = {
   id: string;
   mode: "live" | "test";
+  processingStatus: "failed" | "ignored" | "pending" | "processed";
   resourceId: string | null;
   resourceType: string | null;
 };
@@ -199,13 +200,14 @@ export async function replayWebhookEventAction(formData: FormData) {
     });
   }
 
-  await requireViewerSession();
+  const session = await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
 
   const result = await getDb().execute<StoredWebhookEvent>(sql`
       select
         id,
         mode,
+        processing_status as "processingStatus",
         resource_id as "resourceId",
         resource_type as "resourceType"
       from webhook_events
@@ -215,9 +217,9 @@ export async function replayWebhookEventAction(formData: FormData) {
     `);
   const event = result.rows[0];
 
-  if (!event?.resourceId) {
+  if (!event?.resourceId || event.processingStatus !== "failed") {
     redirectWithMessage(parsed.data.returnTo, {
-      error: "Webhook event resource could not be replayed.",
+      error: "Only failed webhook events in the current mode can be replayed.",
     });
   }
 
@@ -235,9 +237,32 @@ export async function replayWebhookEventAction(formData: FormData) {
         where id = ${event.id}
       `);
 
+    await writeAuditLog(
+      {
+        action: "webhook.event.replay",
+        details: {
+          mode: event.mode,
+          resourceId: event.resourceId,
+          resourceType: event.resourceType,
+          webhookEventId: event.id,
+        },
+        entityId: event.id,
+        entityType: "webhook_event",
+        mode: event.mode,
+        outcome: "success",
+        summary: "Replayed a failed stored Mollie webhook event.",
+      },
+      undefined,
+      {
+        email: session.user.email ?? null,
+        kind: "user",
+      },
+    );
+
     revalidatePath("/notifications");
     revalidatePath("/payments");
     revalidatePath("/customers");
+    revalidatePath("/settings");
     redirectWithMessage(parsed.data.returnTo, {
       notice: "Webhook event replayed successfully.",
     });
@@ -252,6 +277,29 @@ export async function replayWebhookEventAction(formData: FormData) {
           last_attempt_at = now()
         where id = ${event.id}
       `);
+
+    await writeAuditLog(
+      {
+        action: "webhook.event.replay",
+        details: {
+          error: serializeError(error),
+          mode: event.mode,
+          resourceId: event.resourceId,
+          resourceType: event.resourceType,
+          webhookEventId: event.id,
+        },
+        entityId: event.id,
+        entityType: "webhook_event",
+        mode: event.mode,
+        outcome: "failure",
+        summary: "Failed to replay a stored Mollie webhook event.",
+      },
+      undefined,
+      {
+        email: session.user.email ?? null,
+        kind: "user",
+      },
+    );
 
     redirectWithMessage(parsed.data.returnTo, {
       error: serializeError(error),

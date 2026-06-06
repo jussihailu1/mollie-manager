@@ -9,6 +9,7 @@ import { getAcceptedCronSecrets, isBearerAuthorized } from "@/lib/cron-auth";
 import { isMollieConfigured } from "@/lib/mollie/client";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { getReliabilitySnapshot } from "@/lib/reliability/data";
+import { getViewerSession } from "@/lib/auth/session";
 
 function resolveMode(request: Request): MollieMode {
   const mode = new URL(request.url).searchParams.get("mode");
@@ -19,17 +20,24 @@ function resolveMode(request: Request): MollieMode {
   return env.MOLLIE_DEFAULT_MODE;
 }
 
-function isDiagnosticsAuthorized(request: Request) {
+async function isDiagnosticsAuthorized(request: Request) {
   const secrets = getAcceptedCronSecrets({
     cronSecret: process.env.CRON_SECRET ?? null,
     invoiceCronSharedSecret: env.INVOICE_CRON_SHARED_SECRET,
   });
 
-  return isBearerAuthorized(request.headers.get("authorization"), secrets);
+  if (isBearerAuthorized(request.headers.get("authorization"), secrets)) {
+    return true;
+  }
+
+  const session = await getViewerSession();
+  return Boolean(session?.user?.email);
 }
 
 export async function GET(request: Request) {
-  if (!isDiagnosticsAuthorized(request)) {
+  const diagnosticsAuthorized = await isDiagnosticsAuthorized(request);
+
+  if (!diagnosticsAuthorized) {
     return Response.json({
       app: "Kify",
       status: "ok",

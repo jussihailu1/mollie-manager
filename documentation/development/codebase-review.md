@@ -50,6 +50,8 @@ Implemented so far:
 - invoice PDF URLs are now trust-gated before operator display or email use, and attachment fetches now enforce redirect, timeout, and size controls
 - invoice attachment outcome is now surfaced in the payment drawer instead of being buried in raw metadata
 - helper and test coverage were added for the new consent-link utilities, the narrowed consent scope, the health-route visibility split, and the invoice PDF guardrails
+- authenticated operators can now open full `/api/health` diagnostics without cron bearer secrets, while public requests still get minimal liveness only
+- settings now includes a first-class ops overview with failed webhook replay controls and recent reliability activity
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as materially mitigated rather than still open.
 
@@ -176,6 +178,7 @@ Recommended direction:
 
 - keep the public response minimal
 - keep the detailed reliability snapshot behind cron auth or operator auth
+- keep the settings ops surface aligned with the same diagnostics so operators do not need to rely on raw JSON or CLI first
 
 ### P2: Auth now fails closed on missing-secret misconfiguration
 

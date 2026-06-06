@@ -48,6 +48,7 @@ The app stores local operational state, but payment, mandate, and subscription t
 - The app distinguishes first payments from recurring payments.
 - The hosted consent flow is part of the onboarding contract and precedes Mollie checkout.
 - Hosted consent tokens are looked up by hash and recovered for authenticated operator reuse via encrypted storage; run the consent-token backfill after the schema migration to erase legacy plaintext rows.
+- Failed Mollie webhook events can be replayed from the operator ops surface, but replay is now limited to failed stored events in the selected mode.
 - Repair and reconciliation flows must not silently change invoice truth in e-Boekhouden.
 
 ## Relevant Env

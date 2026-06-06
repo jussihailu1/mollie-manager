@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 
 import { BillingSettingsForm } from "@/app/(dashboard)/settings/billing-settings-form";
@@ -9,6 +10,7 @@ import {
   queueFailedRecurringInvoiceRetriesAction,
 } from "@/lib/billing-actions";
 import {
+  replayWebhookEventAction,
   runReconciliationAction,
   sendTestAlertAction,
 } from "@/lib/reliability/actions";
@@ -32,13 +34,26 @@ import {
   getInvoiceAutomationSnapshot,
 } from "@/lib/invoice-automation-metrics";
 import { getInvoiceDeliveryQueueSummary } from "@/lib/invoice-delivery";
-import { getReliabilitySnapshot } from "@/lib/reliability/data";
+import {
+  getReliabilitySnapshot,
+  listFailedWebhookEvents,
+  listRecentAuditActivity,
+} from "@/lib/reliability/data";
 import { env } from "@/lib/env";
 import { FormActionButton } from "@/components/form-action-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/format";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage({
@@ -85,6 +100,10 @@ export default async function SettingsPage({
     selectedMode,
   );
   const reliabilitySnapshot = await getReliabilitySnapshot({ mode: selectedMode });
+  const [failedWebhookEvents, recentAuditActivity] = await Promise.all([
+    listFailedWebhookEvents({ limit: 8, mode: selectedMode }),
+    listRecentAuditActivity({ mode: selectedMode }),
+  ]);
   const [
     dueInvoiceSummary,
     dueFirstPaymentInvoiceSummary,
@@ -138,7 +157,7 @@ export default async function SettingsPage({
       ];
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-8">
+    <div className="mx-auto max-w-6xl space-y-6 p-8">
       {error ? (
         <Alert variant="destructive">
           <AlertTitle>Action failed</AlertTitle>
@@ -154,9 +173,9 @@ export default async function SettingsPage({
       ) : null}
 
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Settings & Operations</h2>
         <p className="mt-2 text-muted-foreground">
-          SMTP diagnostics, e-Boekhouden billing settings, and basic system actions.
+          Operator diagnostics, repair controls, SMTP checks, and billing configuration.
         </p>
       </div>
 
@@ -173,6 +192,175 @@ export default async function SettingsPage({
           }
         />
       ) : null}
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <CardTitle className="text-lg">Operations overview</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Unified operator view for authenticated diagnostics, webhook repair, and recent reliability actions.
+              </p>
+            </div>
+            <Button asChild variant="outline">
+              <Link href={`/api/health?mode=${selectedMode}`} target="_blank">
+                Open JSON diagnostics
+              </Link>
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-border p-4">
+              <p className="text-sm font-medium">Webhook health</p>
+              <p className="mt-2 text-2xl font-semibold">{reliabilitySnapshot.failedWebhookCount}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                failed events in {selectedMode} mode
+              </p>
+            </div>
+            <div className="rounded-xl border border-border p-4">
+              <p className="text-sm font-medium">Unresolved alerts</p>
+              <p className="mt-2 text-2xl font-semibold">{reliabilitySnapshot.unresolvedAlertCount}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                open + acknowledged alert rows
+              </p>
+            </div>
+            <div className="rounded-xl border border-border p-4">
+              <p className="text-sm font-medium">Due email retries</p>
+              <p className="mt-2 text-2xl font-semibold">
+                {invoiceDeliveryQueueSummary.dueRetryFirstPaymentCount +
+                  invoiceDeliveryQueueSummary.dueRetryRecurringCount}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                first-payment + recurring delivery retries
+              </p>
+            </div>
+            <div className="rounded-xl border border-border p-4">
+              <p className="text-sm font-medium">Cron heartbeat</p>
+              <p className="mt-2 text-sm font-semibold">
+                {invoiceAutomationCronHeartbeat.lastCronRunOutcome ?? "n/a"}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                last run {invoiceAutomationCronHeartbeat.lastCronRunAt ?? "never"}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-[1.4fr,1fr]">
+            <div className="rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Failed webhook replay queue</p>
+                  <p className="text-sm text-muted-foreground">
+                    Replay only failed stored webhook events for current mode. Successful or pending rows stay out of this control.
+                  </p>
+                </div>
+                <Badge variant="outline">{failedWebhookEvents.length}</Badge>
+              </div>
+
+              {failedWebhookEvents.length === 0 ? (
+                <p className="mt-4 text-sm text-muted-foreground">
+                  No failed webhook events with replayable resources.
+                </p>
+              ) : (
+                <div className="mt-4">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Received</TableHead>
+                        <TableHead>Resource</TableHead>
+                        <TableHead>Attempts</TableHead>
+                        <TableHead>Error</TableHead>
+                        <TableHead className="text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {failedWebhookEvents.map((event) => (
+                        <TableRow key={event.id}>
+                          <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                            {formatDateTime(event.receivedAt)}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            <div className="font-medium">{event.resourceId}</div>
+                            <div className="text-muted-foreground">{event.resourceType ?? "unknown"}</div>
+                          </TableCell>
+                          <TableCell className="text-sm">{event.retryCount}</TableCell>
+                          <TableCell className="max-w-[18rem] text-sm text-muted-foreground">
+                            {event.errorMessage ?? "Unknown failure"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <form action={replayWebhookEventAction}>
+                              <input type="hidden" name="returnTo" value="/settings" />
+                              <input type="hidden" name="webhookEventId" value={event.id} />
+                              <FormActionButton
+                                pendingLabel="Replaying..."
+                                variant="secondary"
+                              >
+                                Replay
+                              </FormActionButton>
+                            </form>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-border p-4">
+              <p className="text-sm font-medium">Recent reliability activity</p>
+              <p className="text-sm text-muted-foreground">
+                Latest audit rows for repair, replay, and operator-triggered billing operations.
+              </p>
+
+              {recentAuditActivity.length === 0 ? (
+                <p className="mt-4 text-sm text-muted-foreground">No recent audit activity.</p>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  {recentAuditActivity.map((item) => (
+                    <div key={item.id} className="rounded-lg border border-border p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium">{item.summary}</p>
+                        <Badge variant={item.outcome === "success" ? "secondary" : "destructive"}>
+                          {item.outcome}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {item.action} • {formatDateTime(item.createdAt)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border p-4">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Automation health snapshot</p>
+              <p className="text-sm text-muted-foreground">
+                Current mode: {selectedMode}. Pending first-payment creates: {invoiceAutomationSnapshot.dueFirstPaymentPendingCount}. Pending recurring creates due now: {invoiceAutomationSnapshot.dueRecurringPendingCount}.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Failed first-payment rows: {invoiceAutomationSnapshot.failedFirstPaymentCount} (recoverable: {invoiceAutomationSnapshot.failedFirstPaymentRecoverableCount}). Failed recurring rows: {invoiceAutomationSnapshot.failedRecurringCount} (recoverable: {invoiceAutomationSnapshot.failedRecurringRecoverableCount}).
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Webhooks received / processed: {reliabilitySnapshot.lastReceivedWebhookAt ? formatDateTime(reliabilitySnapshot.lastReceivedWebhookAt) : "never"} / {reliabilitySnapshot.lastProcessedWebhookAt ? formatDateTime(reliabilitySnapshot.lastProcessedWebhookAt) : "never"}.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Failed webhook events: {reliabilitySnapshot.failedWebhookCount}. Open alerts: {reliabilitySnapshot.openAlertCount}. Unresolved alerts: {reliabilitySnapshot.unresolvedAlertCount}.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Email retries due now (first-payment/recurring): {invoiceDeliveryQueueSummary.dueRetryFirstPaymentCount}/{invoiceDeliveryQueueSummary.dueRetryRecurringCount}. Permanent delivery failures (first-payment/recurring): {invoiceDeliveryQueueSummary.permanentFailureFirstPaymentCount}/{invoiceDeliveryQueueSummary.permanentFailureRecurringCount}.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Last automation cron run: {invoiceAutomationCronHeartbeat.lastCronRunAt ?? "never"} ({invoiceAutomationCronHeartbeat.lastCronRunOutcome ?? "n/a"}). Last success: {invoiceAutomationCronHeartbeat.lastCronSuccessAt ?? "never"}. Last failure: {invoiceAutomationCronHeartbeat.lastCronFailureAt ?? "never"}.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -363,29 +551,6 @@ export default async function SettingsPage({
             </div>
           </div>
 
-          <div className="rounded-xl border border-border p-4">
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Automation health snapshot</p>
-              <p className="text-sm text-muted-foreground">
-                Current mode: {selectedMode}. Pending first-payment creates: {invoiceAutomationSnapshot.dueFirstPaymentPendingCount}. Pending recurring creates due now: {invoiceAutomationSnapshot.dueRecurringPendingCount}.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Failed first-payment rows: {invoiceAutomationSnapshot.failedFirstPaymentCount} (recoverable: {invoiceAutomationSnapshot.failedFirstPaymentRecoverableCount}). Failed recurring rows: {invoiceAutomationSnapshot.failedRecurringCount} (recoverable: {invoiceAutomationSnapshot.failedRecurringRecoverableCount}).
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Webhooks received / processed: {reliabilitySnapshot.lastReceivedWebhookAt ? formatDateTime(reliabilitySnapshot.lastReceivedWebhookAt) : "never"} / {reliabilitySnapshot.lastProcessedWebhookAt ? formatDateTime(reliabilitySnapshot.lastProcessedWebhookAt) : "never"}.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Failed webhook events: {reliabilitySnapshot.failedWebhookCount}. Open alerts: {reliabilitySnapshot.openAlertCount}. Unresolved alerts: {reliabilitySnapshot.unresolvedAlertCount}.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Email retries due now (first-payment/recurring): {invoiceDeliveryQueueSummary.dueRetryFirstPaymentCount}/{invoiceDeliveryQueueSummary.dueRetryRecurringCount}. Permanent delivery failures (first-payment/recurring): {invoiceDeliveryQueueSummary.permanentFailureFirstPaymentCount}/{invoiceDeliveryQueueSummary.permanentFailureRecurringCount}.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Last automation cron run: {invoiceAutomationCronHeartbeat.lastCronRunAt ?? "never"} ({invoiceAutomationCronHeartbeat.lastCronRunOutcome ?? "n/a"}). Last success: {invoiceAutomationCronHeartbeat.lastCronSuccessAt ?? "never"}. Last failure: {invoiceAutomationCronHeartbeat.lastCronFailureAt ?? "never"}.
-              </p>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>

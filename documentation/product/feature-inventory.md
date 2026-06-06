@@ -38,7 +38,9 @@ Canonical policy docs:
 - [ ] Payment-link functionality exists, but there is no separate primary payment-links workspace
 - [ ] Legacy `/alerts` and `/payment-links` routes are compatibility redirects, not active standalone modules
 - [ ] Manual webhook replay exists in backend actions, but it is not a prominent operator workflow
+  Status: the settings ops surface now exposes a failed-webhook replay queue with failed-only replay controls for the selected mode.
 - [ ] Reliability and invoice automation health is spread across `/settings`, `/api/health`, and CLI scripts rather than one unified ops screen
+  Status: `/settings` now includes an operator-focused ops overview with health snapshot, failed webhook replay queue, and recent reliability activity; CLI scripts and JSON diagnostics still remain available for deeper inspection.
 - [ ] Detailed subscription, mandate, and payment history is available in the data model, but not all of it is surfaced in dense first-class operator views
 
 ## Planned Next
@@ -57,7 +59,7 @@ Reference: `../development/codebase-review.md`
   Status: the hashed lookup-token follow-up is implemented. Canonical lookup uses a hash, operator link regeneration uses encrypted recovery, and a one-time backfill script removes legacy plaintext rows after the schema migration.
   Reference: `../development/track-a-onboarding-hardening-plan.md`
 - [ ] Split public health/liveness from authenticated operator diagnostics and reduce operational detail exposed anonymously
-  Status: `/api/health` now returns minimal public liveness by default; the remaining work is to consolidate richer diagnostics into a clearer operator surface.
+  Status: `/api/health` now returns minimal public liveness by default, while full diagnostics are available to cron bearer auth and authenticated operators; `/settings` now surfaces a clearer operator view over the same reliability signals.
 - [ ] Stop persisting secret-bearing webhook URLs into generic metadata and reduce secret sprawl
   Status: the metadata persistence path is gone, the payment drawer no longer exposes raw callback URLs, and newly generated Mollie webhook URLs are secret-free; webhook processing now requires managed local resource resolution.
 - [ ] Harden invoice PDF fetch and attachment handling with trusted-host, timeout, and size controls
