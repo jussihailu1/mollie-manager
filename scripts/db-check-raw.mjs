@@ -17,6 +17,7 @@ const allowedFiles = new Set(
     "scripts/invoice-automation-self-heal.mjs",
     "scripts/db-check-raw.mjs",
     "scripts/db-smoke.mjs",
+    "scripts/backfill-consent-token-storage.ts",
   ].map((filePath) => path.normalize(filePath)),
 );
 
