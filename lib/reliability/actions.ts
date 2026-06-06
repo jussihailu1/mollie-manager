@@ -14,6 +14,7 @@ import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { deliverAlertEmail } from "@/lib/reliability/alerts";
 import {
   reconcileOperationalData,
+  type ReconciliationMode,
   syncPaymentByMollieId,
   syncPaymentLinkByMollieId,
   syncSubscriptionByMollieId,
@@ -25,6 +26,10 @@ const redirectSchema = z.object({
 
 const replayWebhookSchema = redirectSchema.extend({
   webhookEventId: z.string().uuid(),
+});
+
+const reconciliationSchema = redirectSchema.extend({
+  reconciliationMode: z.enum(["full", "sync_only"]).default("sync_only"),
 });
 
 const updateAlertStatusSchema = redirectSchema.extend({
@@ -153,7 +158,8 @@ async function updateAlertStatus(
 }
 
 export async function runReconciliationAction(formData: FormData) {
-  const parsed = redirectSchema.safeParse({
+  const parsed = reconciliationSchema.safeParse({
+    reconciliationMode: formData.get("reconciliationMode") || undefined,
     returnTo: formData.get("returnTo"),
   });
 
@@ -168,9 +174,15 @@ export async function runReconciliationAction(formData: FormData) {
 
   try {
     const result = await reconcileOperationalData({
-      email: session.user.email ?? null,
-      kind: "user",
-    }, selectedMode);
+      actor: {
+        email: session.user.email ?? null,
+        kind: "user",
+      },
+      mode: selectedMode,
+      reconciliationMode: parsed.data.reconciliationMode,
+    });
+
+    const reconciliationLabel = formatReconciliationMode(parsed.data.reconciliationMode);
 
     revalidatePath("/");
     revalidatePath("/notifications");
@@ -178,7 +190,7 @@ export async function runReconciliationAction(formData: FormData) {
     revalidatePath("/customers");
     revalidatePath("/settings");
     redirectWithMessage(parsed.data.returnTo, {
-      notice: `Repair pass complete. Checked ${result.subscriptionsChecked} subscriptions, ${result.paymentLinksChecked} payment links, and ${result.firstPaymentsChecked} first payments.`,
+      notice: `${reconciliationLabel} reconciliation complete. Checked ${result.subscriptionsChecked} subscriptions, ${result.paymentLinksChecked} payment links, and ${result.firstPaymentsChecked} first payments.`,
     });
   } catch (error) {
     unstable_rethrow(error);
@@ -186,6 +198,10 @@ export async function runReconciliationAction(formData: FormData) {
       error: serializeError(error),
     });
   }
+}
+
+function formatReconciliationMode(mode: ReconciliationMode) {
+  return mode === "sync_only" ? "Sync-only" : "Full";
 }
 
 export async function replayWebhookEventAction(formData: FormData) {

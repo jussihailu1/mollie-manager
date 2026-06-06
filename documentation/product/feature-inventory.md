@@ -46,6 +46,7 @@ Canonical policy docs:
 ## Planned Next
 
 - [ ] Add explicit reconciliation modes so operators can choose `sync-only` versus flows that may trigger invoice-side actions
+  Status: `/settings` now exposes explicit `sync_only` and `full` reconciliation modes. `sync_only` is the least-dangerous default and avoids automatic first-payment invoice creation and subscription activation follow-ups.
 - [ ] Expand reconciliation output with first-payment and recurring invoice-state deltas for easier operator review
 - [ ] Unify stale-sync, webhook-health, and invoice-automation observability into a clearer operator surface
 - [ ] Expose safer, clearer operator controls for webhook replay and repair flows

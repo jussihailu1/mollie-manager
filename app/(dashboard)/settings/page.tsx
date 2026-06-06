@@ -364,24 +364,49 @@ export default async function SettingsPage({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Mollie repair pass</CardTitle>
+          <CardTitle className="text-lg">Mollie reconciliation</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Run the explicit full Mollie repair pass for the current mode when local payment,
-            payment-link, or subscription state looks stale. This is not part of the passive
-            refresh flow.
+            Run an explicit reconciliation pass for the current mode when local payment,
+            payment-link, or subscription state looks stale. Default mode is sync-only so operators
+            can inspect refreshed Mollie state before allowing billing follow-ups.
           </p>
           <p className="text-sm text-muted-foreground">
             Current mode: <span className="font-medium text-foreground">{selectedMode}</span>.
           </p>
-          <form action={runReconciliationAction}>
+          <form action={runReconciliationAction} className="space-y-4">
             <input type="hidden" name="returnTo" value="/settings" />
+            <div className="space-y-2">
+              <label
+                htmlFor="reconciliationMode"
+                className="text-sm font-medium text-foreground"
+              >
+                Reconciliation mode
+              </label>
+              <select
+                id="reconciliationMode"
+                name="reconciliationMode"
+                defaultValue="sync_only"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="sync_only">
+                  Sync-only: refresh Mollie state only, no invoice create or activation follow-ups
+                </option>
+                <option value="full">
+                  Full: refresh Mollie state and allow invoice create / activation follow-ups
+                </option>
+              </select>
+            </div>
+            <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+              Sync-only keeps first-payment invoice creation and subscription activation off. Full
+              mode keeps current automatic follow-up behavior after paid first-payment sync.
+            </div>
             <FormActionButton
-              confirmMessage={`Run the full ${selectedMode} Mollie repair pass now?`}
-              pendingLabel="Repairing..."
+              confirmMessage={`Run ${selectedMode} reconciliation now? Verify selected mode first.`}
+              pendingLabel="Reconciling..."
             >
-              Run repair pass
+              Run reconciliation
             </FormActionButton>
           </form>
         </CardContent>

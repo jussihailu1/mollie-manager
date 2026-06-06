@@ -58,6 +58,8 @@ type SyncActor = {
   kind: "system" | "user";
 };
 
+export type ReconciliationMode = "full" | "sync_only";
+
 type LocalCustomerLink = {
   id: string;
   mollieCustomerId: string | null;
@@ -498,6 +500,10 @@ function buildPaymentLinkMetadata(
   };
 }
 
+function shouldRunBillingFollowups(mode: ReconciliationMode) {
+  return mode === "full";
+}
+
 async function upsertPaymentLinkFromMollie(
   mode: MollieMode,
   paymentLink: MolliePaymentLink,
@@ -873,6 +879,7 @@ export async function syncPaymentByMollieId(
   options?: {
     actor?: SyncActor;
     preferredMode?: MollieMode;
+    reconciliationMode?: ReconciliationMode;
     requireManagedResource?: boolean;
     strictMode?: boolean;
     syncPaymentLinks?: boolean;
@@ -881,6 +888,7 @@ export async function syncPaymentByMollieId(
   const actor = options?.actor ?? {
     kind: "system" as const,
   };
+  const reconciliationMode = options?.reconciliationMode ?? "full";
   const { mode, payment } = await findPaymentAcrossModes(
     molliePaymentId,
     options?.preferredMode,
@@ -1060,7 +1068,7 @@ export async function syncPaymentByMollieId(
       paymentId: localPaymentId,
     });
 
-    if (payment.status === "paid") {
+    if (payment.status === "paid" && shouldRunBillingFollowups(reconciliationMode)) {
       try {
         await createEboekhoudenInvoiceForFirstPayment(localPaymentId, {
           actor,
@@ -1090,7 +1098,8 @@ export async function syncPaymentByMollieId(
   if (
     resolvedCustomerId &&
     paymentType === "first" &&
-    payment.status === "paid"
+    payment.status === "paid" &&
+    shouldRunBillingFollowups(reconciliationMode)
   ) {
     await attemptSubscriptionActivation({
       actor,
@@ -1168,12 +1177,14 @@ export async function syncSubscriptionByLocalId(
   localSubscriptionId: string,
   options?: {
     actor?: SyncActor;
+    reconciliationMode?: ReconciliationMode;
     strictMode?: boolean;
   },
 ) {
   const actor = options?.actor ?? {
     kind: "system" as const,
   };
+  const reconciliationMode = options?.reconciliationMode ?? "full";
   const localSubscription = await getManagedSubscription(localSubscriptionId);
 
   if (!localSubscription?.mollieSubscriptionId || !localSubscription.customerMollieId) {
@@ -1413,7 +1424,7 @@ export async function syncSubscriptionByLocalId(
       paymentId: firstPayment.id,
     });
 
-    if (!firstPayment.isPaid) {
+    if (!firstPayment.isPaid || !shouldRunBillingFollowups(reconciliationMode)) {
       continue;
     }
 
@@ -1486,11 +1497,16 @@ export async function syncSubscriptionByMollieId(
   });
 }
 
-export async function reconcileOperationalData(actor?: SyncActor, mode?: MollieMode) {
-  const effectiveActor = actor ?? {
+export async function reconcileOperationalData(input?: {
+  actor?: SyncActor;
+  mode?: MollieMode;
+  reconciliationMode?: ReconciliationMode;
+}) {
+  const effectiveActor = input?.actor ?? {
     kind: "system" as const,
   };
-  const modeParam = mode ?? null;
+  const modeParam = input?.mode ?? null;
+  const reconciliationMode = input?.reconciliationMode ?? "full";
   const subscriptions = await getDb().execute<{ id: string }>(sql`
       select id
       from subscriptions
@@ -1518,23 +1534,25 @@ export async function reconcileOperationalData(actor?: SyncActor, mode?: MollieM
   for (const subscription of subscriptions.rows) {
     await syncSubscriptionByLocalId(subscription.id, {
       actor: effectiveActor,
-      strictMode: Boolean(mode),
+      reconciliationMode,
+      strictMode: Boolean(input?.mode),
     });
   }
 
   for (const paymentLink of paymentLinks.rows) {
     await syncPaymentLinkByMollieId(paymentLink.molliePaymentLinkId, {
       actor: effectiveActor,
-      preferredMode: mode,
-      strictMode: Boolean(mode),
+      preferredMode: input?.mode,
+      strictMode: Boolean(input?.mode),
     });
   }
 
   for (const payment of firstPayments.rows) {
     await syncPaymentByMollieId(payment.molliePaymentId, {
       actor: effectiveActor,
-      preferredMode: mode,
-      strictMode: Boolean(mode),
+      preferredMode: input?.mode,
+      reconciliationMode,
+      strictMode: Boolean(input?.mode),
     });
   }
 
@@ -1544,13 +1562,17 @@ export async function reconcileOperationalData(actor?: SyncActor, mode?: MollieM
       details: {
         firstPaymentCount: firstPayments.rows.length,
         paymentLinkCount: paymentLinks.rows.length,
+        reconciliationMode,
         subscriptionCount: subscriptions.rows.length,
       },
       entityId: "system",
       entityType: "reconciliation",
-      mode,
+      mode: input?.mode,
       outcome: "success",
-      summary: "Completed a full repair pass against Mollie.",
+      summary:
+        reconciliationMode === "sync_only"
+          ? "Completed a sync-only reconciliation pass against Mollie."
+          : "Completed a full reconciliation pass against Mollie.",
     },
     undefined,
     effectiveActor,
@@ -1559,6 +1581,7 @@ export async function reconcileOperationalData(actor?: SyncActor, mode?: MollieM
   return {
     firstPaymentsChecked: firstPayments.rows.length,
     paymentLinksChecked: paymentLinks.rows.length,
+    reconciliationMode,
     subscriptionsChecked: subscriptions.rows.length,
   };
 }

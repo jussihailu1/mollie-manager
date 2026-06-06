@@ -69,6 +69,13 @@ Authenticated `/api/health?mode=<test|live>` includes:
 
 Use these authenticated diagnostics to confirm scheduler liveness without checking platform logs first. The `/settings` ops overview now surfaces same signals for normal operator use, while raw JSON stays available for direct inspection.
 
+Operator reconciliation from `/settings` now has explicit modes:
+
+- `sync_only`: refresh Mollie-backed local state only
+- `full`: refresh state and allow first-payment invoice create / activation follow-ups
+
+Use `sync_only` first when investigating stale state or webhook drift.
+
 ## Current Scheduler State In Repo
 
 `vercel.json` currently configures:

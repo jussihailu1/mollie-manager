@@ -23,4 +23,20 @@ describe("ops surface hardening", () => {
     assert.match(source, /Failed webhook replay queue/);
     assert.match(source, /replayWebhookEventAction/);
   });
+
+  it("defaults operator reconciliation to sync-only mode", () => {
+    const source = readFileSync(resolve("app/(dashboard)/settings/page.tsx"), "utf8");
+
+    assert.match(source, /name="reconciliationMode"/);
+    assert.match(source, /defaultValue="sync_only"/);
+    assert.match(source, /Sync-only: refresh Mollie state only/);
+  });
+
+  it("gates billing follow-ups behind explicit full reconciliation mode", () => {
+    const source = readFileSync(resolve("lib/reliability/sync.ts"), "utf8");
+
+    assert.match(source, /export type ReconciliationMode = "full" \| "sync_only"/);
+    assert.match(source, /shouldRunBillingFollowups/);
+    assert.match(source, /reconciliationMode = options\?\.reconciliationMode \?\? "full"/);
+  });
 });

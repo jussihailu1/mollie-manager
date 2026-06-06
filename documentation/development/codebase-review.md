@@ -52,6 +52,7 @@ Implemented so far:
 - helper and test coverage were added for the new consent-link utilities, the narrowed consent scope, the health-route visibility split, and the invoice PDF guardrails
 - authenticated operators can now open full `/api/health` diagnostics without cron bearer secrets, while public requests still get minimal liveness only
 - settings now includes a first-class ops overview with failed webhook replay controls and recent reliability activity
+- settings reconciliation now exposes explicit `sync_only` versus `full` modes so operators can refresh Mollie state without automatically triggering invoice or activation follow-ups
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as materially mitigated rather than still open.
 
@@ -410,6 +411,7 @@ Suggested work:
 - split `/api/health` into liveness and authenticated diagnostics
 - stop persisting secret-bearing webhook URLs into metadata
 - review cron and repair endpoints for least-privilege exposure
+- expose explicit reconciliation modes so operator-triggered refresh does not imply full downstream billing side effects
 
 ### Track D: Module And Test Refactor
 
