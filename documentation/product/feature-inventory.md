@@ -47,7 +47,8 @@ Canonical policy docs:
 
 - [x] Add explicit reconciliation modes so operators can choose `sync-only` versus flows that may trigger invoice-side actions
   Status: `/settings` now exposes explicit `sync_only` and `full` reconciliation modes. `sync_only` is the least-dangerous default and avoids automatic first-payment invoice creation and subscription activation follow-ups.
-- [ ] Expand reconciliation output with first-payment and recurring invoice-state deltas for easier operator review
+- [x] Expand reconciliation output with first-payment and recurring invoice-state deltas for easier operator review
+  Status: `/settings` now shows the latest reconciliation result with before/after invoice-state deltas for first-payment rows and recurring billing schedules, so operators can confirm normalization and invoice-side changes without digging through raw tables.
 - [ ] Unify stale-sync, webhook-health, and invoice-automation observability into a clearer operator surface
 - [ ] Expose safer, clearer operator controls for webhook replay and repair flows
 - [ ] Decide whether subscriptions need a dedicated operations workspace again or should stay embedded in customer workflows

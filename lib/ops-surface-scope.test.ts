@@ -32,6 +32,21 @@ describe("ops surface hardening", () => {
     assert.match(source, /Sync-only: refresh Mollie state only/);
   });
 
+  it("surfaces reconciliation invoice-state deltas in settings", () => {
+    const settingsSource = readFileSync(
+      resolve("app/(dashboard)/settings/page.tsx"),
+      "utf8",
+    );
+    const actionSource = readFileSync(resolve("lib/reliability/actions.ts"), "utf8");
+
+    assert.match(settingsSource, /Latest reconciliation result/);
+    assert.match(settingsSource, /First-payment invoice state delta/);
+    assert.match(settingsSource, /Recurring invoice state delta/);
+    assert.match(settingsSource, /parseReconciliationSummary/);
+    assert.match(actionSource, /reconciliationSummary/);
+    assert.match(actionSource, /serializeReconciliationSummary/);
+  });
+
   it("gates billing follow-ups behind explicit full reconciliation mode", () => {
     const source = readFileSync(resolve("lib/reliability/sync.ts"), "utf8");
 

@@ -28,7 +28,7 @@ import {
   getDueRecurringInvoiceQueueSummary,
   getFailedRecurringInvoiceRetrySummary,
 } from "@/lib/eboekhouden/recurring-invoices";
-import { getSingleSearchParam } from "@/lib/format";
+import { formatDateTime, formatLabel, getSingleSearchParam } from "@/lib/format";
 import {
   getInvoiceAutomationCronHeartbeat,
   getInvoiceAutomationSnapshot,
@@ -40,12 +40,15 @@ import {
   listRecentAuditActivity,
 } from "@/lib/reliability/data";
 import { env } from "@/lib/env";
+import {
+  parseReconciliationSummary,
+  type InvoiceStateDeltaSummary,
+} from "@/lib/reliability/reconciliation-summary";
 import { FormActionButton } from "@/components/form-action-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatDateTime } from "@/lib/format";
 import {
   Table,
   TableBody,
@@ -54,7 +57,65 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
 export const dynamic = "force-dynamic";
+
+function formatSignedDelta(value: number) {
+  return value > 0 ? `+${value}` : String(value);
+}
+
+function ReconciliationDeltaSection<TState extends string>({
+  emptyLabel,
+  summary,
+  title,
+}: Readonly<{
+  emptyLabel: string;
+  summary: InvoiceStateDeltaSummary<TState>;
+  title: string;
+}>) {
+  return (
+    <div className="space-y-3 rounded-xl border border-border p-4">
+      <div>
+        <p className="text-sm font-medium">{title}</p>
+        <p className="text-sm text-muted-foreground">
+          Tracked rows:{" "}
+          <span className="font-mono text-foreground">
+            {summary.totalBefore} -&gt; {summary.totalAfter}
+          </span>{" "}
+          ({formatSignedDelta(summary.totalDelta)}).
+        </p>
+      </div>
+
+      {summary.changed.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{emptyLabel}</p>
+      ) : (
+        <div className="space-y-2">
+          {summary.changed.map((entry) => (
+            <div
+              key={entry.state}
+              className="flex items-center justify-between gap-3 rounded-lg border border-border/70 px-3 py-2"
+            >
+              <div className="space-y-1">
+                <Badge variant="outline">{formatLabel(entry.state)}</Badge>
+                <p className="text-xs text-muted-foreground">
+                  Before/after count for this invoice state
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="font-mono text-sm text-foreground">
+                  {entry.before} -&gt; {entry.after}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {formatSignedDelta(entry.delta)}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default async function SettingsPage({
   searchParams,
@@ -64,6 +125,9 @@ export default async function SettingsPage({
   const resolvedSearchParams = await searchParams;
   const error = getSingleSearchParam(resolvedSearchParams.error) ?? null;
   const notice = getSingleSearchParam(resolvedSearchParams.notice) ?? null;
+  const reconciliationSummary = parseReconciliationSummary(
+    getSingleSearchParam(resolvedSearchParams.reconciliationSummary),
+  );
   const invoiceEmailOverrideTo = env.INVOICE_EMAIL_OVERRIDE_TO ?? null;
   const [billingSettings, selectedMode] = await Promise.all([
     ensureTenantBillingSettings(),
@@ -409,6 +473,71 @@ export default async function SettingsPage({
               Run reconciliation
             </FormActionButton>
           </form>
+
+          {reconciliationSummary ? (
+            <div className="rounded-xl border border-border bg-muted/20 p-4">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Latest reconciliation result</p>
+                    <p className="text-sm text-muted-foreground">
+                      Ran {formatDateTime(reconciliationSummary.ranAt)} in{" "}
+                      {reconciliationSummary.mode ?? "all"} mode with{" "}
+                      {reconciliationSummary.reconciliationMode === "sync_only"
+                        ? "sync-only"
+                        : "full"}{" "}
+                      follow-up behavior.
+                    </p>
+                  </div>
+                  <Badge variant="outline">
+                    {reconciliationSummary.reconciliationMode === "sync_only"
+                      ? "Sync-only"
+                      : "Full"}
+                  </Badge>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="rounded-lg border border-border bg-background p-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Subscriptions checked
+                    </p>
+                    <p className="mt-2 font-mono text-lg text-foreground">
+                      {reconciliationSummary.subscriptionsChecked}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background p-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Payment links checked
+                    </p>
+                    <p className="mt-2 font-mono text-lg text-foreground">
+                      {reconciliationSummary.paymentLinksChecked}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background p-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      First payments checked
+                    </p>
+                    <p className="mt-2 font-mono text-lg text-foreground">
+                      {reconciliationSummary.firstPaymentsChecked}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <ReconciliationDeltaSection
+                    emptyLabel="No first-payment invoice state changes detected."
+                    summary={reconciliationSummary.firstPaymentInvoiceStateDelta}
+                    title="First-payment invoice state delta"
+                  />
+                  <ReconciliationDeltaSection
+                    emptyLabel="No recurring invoice state changes detected."
+                    summary={reconciliationSummary.recurringInvoiceStateDelta}
+                    title="Recurring invoice state delta"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

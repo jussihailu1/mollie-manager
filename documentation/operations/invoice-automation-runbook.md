@@ -76,6 +76,8 @@ Operator reconciliation from `/settings` now has explicit modes:
 
 Use `sync_only` first when investigating stale state or webhook drift.
 
+After each reconciliation, `/settings` now also shows the latest first-payment and recurring invoice-state delta summary with before/after counts. Use that summary to confirm whether the run only refreshed state or also changed invoice-tracking rows.
+
 ## Current Scheduler State In Repo
 
 `vercel.json` currently configures:

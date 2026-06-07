@@ -12,6 +12,7 @@ import { getDb, transaction } from "@/lib/db";
 import { env } from "@/lib/env";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { deliverAlertEmail } from "@/lib/reliability/alerts";
+import { serializeReconciliationSummary } from "@/lib/reliability/reconciliation-summary";
 import {
   reconcileOperationalData,
   type ReconciliationMode,
@@ -52,7 +53,11 @@ function buildPath(pathname: string, params?: URLSearchParams) {
 
 function redirectWithMessage(
   pathname: string,
-  options: { error?: string; notice?: string },
+  options: {
+    error?: string;
+    notice?: string;
+    reconciliationSummary?: string;
+  },
 ): never {
   const params = new URLSearchParams();
 
@@ -62,6 +67,10 @@ function redirectWithMessage(
 
   if (options.error) {
     params.set("error", options.error);
+  }
+
+  if (options.reconciliationSummary) {
+    params.set("reconciliationSummary", options.reconciliationSummary);
   }
 
   redirect(buildPath(pathname, params));
@@ -190,7 +199,8 @@ export async function runReconciliationAction(formData: FormData) {
     revalidatePath("/customers");
     revalidatePath("/settings");
     redirectWithMessage(parsed.data.returnTo, {
-      notice: `${reconciliationLabel} reconciliation complete. Checked ${result.subscriptionsChecked} subscriptions, ${result.paymentLinksChecked} payment links, and ${result.firstPaymentsChecked} first payments.`,
+      notice: `${reconciliationLabel} reconciliation complete. Checked ${result.subscriptionsChecked} subscriptions, ${result.paymentLinksChecked} payment links, and ${result.firstPaymentsChecked} first payments. Review the invoice delta summary below.`,
+      reconciliationSummary: serializeReconciliationSummary(result),
     });
   } catch (error) {
     unstable_rethrow(error);

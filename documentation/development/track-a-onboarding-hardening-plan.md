@@ -299,5 +299,5 @@ Track A follow-on status:
 
 Current recommended follow-on is the next operator-facing reliability slice:
 
-1. expand reconciliation output with first-payment and recurring invoice-state deltas in UI
+1. reconciliation output delta follow-up completed in `/settings`
 2. continue with deeper modularization and test refactor work from Track D
