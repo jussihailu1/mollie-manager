@@ -292,9 +292,12 @@ Track A is considered complete when all of the following are true:
 
 ## Follow-On Decision
 
-After Track A lands, reassess whether the next best move is:
+Track A follow-on status:
 
-1. Track C: ops surface hardening
-2. Track B: invoice delivery hardening
+1. Track C: ops surface hardening completed
+2. Invoice delivery hardening completed
 
-Default recommendation remains Track C next because it overlaps best with the planned unified reliability and repair operator surface.
+Current recommended follow-on is the next operator-facing reliability slice:
+
+1. expand reconciliation output with first-payment and recurring invoice-state deltas in UI
+2. continue with deeper modularization and test refactor work from Track D
