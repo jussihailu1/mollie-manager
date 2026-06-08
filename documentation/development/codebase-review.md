@@ -240,6 +240,7 @@ Progress:
 - payment sync classification, chargeback detection, review timestamping, and metadata mapping now live in [lib/reliability/payment-sync-record.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/payment-sync-record.ts>) with focused node coverage
 - payment and subscription alert side effects now live in [lib/reliability/sync-alerts.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/sync-alerts.ts>) so sync orchestration no longer owns alert delivery details
 - first-payment and recurring invoice modules now share count, amount, error, date, and duplicate-reference helpers in [lib/eboekhouden/invoice-flow-helpers.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/eboekhouden/invoice-flow-helpers.ts>) with focused node coverage
+- customer onboarding relation-field normalization and e-Boekhouden patch detection now live in [lib/onboarding/customer-relation-fields.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/customer-relation-fields.ts>) with focused node coverage
 
 ### P2: Highest-risk flows now have focused seam coverage; broader DB-backed integration remains optional hardening
 

@@ -22,13 +22,15 @@ import {
 } from "@/lib/eboekhouden/client";
 import {
   localFieldsToRelationPatch,
-  relationToLocalFields,
-  type EboekhoudenRelation,
   type LocalRelationFields,
 } from "@/lib/eboekhouden/relation-mapping";
 import { getMollieClient, getMollieWebhookUrl } from "@/lib/mollie/client";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
 import { buildConsentLinkCreatedNotice } from "@/lib/onboarding/consent-link";
+import {
+  shouldPatchEboekhoudenRelation,
+  toCustomerRelationFields,
+} from "@/lib/onboarding/customer-relation-fields";
 import {
   buildConsentTokenStorage,
   createConsentToken,
@@ -199,43 +201,13 @@ function serializeIntegrationError(error: unknown) {
   return serializeError(error);
 }
 
-function toRelationFields(data: {
-  address?: string;
-  businessName: string;
-  contactName: string;
-  email: string;
-  notes?: string;
-  phone?: string;
-}): LocalRelationFields {
-  return {
-    address: data.address ?? "",
-    businessName: data.businessName,
-    contactName: data.contactName,
-    email: data.email,
-    notes: data.notes ?? "",
-    phone: data.phone ?? "",
-  };
-}
-
-function shouldPatchRelation(
-  relation: EboekhoudenRelation,
-  fields: LocalRelationFields,
-) {
-  const existingFields = relationToLocalFields(relation);
-
-  return Object.entries(fields).some(([field, value]) => {
-    const currentValue = existingFields[field as keyof LocalRelationFields];
-    return value.trim().length > 0 && currentValue.trim() !== value.trim();
-  });
-}
-
 async function updateRelationFromLocalFields(
   relationId: number,
   fields: LocalRelationFields,
 ) {
   const relation = await getEboekhoudenRelation(relationId);
 
-  if (!shouldPatchRelation(relation, fields)) {
+  if (!shouldPatchEboekhoudenRelation(relation, fields)) {
     return relation;
   }
 
@@ -719,7 +691,7 @@ export async function createCustomerAction(formData: FormData) {
   try {
     const localCustomerId = crypto.randomUUID();
     const selectedMode = await getSelectedMollieMode();
-    const relationFields = toRelationFields(parsed.data);
+    const relationFields = toCustomerRelationFields(parsed.data);
     const relationIdToLink =
       parsed.data.source === "eboekhouden"
         ? parsed.data.eboekhoudenRelationId
@@ -879,7 +851,7 @@ export async function linkEboekhoudenRelationAction(formData: FormData) {
       customer.id,
     );
 
-    const relationFields = toRelationFields(parsed.data);
+    const relationFields = toCustomerRelationFields(parsed.data);
     const linkedRelation = await updateRelationFromLocalFields(
       parsed.data.eboekhoudenRelationId,
       relationFields,
