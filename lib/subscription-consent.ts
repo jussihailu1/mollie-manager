@@ -8,11 +8,12 @@ import { z } from "zod";
 import { getDb } from "@/lib/db";
 import { env } from "@/lib/env";
 import {
-  buildSubscriptionConsentPath,
   consentTokenSchema,
-  findMissingRequiredConsentKey,
-  parseConsentAcceptanceInput,
 } from "@/lib/subscription-consent-acceptance";
+import {
+  runAcceptSubscriptionConsentFlow,
+  type MarkSubscriptionConsentAcceptedInput,
+} from "@/lib/subscription-consent-flow";
 import {
   buildConsentTokenStorage,
   hashConsentToken,
@@ -303,46 +304,22 @@ export async function getSubscriptionOnboardingReturnRecord(token: string) {
   } satisfies SubscriptionOnboardingReturnRecord;
 }
 
+async function markSubscriptionConsentAccepted(input: MarkSubscriptionConsentAcceptedInput) {
+  await getDb().execute(sql`
+    update subscription_onboarding_consents
+    set
+      accepted_checkbox_keys = ${JSON.stringify(input.acceptedCheckboxKeys)}::jsonb,
+      accepted_at = now(),
+      accepted_ip = ${input.acceptedIp},
+      accepted_user_agent = ${input.acceptedUserAgent},
+      updated_at = now()
+    where id = ${input.consentId}
+      and accepted_at is null
+  `);
+}
+
 export async function acceptSubscriptionConsentAction(formData: FormData) {
   "use server";
-
-  const parsed = parseConsentAcceptanceInput({
-    cancellationPolicyAck: formData.get("cancellationPolicyAck"),
-    recurringBillingPolicyAck: formData.get("recurringBillingPolicyAck"),
-    recurringTermsAck: formData.get("recurringTermsAck"),
-    token: formData.get("token"),
-  });
-
-  if (!parsed.success) {
-    redirect(
-      buildSubscriptionConsentPath(parsed.tokenForRedirect, {
-        error: "consent_form_invalid",
-      }),
-    );
-  }
-
-  const consent = await getSubscriptionConsentByToken(parsed.token);
-
-  if (!consent) {
-    redirect(buildSubscriptionConsentPath(parsed.token, { error: "consent_not_found" }));
-  }
-
-  if (!consent.checkoutUrl) {
-    redirect(buildSubscriptionConsentPath(parsed.token, { error: "checkout_missing" }));
-  }
-
-  if (consent.acceptedAt) {
-    redirect(consent.checkoutUrl);
-  }
-
-  const missingKey = findMissingRequiredConsentKey(
-    consent.requiredCheckboxKeys,
-    parsed.acknowledgedKeys,
-  );
-
-  if (missingKey) {
-    redirect(buildSubscriptionConsentPath(parsed.token, { error: "consent_required" }));
-  }
 
   const headerStore = await headers();
   const acceptedIp =
@@ -352,19 +329,23 @@ export async function acceptSubscriptionConsentAction(formData: FormData) {
       .map((part) => part.trim())
       .find(Boolean) ?? null;
   const acceptedUserAgent = headerStore.get("user-agent") ?? null;
+  const result = await runAcceptSubscriptionConsentFlow(
+    {
+      acceptedIp,
+      acceptedUserAgent,
+      formInput: {
+        cancellationPolicyAck: formData.get("cancellationPolicyAck"),
+        recurringBillingPolicyAck: formData.get("recurringBillingPolicyAck"),
+        recurringTermsAck: formData.get("recurringTermsAck"),
+        token: formData.get("token"),
+      },
+    },
+    {
+      getConsentByToken: getSubscriptionConsentByToken,
+      markConsentAccepted: markSubscriptionConsentAccepted,
+    },
+  );
 
-  await getDb().execute(sql`
-    update subscription_onboarding_consents
-    set
-      accepted_checkbox_keys = ${JSON.stringify(parsed.acknowledgedKeys)}::jsonb,
-      accepted_at = now(),
-      accepted_ip = ${acceptedIp},
-      accepted_user_agent = ${acceptedUserAgent},
-      updated_at = now()
-    where id = ${consent.consentId}
-      and accepted_at is null
-  `);
-
-  redirect(consent.checkoutUrl);
+  redirect(result.redirectTo);
 }
 

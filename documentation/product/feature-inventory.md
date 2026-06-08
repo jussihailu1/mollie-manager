@@ -73,8 +73,8 @@ Reference: `../development/codebase-review.md`
   Status: the metadata persistence path is gone, the payment drawer no longer exposes raw callback URLs, and newly generated Mollie webhook URLs are secret-free; webhook processing now requires managed local resource resolution.
 - [x] Harden invoice PDF fetch and attachment handling with trusted-host, timeout, and size controls
   Status: trusted e-Boekhouden-only URL handling, redirect/timeout/size controls, and payment-drawer attachment status are now in place; the remaining work is broader ops-surface visibility only if it proves necessary.
-- [ ] Add integration coverage for consent, webhook sync, first-payment invoice creation, recurring invoice delivery retry, and repair flows
-  Status: flow coverage now exists for consent form acceptance parsing/required-checkbox policy, webhook ingestion/status handling, the invoice creation batch helper, the invoice delivery retry batch helper, and the targeted repair surface; full DB-backed consent acceptance still needs deeper executable tests.
+- [x] Add integration coverage for consent, webhook sync, first-payment invoice creation, recurring invoice delivery retry, and repair flows
+  Status: focused executable coverage now exists at the key flow seams: consent acceptance parsing and injected acceptance orchestration, webhook ingestion/status handling, invoice creation batch mapping, invoice delivery retry batch mapping, and targeted repair routing. A heavier DB-backed end-to-end harness remains optional future hardening rather than a current blocker.
 - [ ] Refactor oversized billing/orchestration modules into smaller policy, state-transition, and integration units
 
 ## Deferred Or Later

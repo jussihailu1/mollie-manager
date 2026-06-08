@@ -58,6 +58,7 @@ Implemented so far:
 - invoice delivery retry batch handling now has a shared helper and executable coverage for first-payment and recurring retry mapping
 - Mollie webhook ingestion now routes through an injectable helper with executable coverage for JSON/form parsing, supported resource checks, pending event storage, processed/failed status updates, and preferred-mode behavior
 - consent form acceptance parsing and required-checkbox policy now live in a pure helper with executable coverage
+- consent acceptance orchestration now routes through an injectable helper with executable coverage for invalid forms, missing records, missing checkout URLs, already-accepted consent, missing required acknowledgements, and successful acceptance updates
 - settings reconciliation now exposes explicit `sync_only` versus `full` modes so operators can refresh Mollie state without automatically triggering invoice or activation follow-ups
 - the standalone Track A onboarding hardening plan has been retired; the remaining hardening work now lives in the active docs below
 - product scope has been narrowed so subscriptions stay inside customer workflows and payment links stay inside onboarding instead of becoming standalone workspaces
@@ -229,29 +230,27 @@ Recommended direction:
 - isolate side effects from state-transition logic
 - create narrower modules around consent, payment-link creation, payment sync, invoice claiming, and alert generation
 
-### P2: Highest-risk flows are weakly tested
+### P2: Highest-risk flows now have focused seam coverage; broader DB-backed integration remains optional hardening
 
-Existing tests are mostly helper or formatter level.
+Existing tests now cover the main money/compliance flow decisions at pure or dependency-injected seams, but they still stop short of a full database-backed end-to-end harness.
 
 Observed test surface:
 
 - [package.json](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/package.json:23>)
 - current test files are concentrated in small helper modules, not the end-to-end flows
 
-Why this is unhealthy:
+Why this still matters:
 
 - onboarding, webhook processing, sync repair, and invoice creation are where money and compliance risk live
-- those flows currently depend more on careful reading than executable guarantees
+- the current tests lock the critical decisions, but full route/action/database integration would catch wiring issues that seam tests cannot
 
 Recommended direction:
 
-- add focused integration-style tests around:
-  - first-payment sync -> invoice create
-  - recurring invoice create/delivery retry
-  - repair flows with mixed happy and failure paths
+- keep adding focused integration-style tests when touching these paths
+- consider a database-backed test harness only if future changes increase cross-table behavior or regression cost
 
 Webhook ingestion/status handling now has executable coverage around the route helper; replay behavior remains partially covered by source-scope tests.
-Consent form parsing and required-checkbox policy now have executable coverage; the DB-backed consent acceptance action still needs deeper integration-style coverage.
+Consent form parsing, required-checkbox policy, and acceptance orchestration now have executable coverage around injected dependencies.
 
 ### P3: e-Boekhouden relation search is operationally expensive
 
