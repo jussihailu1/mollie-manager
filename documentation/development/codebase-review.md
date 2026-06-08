@@ -238,6 +238,7 @@ Progress:
 - first-payment plan normalization, term validation, and consent-plan construction now live in [lib/onboarding/first-payment-plan.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/first-payment-plan.ts>) with focused node coverage
 - payment-link sync status, amount fallback, and metadata mapping now live in [lib/reliability/payment-link-sync-record.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/payment-link-sync-record.ts>) with focused node coverage
 - payment sync classification, chargeback detection, review timestamping, and metadata mapping now live in [lib/reliability/payment-sync-record.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/payment-sync-record.ts>) with focused node coverage
+- payment and subscription alert side effects now live in [lib/reliability/sync-alerts.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/sync-alerts.ts>) so sync orchestration no longer owns alert delivery details
 
 ### P2: Highest-risk flows now have focused seam coverage; broader DB-backed integration remains optional hardening
 

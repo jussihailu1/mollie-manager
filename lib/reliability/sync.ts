@@ -17,11 +17,6 @@ import {
   upsertRecurringBillingScheduleForSubscription,
 } from "@/lib/recurring-billing-schedule";
 import {
-  deliverAlertEmail,
-  openAlert,
-  resolveAlertsForEntity,
-} from "@/lib/reliability/alerts";
-import {
   buildInvoiceStateDeltaSummary,
   FIRST_PAYMENT_INVOICE_STATES,
   mapInvoiceStateCounts,
@@ -44,8 +39,11 @@ import {
   hasPaymentChargeback,
   resolveFirstPaymentMode,
   resolvePaymentSyncType,
-  serializePaymentStatusReason,
 } from "@/lib/reliability/payment-sync-record";
+import {
+  handlePaymentAlerts,
+  handleSubscriptionAlerts,
+} from "@/lib/reliability/sync-alerts";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 
 type MolliePaymentLink = {
@@ -599,224 +597,6 @@ async function syncMatchingPaymentLinkForPayment(
   }
 
   return null;
-}
-
-async function handlePaymentAlerts(input: {
-  customerId: string | null;
-  localPaymentId: string;
-  payment: Payment;
-  subscriptionId: string | null;
-}) {
-  const paymentType = resolvePaymentSyncType(input.payment);
-  const recurringCollectionState = derivePaymentRecurringCollectionState(input.payment);
-
-  if (paymentType === "recurring") {
-    if (recurringCollectionState === "pending_return_window") {
-      return;
-    }
-
-    if (recurringCollectionState === "reversal_critical_review") {
-      const alert = await openAlert({
-        customerId: input.customerId,
-        message:
-          "A recurring SEPA direct debit was reversed or disputed. The invoice obligation may still be open; review Mollie and e-Boekhouden before changing service or billing state.",
-        paymentId: input.localPaymentId,
-        payload: {
-          policy: "recurring_billing_policy",
-          recurringCollectionState,
-        },
-        severity: "critical",
-        subscriptionId: input.subscriptionId,
-        title: "Recurring collection reversed",
-      });
-
-      if (alert.isNew) {
-        await deliverAlertEmail({
-          alertId: alert.id,
-          message:
-            "A recurring SEPA direct debit was reversed or disputed. Review Mollie, the invoice, and the subscription before taking action.",
-          title: "Recurring collection reversed",
-        });
-      }
-
-      return;
-    }
-
-    if (recurringCollectionState === "mandate_problem_review") {
-      const alert = await openAlert({
-        customerId: input.customerId,
-        message:
-          "A recurring collection failed with a possible mandate or bank-account problem. Do not rely on future automatic collection until the mandate or payment path is reviewed.",
-        paymentId: input.localPaymentId,
-        payload: {
-          policy: "recurring_billing_policy",
-          recurringCollectionState,
-          statusReason: serializePaymentStatusReason(input.payment.statusReason),
-        },
-        severity: "critical",
-        subscriptionId: input.subscriptionId,
-        title: "Recurring mandate problem",
-      });
-
-      if (alert.isNew) {
-        await deliverAlertEmail({
-          alertId: alert.id,
-          message:
-            "A recurring collection failed with a possible mandate problem. Review the customer before retrying automatic collection.",
-          title: "Recurring mandate problem",
-        });
-      }
-
-      return;
-    }
-
-    if (recurringCollectionState === "failed_needs_review") {
-      const alert = await openAlert({
-        customerId: input.customerId,
-        message:
-          "A recurring collection failed. Keep the existing invoice open, do not create a duplicate invoice, and review the customer manually before retrying or changing service state.",
-        paymentId: input.localPaymentId,
-        payload: {
-          invoiceStatePolicy: "keep_existing_invoice_open",
-          noAutomaticCancellation: true,
-          noAutomaticFees: true,
-          policy: "recurring_billing_policy",
-          recurringCollectionState,
-        },
-        severity: "warning",
-        subscriptionId: input.subscriptionId,
-        title: "Recurring collection failed",
-      });
-
-      if (alert.isNew) {
-        await deliverAlertEmail({
-          alertId: alert.id,
-          message:
-            "A recurring collection failed. Keep the existing invoice open and review manually; do not create a duplicate invoice or auto-cancel.",
-          title: "Recurring collection failed",
-        });
-      }
-
-      return;
-    }
-
-    if (recurringCollectionState === "settled") {
-      await resolveAlertsForEntity({
-        paymentId: input.localPaymentId,
-      });
-      return;
-    }
-  }
-
-  if (hasPaymentChargeback(input.payment)) {
-    const alert = await openAlert({
-      customerId: input.customerId,
-      message:
-        "A payment appears to have been charged back or disputed. Review the payment in Mollie and decide how the subscription should proceed.",
-      paymentId: input.localPaymentId,
-      severity: "critical",
-      subscriptionId: input.subscriptionId,
-      title: "Disputed payment",
-    });
-
-    if (alert.isNew) {
-      await deliverAlertEmail({
-        alertId: alert.id,
-        message:
-          "A payment was marked as charged back or disputed during synchronization. Open Mollie Manager and review the payment immediately.",
-        title: "Disputed payment",
-      });
-    }
-
-    return;
-  }
-
-  if (input.payment.status === "failed" || input.payment.status === "expired") {
-    const alertTitle =
-      input.payment.status === "failed" ? "Failed payment" : "Expired payment";
-    const alert = await openAlert({
-      customerId: input.customerId,
-      message:
-        input.payment.status === "failed"
-          ? "A payment failed and needs review before service continues."
-          : "A checkout expired before the payment completed.",
-      paymentId: input.localPaymentId,
-      severity: "warning",
-      subscriptionId: input.subscriptionId,
-      title: alertTitle,
-    });
-
-    if (alert.isNew) {
-      await deliverAlertEmail({
-        alertId: alert.id,
-        message:
-          input.payment.status === "failed"
-            ? "A payment failed during synchronization. Open Mollie Manager to review the payment and the affected customer."
-            : "A Mollie checkout expired before completion. Open Mollie Manager to decide whether to issue a new payment.",
-        title: alertTitle,
-      });
-    }
-
-    return;
-  }
-
-  await resolveAlertsForEntity({
-    paymentId: input.localPaymentId,
-  });
-}
-
-async function handleSubscriptionAlerts(input: {
-  customerId: string;
-  localSubscriptionId: string;
-  localStatus: string;
-}) {
-  if (input.localStatus === "payment_action_required") {
-    const alert = await openAlert({
-      customerId: input.customerId,
-      message:
-        "The subscription is suspended or waiting for a payment-related intervention in Mollie.",
-      severity: "warning",
-      subscriptionId: input.localSubscriptionId,
-      title: "Subscription needs payment action",
-    });
-
-    if (alert.isNew) {
-      await deliverAlertEmail({
-        alertId: alert.id,
-        message:
-          "A subscription entered a payment-action-required state. Open Mollie Manager to inspect the latest payment and subscription details.",
-        title: "Subscription needs payment action",
-      });
-    }
-
-    return;
-  }
-
-  if (input.localStatus === "out_of_sync") {
-    const alert = await openAlert({
-      customerId: input.customerId,
-      message:
-        "The local subscription state no longer matches the latest Mollie state.",
-      severity: "critical",
-      subscriptionId: input.localSubscriptionId,
-      title: "Subscription out of sync",
-    });
-
-    if (alert.isNew) {
-      await deliverAlertEmail({
-        alertId: alert.id,
-        message:
-          "A subscription appears out of sync with Mollie. Open Mollie Manager and run a sync or reconciliation pass.",
-        title: "Subscription out of sync",
-      });
-    }
-
-    return;
-  }
-
-  await resolveAlertsForEntity({
-    subscriptionId: input.localSubscriptionId,
-  });
 }
 
 export async function syncPaymentByMollieId(
