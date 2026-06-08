@@ -18,6 +18,13 @@ import {
   isSafeInvoiceRetryFailure,
   SAFE_INVOICE_RETRY_FAILURE_CODES,
 } from "@/lib/eboekhouden/invoice-failure-retry";
+import {
+  isEboekhoudenReferenceAlreadyExistsError,
+  serializeInvoiceErrorMessage,
+  toInvoiceAmountNumber,
+  toInvoiceCount,
+  toInvoiceDateString,
+} from "@/lib/eboekhouden/invoice-flow-helpers";
 import { buildFirstPaymentInvoiceReference } from "@/lib/eboekhouden/invoice-reference";
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
 import { createInvoiceBatchWithDependencies } from "@/lib/invoice-creation-batch";
@@ -116,42 +123,18 @@ type FailedFirstPaymentRecoveryCandidate = {
   subscriptionId: string | null;
 };
 
-function toCount(value: unknown) {
-  if (typeof value === "number") {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    return Number(value);
-  }
-
-  return 0;
-}
-
-function toNumberAmount(value: string) {
-  return Number(Number(value).toFixed(2));
-}
-
 function serializeErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message.slice(0, 500);
-  }
-
-  return "First-payment invoice creation failed.";
-}
-
-function toDateString(value: string | null) {
-  if (!value) {
-    return null;
-  }
-
-  return value.slice(0, 10);
+  return serializeInvoiceErrorMessage(
+    error,
+    "First-payment invoice creation failed.",
+  );
 }
 
 function buildReference(candidate: FirstPaymentInvoiceCandidate) {
   return buildFirstPaymentInvoiceReference({
     invoiceDate:
-      toDateString(candidate.paidAt) ?? toDateString(candidate.paymentCreatedAt),
+      toInvoiceDateString(candidate.paidAt) ??
+      toInvoiceDateString(candidate.paymentCreatedAt),
     paymentId: candidate.paymentId,
   });
 }
@@ -383,18 +366,6 @@ async function storeInvoiceCreationSuccess(input: {
   };
 }
 
-function isReferenceAlreadyExistsError(error: unknown) {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  return (
-    error.message.includes("FACT_VERWERK_004") ||
-    error.message.includes("already exists") ||
-    error.message.includes("FACT_014")
-  );
-}
-
 async function storeInvoiceCreationFailure(input: {
   actor: InvoiceActor;
   candidate: FirstPaymentInvoiceCandidate;
@@ -476,10 +447,6 @@ async function storeInvoiceCreationFailure(input: {
   return errorMessage;
 }
 
-function isFailureRetrySafe(errorMessage: string | null) {
-  return isSafeInvoiceRetryFailure(errorMessage);
-}
-
 export async function queueRetryForSafeFailedFirstPaymentInvoicesBatch(input: {
   actor: InvoiceActor;
   limit?: number;
@@ -502,7 +469,7 @@ export async function queueRetryForSafeFailedFirstPaymentInvoicesBatch(input: {
     limit ${Math.max(1, input.limit ?? DEFAULT_BATCH_SIZE)}
   `);
   const safePaymentIds = failedRows.rows
-    .filter((row) => isFailureRetrySafe(row.errorMessage))
+    .filter((row) => isSafeInvoiceRetryFailure(row.errorMessage))
     .map((row) => row.paymentId);
 
   if (safePaymentIds.length === 0) {
@@ -583,7 +550,7 @@ export async function getFailedFirstPaymentInvoiceRetrySummary(
 
   let retryableCount = 0;
   for (const row of result.rows) {
-    if (isFailureRetrySafe(row.errorMessage)) {
+    if (isSafeInvoiceRetryFailure(row.errorMessage)) {
       retryableCount += 1;
     }
   }
@@ -621,7 +588,7 @@ export async function queueRetryForFailedFirstPaymentInvoicesBatch(input: {
     `);
     const candidate = row.rows[0];
 
-    if (!candidate || !isFailureRetrySafe(candidate.errorMessage)) {
+    if (!candidate || !isSafeInvoiceRetryFailure(candidate.errorMessage)) {
       skippedCount += 1;
       continue;
     }
@@ -899,9 +866,9 @@ export async function getDueFirstPaymentInvoiceQueueSummary(
   const row = result.rows[0];
 
   return {
-    actionableCount: toCount(row?.actionableCount),
-    blockedCount: toCount(row?.blockedCount),
-    dueCount: toCount(row?.dueCount),
+    actionableCount: toInvoiceCount(row?.actionableCount),
+    blockedCount: toInvoiceCount(row?.blockedCount),
+    dueCount: toInvoiceCount(row?.dueCount),
   };
 }
 
@@ -974,7 +941,8 @@ export async function createEboekhoudenInvoiceForFirstPayment(
   }
 
   const invoiceDate =
-    toDateString(candidate.paidAt) ?? toDateString(candidate.paymentCreatedAt);
+    toInvoiceDateString(candidate.paidAt) ??
+    toInvoiceDateString(candidate.paymentCreatedAt);
   if (!invoiceDate) {
     const errorMessage = await storeInvoiceCreationFailure({
       actor,
@@ -1046,7 +1014,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
         {
           description: parsedPlanSnapshot.data.description,
           ledgerId: settings!.revenueLedgerId!,
-          pricePerUnit: toNumberAmount(candidate.amountValue),
+          pricePerUnit: toInvoiceAmountNumber(candidate.amountValue),
           quantity: 1,
           vatCode: settings!.vatCode,
         },
@@ -1082,7 +1050,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       status: "created",
     };
   } catch (error) {
-    if (isReferenceAlreadyExistsError(error)) {
+    if (isEboekhoudenReferenceAlreadyExistsError(error)) {
       const existing = await findExistingEboekhoudenInvoiceByReference({
         date: invoiceDate,
         reference,
@@ -1177,7 +1145,8 @@ export async function recoverFailedFirstPaymentInvoicesBatch(input: {
 
   for (const candidate of candidates) {
     const invoiceDate =
-      toDateString(candidate.paidAt) ?? toDateString(candidate.paymentCreatedAt);
+      toInvoiceDateString(candidate.paidAt) ??
+      toInvoiceDateString(candidate.paymentCreatedAt);
     if (!invoiceDate) {
       continue;
     }

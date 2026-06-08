@@ -14,6 +14,12 @@ import {
   isSafeInvoiceRetryFailure,
   SAFE_INVOICE_RETRY_FAILURE_CODES,
 } from "@/lib/eboekhouden/invoice-failure-retry";
+import {
+  isEboekhoudenReferenceAlreadyExistsError,
+  serializeInvoiceErrorMessage,
+  toInvoiceAmountNumber,
+  toInvoiceCount,
+} from "@/lib/eboekhouden/invoice-flow-helpers";
 import { buildRecurringInvoiceReference } from "@/lib/eboekhouden/invoice-reference";
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
 import { createInvoiceBatchWithDependencies } from "@/lib/invoice-creation-batch";
@@ -105,32 +111,8 @@ function daysBetween(startDate: string, endDate: string) {
   return Math.max(Math.round((end - start) / 86_400_000), 0);
 }
 
-function toNumberAmount(value: string) {
-  return Number(Number(value).toFixed(2));
-}
-
-function toCount(value: unknown) {
-  if (typeof value === "number") {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    return Number(value);
-  }
-
-  return 0;
-}
-
 function serializeErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message.slice(0, 500);
-  }
-
-  return "Recurring invoice creation failed.";
-}
-
-function isFailureRetrySafe(errorMessage: string | null) {
-  return isSafeInvoiceRetryFailure(errorMessage);
+  return serializeInvoiceErrorMessage(error, "Recurring invoice creation failed.");
 }
 
 function buildReference(candidate: ScheduledInvoiceCandidate) {
@@ -286,18 +268,6 @@ async function storeInvoiceCreationSuccess(input: {
   };
 }
 
-function isReferenceAlreadyExistsError(error: unknown) {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  return (
-    error.message.includes("FACT_VERWERK_004") ||
-    error.message.includes("already exists") ||
-    error.message.includes("FACT_014")
-  );
-}
-
 async function storeInvoiceCreationFailure(input: {
   actor: InvoiceActor;
   candidate: ScheduledInvoiceCandidate;
@@ -433,9 +403,9 @@ export async function getDueRecurringInvoiceQueueSummary(
   const row = result.rows[0];
 
   return {
-    actionableCount: toCount(row?.actionableCount),
-    blockedCount: toCount(row?.blockedCount),
-    dueCount: toCount(row?.dueCount),
+    actionableCount: toInvoiceCount(row?.actionableCount),
+    blockedCount: toInvoiceCount(row?.blockedCount),
+    dueCount: toInvoiceCount(row?.dueCount),
   };
 }
 
@@ -458,7 +428,7 @@ export async function getFailedRecurringInvoiceRetrySummary(
 
   let retryableCount = 0;
   for (const row of result.rows) {
-    if (isFailureRetrySafe(row.errorMessage)) {
+    if (isSafeInvoiceRetryFailure(row.errorMessage)) {
       retryableCount += 1;
     }
   }
@@ -491,7 +461,7 @@ export async function queueRetryForFailedRecurringInvoice(input: {
   `);
   const row = candidate.rows[0];
 
-  if (!row || !isFailureRetrySafe(row.errorMessage)) {
+  if (!row || !isSafeInvoiceRetryFailure(row.errorMessage)) {
     return "skipped";
   }
 
@@ -588,7 +558,7 @@ export async function queueRetryForSafeFailedRecurringInvoicesBatch(input: {
     limit ${Math.max(1, input.limit ?? DEFAULT_BATCH_SIZE)}
   `);
   const safeScheduleIds = failedRows.rows
-    .filter((row) => isFailureRetrySafe(row.errorMessage))
+    .filter((row) => isSafeInvoiceRetryFailure(row.errorMessage))
     .map((row) => row.scheduleId);
 
   if (safeScheduleIds.length === 0) {
@@ -857,7 +827,7 @@ export async function createEboekhoudenInvoiceForSchedule(
         {
           description: candidate.subscriptionDescription,
           ledgerId: settings!.revenueLedgerId!,
-          pricePerUnit: toNumberAmount(candidate.amountValue),
+          pricePerUnit: toInvoiceAmountNumber(candidate.amountValue),
           quantity: 1,
           vatCode: settings!.vatCode,
         },
@@ -897,7 +867,7 @@ export async function createEboekhoudenInvoiceForSchedule(
       status: "created",
     };
   } catch (error) {
-    if (isReferenceAlreadyExistsError(error)) {
+    if (isEboekhoudenReferenceAlreadyExistsError(error)) {
       const existing = await findExistingEboekhoudenInvoiceByReference({
         date: candidate.invoiceSendDueDate,
         reference,
