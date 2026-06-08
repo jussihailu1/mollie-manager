@@ -37,31 +37,23 @@ import {
   type ReconciliationSummary,
   type RecurringInvoiceState,
 } from "@/lib/reliability/reconciliation-summary";
+import {
+  buildPaymentLinkSyncMetadata,
+  derivePaymentLinkSyncAmount,
+  derivePaymentLinkSyncStatus,
+  type PaymentLinkSyncSource,
+} from "@/lib/reliability/payment-link-sync-record";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 
-type MollieAmount = {
-  currency: string;
-  value: string;
-};
-
 type MolliePaymentLink = {
-  allowedMethods?: string[];
-  amount?: MollieAmount;
-  archived: boolean;
   createdAt?: string;
-  customerId?: string;
   description: string;
   expiresAt?: string;
   getPaymentUrl: () => string;
   getPayments: () => AsyncIterable<Payment>;
   id: string;
-  minimumAmount?: MollieAmount;
-  paidAt?: string;
-  redirectUrl?: string;
-  reusable?: boolean;
-  sequenceType: string;
   webhookUrl?: string;
-};
+} & PaymentLinkSyncSource;
 
 type SyncActor = {
   email?: string | null;
@@ -115,8 +107,6 @@ type InvoiceStateCountRow<TState extends string> = {
   count: number | string;
   state: TState;
 };
-
-const unsuccessfulPaymentStatuses = new Set(["canceled", "expired", "failed"]);
 
 async function getFirstPaymentInvoiceStateCounts(
   mode?: MollieMode | null,
@@ -501,53 +491,6 @@ async function collectPaymentLinkPayments(paymentLink: MolliePaymentLink) {
   return payments;
 }
 
-function derivePaymentLinkStatus(
-  paymentLink: MolliePaymentLink,
-  payments: Payment[],
-) {
-  const latestPayment = payments[0] ?? null;
-
-  if (paymentLink.archived) {
-    return "archived";
-  }
-
-  if (paymentLink.paidAt || payments.some((payment) => payment.status === "paid")) {
-    return "paid";
-  }
-
-  if (latestPayment && unsuccessfulPaymentStatuses.has(latestPayment.status)) {
-    return latestPayment.status;
-  }
-
-  return "open";
-}
-
-function buildPaymentLinkMetadata(
-  paymentLink: MolliePaymentLink,
-  payments: Payment[],
-  existingMetadata: Record<string, unknown> = {},
-) {
-  const latestPayment = payments[0] ?? null;
-
-  return {
-    ...existingMetadata,
-    allowedMethods: paymentLink.allowedMethods ?? ["ideal"],
-    latestPaymentId: latestPayment?.id ?? null,
-    latestPaymentStatus: latestPayment?.status ?? null,
-    mollieCustomerId: paymentLink.customerId ?? null,
-    paymentIds: payments.map((payment) => payment.id),
-    paymentType: "first",
-    redirectUrl:
-      paymentLink.redirectUrl ??
-      (typeof existingMetadata.redirectUrl === "string"
-        ? existingMetadata.redirectUrl
-        : null),
-    reusable: paymentLink.reusable ?? false,
-    sequenceType: paymentLink.sequenceType,
-    source: "subscription_onboarding",
-  };
-}
-
 function shouldRunBillingFollowups(mode: ReconciliationMode) {
   return mode === "full";
 }
@@ -565,12 +508,8 @@ async function upsertPaymentLinkFromMollie(
     options.customerId ??
     (await getLocalCustomerByMollieId(mode, paymentLink.customerId))?.id ??
     null;
-  const paymentLinkAmount =
-    paymentLink.amount ?? paymentLink.minimumAmount ?? payments[0]?.amount ?? {
-      currency: "EUR",
-      value: "0.00",
-    };
-  const paymentLinkStatus = derivePaymentLinkStatus(paymentLink, payments);
+  const paymentLinkAmount = derivePaymentLinkSyncAmount(paymentLink, payments);
+  const paymentLinkStatus = derivePaymentLinkSyncStatus(paymentLink, payments);
   let localPaymentLinkId = crypto.randomUUID();
 
   await transaction(async (client) => {
@@ -609,7 +548,11 @@ async function upsertPaymentLinkFromMollie(
           ${paymentLink.getPaymentUrl()},
           ${paymentLink.expiresAt ?? null}::timestamptz,
           ${JSON.stringify(
-            buildPaymentLinkMetadata(paymentLink, payments, existingPaymentLink?.metadata),
+            buildPaymentLinkSyncMetadata({
+              existingMetadata: existingPaymentLink?.metadata,
+              paymentLink,
+              payments,
+            }),
           )}::jsonb,
           coalesce(${paymentLink.createdAt ?? null}::timestamptz, now()),
           now(),
