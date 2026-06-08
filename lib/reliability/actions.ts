@@ -20,6 +20,7 @@ import {
   syncPaymentLinkByMollieId,
   syncSubscriptionByMollieId,
 } from "@/lib/reliability/sync";
+import { repairReliabilityTarget } from "@/lib/reliability/repair";
 
 const redirectSchema = z.object({
   returnTo: z.string().trim().startsWith("/").default("/notifications"),
@@ -27,6 +28,11 @@ const redirectSchema = z.object({
 
 const replayWebhookSchema = redirectSchema.extend({
   webhookEventId: z.string().uuid(),
+});
+
+const repairTargetSchema = redirectSchema.extend({
+  repairTargetId: z.string().uuid(),
+  repairTargetKind: z.enum(["customer", "payment", "subscription"]),
 });
 
 const reconciliationSchema = redirectSchema.extend({
@@ -214,6 +220,10 @@ function formatReconciliationMode(mode: ReconciliationMode) {
   return mode === "sync_only" ? "Sync-only" : "Full";
 }
 
+function formatRepairTargetKind(kind: "customer" | "payment" | "subscription") {
+  return kind === "customer" ? "Customer" : kind === "payment" ? "Payment" : "Subscription";
+}
+
 export async function replayWebhookEventAction(formData: FormData) {
   const parsed = replayWebhookSchema.safeParse({
     returnTo: formData.get("returnTo"),
@@ -327,6 +337,54 @@ export async function replayWebhookEventAction(formData: FormData) {
       },
     );
 
+    redirectWithMessage(parsed.data.returnTo, {
+      error: serializeError(error),
+    });
+  }
+}
+
+export async function repairReliabilityTargetAction(formData: FormData) {
+  const parsed = repairTargetSchema.safeParse({
+    repairTargetId: formData.get("repairTargetId"),
+    repairTargetKind: formData.get("repairTargetKind"),
+    returnTo: formData.get("returnTo"),
+  });
+
+  if (!parsed.success) {
+    redirectWithMessage("/settings", {
+      error: "Repair target details are missing.",
+    });
+  }
+
+  const session = await requireViewerSession();
+  const selectedMode = await getSelectedMollieMode();
+
+  try {
+    const result = await repairReliabilityTarget({
+      actor: {
+        email: session.user.email ?? null,
+        kind: "user",
+      },
+      id: parsed.data.repairTargetId,
+      kind: parsed.data.repairTargetKind,
+      mode: selectedMode,
+    });
+
+    revalidatePath("/settings");
+    revalidatePath("/customers");
+    revalidatePath("/payments");
+    revalidatePath("/notifications");
+
+    redirectWithMessage(parsed.data.returnTo, {
+      notice:
+        result.status === "repaired"
+          ? `${formatRepairTargetKind(parsed.data.repairTargetKind)} repair completed.`
+          : `${formatRepairTargetKind(parsed.data.repairTargetKind)} repair skipped: ${
+              result.reason ?? "not available"
+            }.`,
+    });
+  } catch (error) {
+    unstable_rethrow(error);
     redirectWithMessage(parsed.data.returnTo, {
       error: serializeError(error),
     });

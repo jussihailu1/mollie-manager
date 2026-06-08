@@ -37,8 +37,8 @@ Canonical policy docs:
 - [ ] Subscription management exists, but mostly inside customer workflows rather than a dedicated primary workspace
 - [ ] Payment-link functionality exists, but there is no separate primary payment-links workspace
 - [ ] Legacy `/alerts` and `/payment-links` routes are compatibility redirects, not active standalone modules
-- [ ] Manual webhook replay exists in backend actions, but it is not a prominent operator workflow
-  Status: the settings ops surface now exposes a failed-webhook replay queue with failed-only replay controls and explicit replay confirmation for the selected mode.
+- [x] Manual webhook replay and targeted repair are surfaced in the settings ops workflow
+  Status: the settings ops surface now exposes a failed-webhook replay queue with failed-only replay controls and explicit replay confirmation, plus a targeted repair form for single customer/payment/subscription resyncs.
 - [x] Reliability and invoice automation health is unified across `/settings` and authenticated `/api/health`
   Status: both surfaces now share the same reliability ops snapshot for webhook health, invoice automation, delivery retries, and cron heartbeat; CLI scripts still remain as deeper fallbacks.
 - [ ] Detailed subscription, mandate, and payment history is available in the data model, but not all of it is surfaced in dense first-class operator views
@@ -50,7 +50,8 @@ Canonical policy docs:
 - [x] Expand reconciliation output with first-payment and recurring invoice-state deltas for easier operator review
   Status: `/settings` now shows the latest reconciliation result with before/after invoice-state deltas for first-payment rows and recurring billing schedules, so operators can confirm normalization and invoice-side changes without digging through raw tables.
 - [ ] Unify stale-sync, webhook-health, and invoice-automation observability into a clearer operator surface
-- [ ] Expose safer, clearer operator controls for webhook replay and repair flows
+- [x] Expose safer, clearer operator controls for webhook replay and repair flows
+  Status: the settings page now includes explicit replay confirmation for failed webhook events and a targeted repair form for customer/payment/subscription resyncs.
 - [ ] Decide whether subscriptions need a dedicated operations workspace again or should stay embedded in customer workflows
 
 ## Cross-Cutting Hardening Work

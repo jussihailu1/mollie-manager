@@ -5,9 +5,7 @@ import { z } from "zod";
 import { requireViewerSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import {
-  repairCustomerTarget,
-  repairPaymentTarget,
-  repairSubscriptionTarget,
+  repairReliabilityTarget,
 } from "@/lib/reliability/repair";
 
 const repairSchema = z.object({
@@ -53,24 +51,12 @@ export async function POST(request: NextRequest) {
       kind: "user" as const,
     };
 
-    const result =
-      parsed.data.kind === "customer"
-        ? await repairCustomerTarget({
-            actor,
-            customerId: parsed.data.id,
-            mode: selectedMode,
-          })
-        : parsed.data.kind === "payment"
-          ? await repairPaymentTarget({
-              actor,
-              mode: selectedMode,
-              paymentId: parsed.data.id,
-            })
-          : await repairSubscriptionTarget({
-              actor,
-              mode: selectedMode,
-              subscriptionId: parsed.data.id,
-            });
+    const result = await repairReliabilityTarget({
+      actor,
+      id: parsed.data.id,
+      kind: parsed.data.kind,
+      mode: selectedMode,
+    });
 
     await revalidateDashboardPaths();
 

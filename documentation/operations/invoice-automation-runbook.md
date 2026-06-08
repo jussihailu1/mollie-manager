@@ -71,6 +71,8 @@ Use these authenticated diagnostics to confirm scheduler liveness without checki
 
 The `/settings` and authenticated `/api/health` surfaces now share the same reliability ops snapshot, so webhook health, invoice automation, delivery retries, and cron heartbeat stay aligned across both views.
 
+The settings page also exposes a targeted repair form for single customer, payment, or subscription resyncs. Use that when one record needs a focused repair without running broader cron recovery.
+
 Operator reconciliation from `/settings` now has explicit modes:
 
 - `sync_only`: refresh Mollie-backed local state only

@@ -339,6 +339,35 @@ export async function repairCustomerTarget(input: {
   };
 }
 
+export async function repairReliabilityTarget(input: {
+  actor?: RepairActor;
+  id: string;
+  kind: RepairTargetKind;
+  mode: MollieMode;
+}): Promise<RepairTargetResult> {
+  if (input.kind === "customer") {
+    return repairCustomerTarget({
+      actor: input.actor,
+      customerId: input.id,
+      mode: input.mode,
+    });
+  }
+
+  if (input.kind === "payment") {
+    return repairPaymentTarget({
+      actor: input.actor,
+      mode: input.mode,
+      paymentId: input.id,
+    });
+  }
+
+  return repairSubscriptionTarget({
+    actor: input.actor,
+    mode: input.mode,
+    subscriptionId: input.id,
+  });
+}
+
 export async function repairPaymentTarget(input: {
   actor?: RepairActor;
   paymentId: string;

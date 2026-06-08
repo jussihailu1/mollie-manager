@@ -11,6 +11,7 @@ import {
 } from "@/lib/billing-actions";
 import {
   replayWebhookEventAction,
+  repairReliabilityTargetAction,
   runReconciliationAction,
   sendTestAlertAction,
 } from "@/lib/reliability/actions";
@@ -552,6 +553,65 @@ export default async function SettingsPage({
               </div>
             </div>
           ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Targeted repair</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Repair one stale customer, payment, or subscription in the current mode when a
+            focused resync is safer than a broader reconciliation pass.
+          </p>
+          <form action={repairReliabilityTargetAction} className="space-y-4">
+            <input type="hidden" name="returnTo" value="/settings" />
+            <div className="grid gap-4 md:grid-cols-[180px,1fr]">
+              <div className="space-y-2">
+                <label
+                  htmlFor="repairTargetKind"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Target type
+                </label>
+                <select
+                  id="repairTargetKind"
+                  name="repairTargetKind"
+                  defaultValue="customer"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="customer">Customer</option>
+                  <option value="payment">Payment</option>
+                  <option value="subscription">Subscription</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="repairTargetId"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Target id
+                </label>
+                <input
+                  id="repairTargetId"
+                  name="repairTargetId"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  placeholder="uuid"
+                />
+              </div>
+            </div>
+            <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+              Batch repair still runs through protected cron recovery. This form is for a single
+              target only.
+            </div>
+            <FormActionButton
+              confirmMessage="Repair the selected target now? This re-syncs the record in the current mode."
+              pendingLabel="Repairing..."
+            >
+              Repair target
+            </FormActionButton>
+          </form>
         </CardContent>
       </Card>
 
