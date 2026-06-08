@@ -58,14 +58,13 @@ Canonical policy docs:
 
 Reference: `../development/codebase-review.md`
 
-- [ ] Remove consent-token leakage from redirect notices, audit logs, and non-essential metadata while improving the operator share-link workflow
+- [x] Remove consent-token leakage from redirect notices, audit logs, and non-essential metadata while improving the operator share-link workflow
   Status: the hashed lookup-token follow-up is implemented. Canonical lookup uses a hash, operator link regeneration uses encrypted recovery, and a one-time backfill script removes legacy plaintext rows after the schema migration.
-  Reference: `../development/track-a-onboarding-hardening-plan.md`
-- [ ] Split public health/liveness from authenticated operator diagnostics and reduce operational detail exposed anonymously
+- [x] Split public health/liveness from authenticated operator diagnostics and reduce operational detail exposed anonymously
   Status: `/api/health` now returns minimal public liveness by default, while full diagnostics are available to cron bearer auth and authenticated operators; `/settings` now surfaces a clearer operator view over the same reliability signals.
-- [ ] Stop persisting secret-bearing webhook URLs into generic metadata and reduce secret sprawl
+- [x] Stop persisting secret-bearing webhook URLs into generic metadata and reduce secret sprawl
   Status: the metadata persistence path is gone, the payment drawer no longer exposes raw callback URLs, and newly generated Mollie webhook URLs are secret-free; webhook processing now requires managed local resource resolution.
-- [ ] Harden invoice PDF fetch and attachment handling with trusted-host, timeout, and size controls
+- [x] Harden invoice PDF fetch and attachment handling with trusted-host, timeout, and size controls
   Status: trusted e-Boekhouden-only URL handling, redirect/timeout/size controls, and payment-drawer attachment status are now in place; the remaining work is broader ops-surface visibility only if it proves necessary.
 - [ ] Add integration coverage for consent, webhook sync, first-payment invoice creation, recurring invoice delivery retry, and repair flows
   Status: flow coverage now exists for the invoice creation batch helper, the invoice delivery retry batch helper, and the targeted repair surface; webhook sync and consent still need deeper executable tests.

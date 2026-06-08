@@ -10,7 +10,6 @@ These are the active sources of truth:
 - `development/setup.md`: local setup and environment guidance
 - `development/commands-and-checks.md`: common developer and ops commands
 - `development/codebase-review.md`: active engineering assessment, risks, and remediation tracks
-- `development/track-a-onboarding-hardening-plan.md`: concrete implementation plan for onboarding hardening
 - `product/feature-inventory.md`: active implementation inventory and development backlog
 - `product/subscription-policy.md`: canonical subscription-policy rules
 - `product/recurring-billing-policy.md`: canonical recurring billing rules

@@ -57,6 +57,7 @@ Implemented so far:
 - invoice creation batch handling now has a shared helper and executable coverage for first-payment and recurring batch mapping
 - invoice delivery retry batch handling now has a shared helper and executable coverage for first-payment and recurring retry mapping
 - settings reconciliation now exposes explicit `sync_only` versus `full` modes so operators can refresh Mollie state without automatically triggering invoice or activation follow-ups
+- the standalone Track A onboarding hardening plan has been retired; the remaining hardening work now lives in the active docs below
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as materially mitigated rather than still open.
 
@@ -358,26 +359,6 @@ Official reference:
 
 These tracks are designed so hardening work can also improve feature work instead of purely slowing development down.
 
-### Track A: Secure Onboarding And Consent Flow
-
-Goals:
-
-- remove token leakage
-- tighten consent evidence handling
-- improve operator UX for share/retry flows
-
-Feature overlap:
-
-- safer, clearer operator controls for onboarding and repair
-- future reconciliation and customer-workflow improvements
-
-Suggested work:
-
-- remove share-link query-string notices
-- add explicit operator copy/share affordance in customer UI
-- redact consent tokens from audit details and generic metadata
-- define retention rules for consent evidence fields
-
 ### Track B: Secure Document And Invoice Delivery Path
 
 Goals:
@@ -438,17 +419,15 @@ Suggested work:
 
 If the goal is best risk reduction with the least wasted effort, start in this order:
 
-1. Track A: secure onboarding and consent flow
-2. Track C: ops surface hardening
-3. Track B: invoice delivery hardening
-4. Track D: modularization and deeper tests
+1. Track C: ops surface hardening
+2. Track B: invoice delivery hardening
+3. Track D: modularization and deeper tests
 
 Reasoning:
 
-- Track A removes the clearest bearer-token issue and improves a customer-facing feature path
 - Track C reduces avoidable exposure while directly helping the planned unified ops work
 - Track B closes the biggest server-side fetch risk in money-adjacent flows
-- Track D is important, but should be shaped by the safer boundaries created by A-C
+- Track D is important, but should be shaped by the safer boundaries created by C-B
 
 ## Planning Rule
 
