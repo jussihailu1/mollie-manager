@@ -8,6 +8,12 @@ import { z } from "zod";
 import { getDb } from "@/lib/db";
 import { env } from "@/lib/env";
 import {
+  buildSubscriptionConsentPath,
+  consentTokenSchema,
+  findMissingRequiredConsentKey,
+  parseConsentAcceptanceInput,
+} from "@/lib/subscription-consent-acceptance";
+import {
   buildConsentTokenStorage,
   hashConsentToken,
   resolveStoredConsentToken,
@@ -53,15 +59,6 @@ export const subscriptionConsentPlanSnapshotSchema = z.object({
   totalPayments: z.number().int().nullable(),
 });
 
-const consentTokenSchema = z.string().trim().min(8).max(200);
-
-const acceptConsentSchema = z.object({
-  cancellationPolicyAck: z.string().optional(),
-  recurringBillingPolicyAck: z.string().optional(),
-  recurringTermsAck: z.string().optional(),
-  token: consentTokenSchema,
-});
-
 export type SubscriptionConsentRecord = {
   acceptedAt: string | null;
   acceptedCheckboxKeys: string[];
@@ -88,21 +85,6 @@ export type SubscriptionOnboardingReturnRecord = {
   paymentLinkStatus: string | null;
   subscriptionStatus: string | null;
 };
-
-function buildUrl(token: string, params: Record<string, string | null | undefined> = {}) {
-  const search = new URLSearchParams();
-
-  for (const [key, value] of Object.entries(params)) {
-    if (!value) {
-      continue;
-    }
-
-    search.set(key, value);
-  }
-
-  const searchString = search.toString();
-  return `/subscribe/${token}${searchString ? `?${searchString}` : ""}`;
-}
 
 export function buildSubscriptionConsentReturnPath(token: string) {
   return `/subscribe/${token}/return`;
@@ -324,47 +306,42 @@ export async function getSubscriptionOnboardingReturnRecord(token: string) {
 export async function acceptSubscriptionConsentAction(formData: FormData) {
   "use server";
 
-  const parsed = acceptConsentSchema.safeParse({
-    cancellationPolicyAck: formData.get("cancellationPolicyAck") || undefined,
-    recurringBillingPolicyAck:
-      formData.get("recurringBillingPolicyAck") || undefined,
-    recurringTermsAck: formData.get("recurringTermsAck") || undefined,
+  const parsed = parseConsentAcceptanceInput({
+    cancellationPolicyAck: formData.get("cancellationPolicyAck"),
+    recurringBillingPolicyAck: formData.get("recurringBillingPolicyAck"),
+    recurringTermsAck: formData.get("recurringTermsAck"),
     token: formData.get("token"),
   });
 
   if (!parsed.success) {
-    const token = String(formData.get("token") || "");
-    redirect(buildUrl(token, { error: "consent_form_invalid" }));
+    redirect(
+      buildSubscriptionConsentPath(parsed.tokenForRedirect, {
+        error: "consent_form_invalid",
+      }),
+    );
   }
 
-  const consent = await getSubscriptionConsentByToken(parsed.data.token);
+  const consent = await getSubscriptionConsentByToken(parsed.token);
 
   if (!consent) {
-    redirect(buildUrl(parsed.data.token, { error: "consent_not_found" }));
+    redirect(buildSubscriptionConsentPath(parsed.token, { error: "consent_not_found" }));
   }
 
   if (!consent.checkoutUrl) {
-    redirect(buildUrl(parsed.data.token, { error: "checkout_missing" }));
+    redirect(buildSubscriptionConsentPath(parsed.token, { error: "checkout_missing" }));
   }
 
   if (consent.acceptedAt) {
     redirect(consent.checkoutUrl);
   }
 
-  const acknowledgedKeys = [
-    parsed.data.recurringTermsAck ? "recurring_terms_ack" : null,
-    parsed.data.recurringBillingPolicyAck
-      ? "recurring_billing_policy_ack"
-      : null,
-    parsed.data.cancellationPolicyAck ? "cancellation_policy_ack" : null,
-  ].filter((value): value is string => value !== null);
-
-  const missingKey = consent.requiredCheckboxKeys.find(
-    (requiredKey) => !acknowledgedKeys.includes(requiredKey),
+  const missingKey = findMissingRequiredConsentKey(
+    consent.requiredCheckboxKeys,
+    parsed.acknowledgedKeys,
   );
 
   if (missingKey) {
-    redirect(buildUrl(parsed.data.token, { error: "consent_required" }));
+    redirect(buildSubscriptionConsentPath(parsed.token, { error: "consent_required" }));
   }
 
   const headerStore = await headers();
@@ -379,7 +356,7 @@ export async function acceptSubscriptionConsentAction(formData: FormData) {
   await getDb().execute(sql`
     update subscription_onboarding_consents
     set
-      accepted_checkbox_keys = ${JSON.stringify(acknowledgedKeys)}::jsonb,
+      accepted_checkbox_keys = ${JSON.stringify(parsed.acknowledgedKeys)}::jsonb,
       accepted_at = now(),
       accepted_ip = ${acceptedIp},
       accepted_user_agent = ${acceptedUserAgent},
