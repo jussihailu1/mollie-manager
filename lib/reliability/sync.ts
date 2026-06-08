@@ -44,6 +44,7 @@ import {
   handlePaymentAlerts,
   handleSubscriptionAlerts,
 } from "@/lib/reliability/sync-alerts";
+import { buildConfiguredMollieModeOrder } from "@/lib/reliability/mollie-mode-selection";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 
 type MolliePaymentLink = {
@@ -143,18 +144,11 @@ async function getRecurringInvoiceStateCounts(
 }
 
 function buildModesToTry(preferredMode?: MollieMode, strictMode = false) {
-  if (preferredMode && strictMode) {
-    return isMollieConfigured(preferredMode) ? [preferredMode] : [];
-  }
-
-  const orderedModes: MollieMode[] = preferredMode
-    ? [preferredMode, preferredMode === "live" ? "test" : "live"]
-    : ["live", "test"];
-
-  return orderedModes.filter(
-    (mode, index, array): mode is MollieMode =>
-      array.indexOf(mode) === index && isMollieConfigured(mode),
-  );
+  return buildConfiguredMollieModeOrder({
+    isConfigured: isMollieConfigured,
+    preferredMode,
+    strictMode,
+  });
 }
 
 async function findPaymentAcrossModes(
