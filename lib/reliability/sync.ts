@@ -45,6 +45,11 @@ import {
   handleSubscriptionAlerts,
 } from "@/lib/reliability/sync-alerts";
 import { buildConfiguredMollieModeOrder } from "@/lib/reliability/mollie-mode-selection";
+import {
+  buildSubscriptionSyncMetadata,
+  deriveSubscriptionBillingDay,
+  shouldStopSubscriptionAfterCurrentPeriod,
+} from "@/lib/reliability/subscription-sync-record";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 
 type MolliePaymentLink = {
@@ -934,17 +939,11 @@ export async function syncSubscriptionByLocalId(
           interval = ${subscription.interval},
           amount_value = ${subscription.amount.value},
           amount_currency = ${subscription.amount.currency},
-          billing_day = ${
-            subscription.startDate
-              ? new Date(`${subscription.startDate}T00:00:00Z`).getUTCDate()
-              : null
-          },
+          billing_day = ${deriveSubscriptionBillingDay(subscription)},
           start_date = ${subscription.startDate}::date,
-          stop_after_current_period = ${subscription.status === "canceled" || subscription.status === "completed"},
+          stop_after_current_period = ${shouldStopSubscriptionAfterCurrentPeriod(subscription)},
           canceled_at = ${subscription.canceledAt ?? null}::timestamptz,
-          metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
-            nextPaymentDate: subscription.nextPaymentDate ?? null,
-          })}::jsonb,
+          metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(buildSubscriptionSyncMetadata(subscription))}::jsonb,
           updated_at = now(),
           last_synced_at = now()
         where id = ${localSubscription.id}
