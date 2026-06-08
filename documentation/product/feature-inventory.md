@@ -34,14 +34,17 @@ Canonical policy docs:
 
 ## Partially Implemented Or Narrow In UI
 
-- [ ] Subscription management exists, but mostly inside customer workflows rather than a dedicated primary workspace
-- [ ] Payment-link functionality exists, but there is no separate primary payment-links workspace
-- [ ] Legacy `/alerts` and `/payment-links` routes are compatibility redirects, not active standalone modules
+- [x] Subscription management intentionally lives inside customer workflows rather than a dedicated primary workspace
+  Status: a customer is the operator's primary subscription context for this product, so a separate subscription screen is not planned.
+- [x] Payment-link functionality intentionally lives inside customer onboarding rather than a dedicated primary workspace
+  Status: payment links are onboarding artifacts, not a separate operator management object.
+- [x] Legacy `/alerts` and `/payment-links` routes are compatibility redirects, not active standalone modules
+  Status: this is intentional while notifications/settings and customer onboarding remain the real operator surfaces.
 - [x] Manual webhook replay and targeted repair are surfaced in the settings ops workflow
   Status: the settings ops surface now exposes a failed-webhook replay queue with failed-only replay controls and explicit replay confirmation, plus a targeted repair form for single customer/payment/subscription resyncs.
 - [x] Reliability and invoice automation health is unified across `/settings` and authenticated `/api/health`
   Status: both surfaces now share the same reliability ops snapshot for webhook health, invoice automation, delivery retries, and cron heartbeat; CLI scripts still remain as deeper fallbacks.
-- [ ] Detailed subscription, mandate, and payment history is available in the data model, but not all of it is surfaced in dense first-class operator views
+- [ ] Detailed subscription, mandate, and payment history is available in the data model, but not all of it is surfaced in dense customer-centered operator views
 
 ## Planned Next
 
@@ -49,10 +52,12 @@ Canonical policy docs:
   Status: `/settings` now exposes explicit `sync_only` and `full` reconciliation modes. `sync_only` is the least-dangerous default and avoids automatic first-payment invoice creation and subscription activation follow-ups.
 - [x] Expand reconciliation output with first-payment and recurring invoice-state deltas for easier operator review
   Status: `/settings` now shows the latest reconciliation result with before/after invoice-state deltas for first-payment rows and recurring billing schedules, so operators can confirm normalization and invoice-side changes without digging through raw tables.
-- [ ] Unify stale-sync, webhook-health, and invoice-automation observability into a clearer operator surface
+- [x] Unify stale-sync, webhook-health, and invoice-automation observability into a clearer operator surface
+  Status: `/settings` now uses the shared reliability ops snapshot for webhook health, stale repair context, invoice automation, delivery retries, and cron heartbeat; authenticated `/api/health` uses the same source.
 - [x] Expose safer, clearer operator controls for webhook replay and repair flows
   Status: the settings page now includes explicit replay confirmation for failed webhook events and a targeted repair form for customer/payment/subscription resyncs.
-- [ ] Decide whether subscriptions need a dedicated operations workspace again or should stay embedded in customer workflows
+- [x] Decide whether subscriptions need a dedicated operations workspace again or should stay embedded in customer workflows
+  Status: subscriptions stay embedded in customer workflows unless future usage shows a concrete operator need for a separate workspace.
 
 ## Cross-Cutting Hardening Work
 

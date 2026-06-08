@@ -58,6 +58,7 @@ Implemented so far:
 - invoice delivery retry batch handling now has a shared helper and executable coverage for first-payment and recurring retry mapping
 - settings reconciliation now exposes explicit `sync_only` versus `full` modes so operators can refresh Mollie state without automatically triggering invoice or activation follow-ups
 - the standalone Track A onboarding hardening plan has been retired; the remaining hardening work now lives in the active docs below
+- product scope has been narrowed so subscriptions stay inside customer workflows and payment links stay inside onboarding instead of becoming standalone workspaces
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as materially mitigated rather than still open.
 
@@ -359,7 +360,7 @@ Official reference:
 
 These tracks are designed so hardening work can also improve feature work instead of purely slowing development down.
 
-### Track B: Secure Document And Invoice Delivery Path
+### Completed: Secure Document And Invoice Delivery Path
 
 Goals:
 
@@ -377,7 +378,13 @@ Suggested work:
 - record structured delivery failure causes
 - expose attachment/source status more clearly in payments and settings UI
 
-### Track C: Ops Surface Hardening
+Status:
+
+- trusted-host validation and size/time limits are implemented
+- invoice creation and delivery retry batch helpers now have executable coverage
+- attachment/source status is visible where operators already inspect payments
+
+### Completed: Ops Surface Hardening
 
 Goals:
 
@@ -398,7 +405,13 @@ Suggested work:
 - review cron and repair endpoints for least-privilege exposure
 - expose explicit reconciliation modes so operator-triggered refresh does not imply full downstream billing side effects
 
-### Track D: Module And Test Refactor
+Status:
+
+- `/api/health` now separates public liveness from authenticated diagnostics
+- webhook URLs are secret-free and no longer persisted into generic metadata
+- settings exposes failed-only webhook replay, targeted repair, and explicit reconciliation modes
+
+### Active: Module And Test Refactor
 
 Goals:
 
@@ -415,19 +428,19 @@ Suggested work:
 - add integration tests for onboarding, webhook sync, invoice creation, and delivery retry
 - reduce JSONB metadata dependence where fields deserve first-class schema columns
 
-## Recommended Starting Order
+## Recommended Current Order
 
 If the goal is best risk reduction with the least wasted effort, start in this order:
 
-1. Track C: ops surface hardening
-2. Track B: invoice delivery hardening
-3. Track D: modularization and deeper tests
+1. Module and test refactor on consent, webhook sync, repair, and invoice flows
+2. e-Boekhouden relation-search cost reduction
+3. Retention and compliance implementation plan
 
 Reasoning:
 
-- Track C reduces avoidable exposure while directly helping the planned unified ops work
-- Track B closes the biggest server-side fetch risk in money-adjacent flows
-- Track D is important, but should be shaped by the safer boundaries created by C-B
+- the broad product-surface questions are now intentionally resolved around the customer workspace
+- the remaining code risk is concentrated in large modules and incomplete executable coverage
+- relation search and retention work are meaningful, but less tied to immediate feature correctness than the billing and sync flow tests
 
 ## Planning Rule
 
