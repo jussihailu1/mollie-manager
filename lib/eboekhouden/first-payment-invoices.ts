@@ -20,6 +20,7 @@ import {
 } from "@/lib/eboekhouden/invoice-failure-retry";
 import { buildFirstPaymentInvoiceReference } from "@/lib/eboekhouden/invoice-reference";
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
+import { createInvoiceBatchWithDependencies } from "@/lib/invoice-creation-batch";
 import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { deliverAlertEmail, openAlert } from "@/lib/reliability/alerts";
@@ -1148,45 +1149,18 @@ export async function createDueFirstPaymentInvoicesBatch(input: {
     mode: input.mode,
   });
 
-  const candidates = await listDueFirstPaymentInvoiceCandidates(
-    input.mode,
-    input.limit ?? DEFAULT_BATCH_SIZE,
-  );
-  let createdCount = 0;
-  let failedCount = 0;
-  let skippedCount = 0;
-
-  for (const candidate of candidates) {
-    const result = await createEboekhoudenInvoiceForFirstPayment(
-      candidate.paymentId,
-      {
+  return createInvoiceBatchWithDependencies(input, {
+    createInvoice: async (entityId) =>
+      createEboekhoudenInvoiceForFirstPayment(entityId, {
         actor: input.actor,
         settings,
-      },
-    );
-
-    if (result.status === "created") {
-      createdCount += 1;
-      continue;
-    }
-
-    if (result.status === "failed") {
-      failedCount += 1;
-      continue;
-    }
-
-    skippedCount += 1;
-  }
-
-  const remainingSummary = await getDueFirstPaymentInvoiceQueueSummary(input.mode);
-
-  return {
-    actionableCount: candidates.length,
-    createdCount,
-    failedCount,
-    remainingActionableCount: remainingSummary.actionableCount,
-    skippedCount,
-  };
+      }),
+    getRemainingSummary: getDueFirstPaymentInvoiceQueueSummary,
+    loadCandidates: async (mode, limit) =>
+      (await listDueFirstPaymentInvoiceCandidates(mode, limit)).map((row) => ({
+        entityId: row.paymentId,
+      })),
+  });
 }
 
 export async function recoverFailedFirstPaymentInvoicesBatch(input: {

@@ -16,6 +16,7 @@ import {
 } from "@/lib/eboekhouden/invoice-failure-retry";
 import { buildRecurringInvoiceReference } from "@/lib/eboekhouden/invoice-reference";
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
+import { createInvoiceBatchWithDependencies } from "@/lib/invoice-creation-batch";
 import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { deliverAlertEmail, openAlert } from "@/lib/reliability/alerts";
@@ -960,40 +961,16 @@ export async function createDueRecurringInvoicesBatch(input: {
     );
   }
 
-  const candidates = await listDueRecurringInvoiceCandidates(
-    input.mode,
-    input.limit ?? DEFAULT_BATCH_SIZE,
-  );
-  let createdCount = 0;
-  let failedCount = 0;
-  let skippedCount = 0;
-
-  for (const candidate of candidates) {
-    const result = await createEboekhoudenInvoiceForSchedule(candidate.scheduleId, {
-      actor: input.actor,
-      settings,
-    });
-
-    if (result.status === "created") {
-      createdCount += 1;
-      continue;
-    }
-
-    if (result.status === "failed") {
-      failedCount += 1;
-      continue;
-    }
-
-    skippedCount += 1;
-  }
-
-  const remainingSummary = await getDueRecurringInvoiceQueueSummary(input.mode);
-
-  return {
-    actionableCount: candidates.length,
-    createdCount,
-    failedCount,
-    remainingActionableCount: remainingSummary.actionableCount,
-    skippedCount,
-  };
+  return createInvoiceBatchWithDependencies(input, {
+    createInvoice: async (entityId) =>
+      createEboekhoudenInvoiceForSchedule(entityId, {
+        actor: input.actor,
+        settings,
+      }),
+    getRemainingSummary: getDueRecurringInvoiceQueueSummary,
+    loadCandidates: async (mode, limit) =>
+      (await listDueRecurringInvoiceCandidates(mode, limit)).map((row) => ({
+        entityId: row.scheduleId,
+      })),
+  });
 }

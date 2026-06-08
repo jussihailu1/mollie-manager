@@ -54,6 +54,7 @@ Implemented so far:
 - settings now includes a first-class ops overview with failed webhook replay controls and recent reliability activity
 - settings and authenticated `/api/health` now share the same reliability ops snapshot for webhook health, invoice automation, delivery retries, and cron heartbeat
 - settings now also surfaces a targeted repair form for single customer, payment, or subscription resyncs
+- invoice creation batch handling now has a shared helper and executable coverage for first-payment and recurring batch mapping
 - invoice delivery retry batch handling now has a shared helper and executable coverage for first-payment and recurring retry mapping
 - settings reconciliation now exposes explicit `sync_only` versus `full` modes so operators can refresh Mollie state without automatically triggering invoice or activation follow-ups
 
