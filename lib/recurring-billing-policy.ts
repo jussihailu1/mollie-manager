@@ -1,5 +1,3 @@
-import "server-only";
-
 export const DEFAULT_RECURRING_BILLING_POLICY = {
   invoiceNoticeDaysBeforeDueDate: 5,
   invoicePreNotificationMethod: "invoice_email",

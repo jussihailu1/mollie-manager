@@ -77,7 +77,7 @@ Reference: `../development/codebase-review.md`
 - [x] Add integration coverage for consent, webhook sync, first-payment invoice creation, recurring invoice delivery retry, and repair flows
   Status: focused executable coverage now exists at the key flow seams: consent acceptance parsing and injected acceptance orchestration, webhook ingestion/status handling, invoice creation batch mapping, invoice delivery retry batch mapping, and targeted repair routing. A heavier DB-backed end-to-end harness remains optional future hardening rather than a current blocker.
 - [ ] Refactor oversized billing/orchestration modules into smaller policy, state-transition, and integration units
-  Status: started. Extracted shared invoice creation and delivery retry batch helpers, webhook ingestion processing, consent acceptance helpers, and first-payment link record mapping; the largest remaining modules still need further reduction.
+  Status: started. Extracted shared invoice creation and delivery retry batch helpers, webhook ingestion processing, consent acceptance helpers, first-payment plan policy, and first-payment link record mapping; the largest remaining modules still need further reduction.
 
 ## Deferred Or Later
 

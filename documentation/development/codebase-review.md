@@ -233,6 +233,10 @@ Recommended direction:
 - isolate side effects from state-transition logic
 - create narrower modules around consent, payment-link creation, payment sync, invoice claiming, and alert generation
 
+Progress:
+
+- first-payment plan normalization, term validation, and consent-plan construction now live in [lib/onboarding/first-payment-plan.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/first-payment-plan.ts>) with focused node coverage
+
 ### P2: Highest-risk flows now have focused seam coverage; broader DB-backed integration remains optional hardening
 
 Existing tests now cover the main money/compliance flow decisions at pure or dependency-injected seams, but they still stop short of a full database-backed end-to-end harness.
@@ -254,6 +258,7 @@ Recommended direction:
 
 Webhook ingestion/status handling now has executable coverage around the route helper; replay behavior remains partially covered by source-scope tests.
 Consent form parsing, required-checkbox policy, and acceptance orchestration now have executable coverage around injected dependencies.
+First-payment setup plan normalization and fixed-term validation now have executable coverage before Mollie side effects.
 
 ### P3: e-Boekhouden relation search fan-out is now reduced
 
@@ -440,14 +445,13 @@ Suggested work:
 If the goal is best risk reduction with the least wasted effort, start in this order:
 
 1. Module and test refactor on consent, webhook sync, repair, and invoice flows
-2. e-Boekhouden relation-search cost reduction
-3. Retention and compliance implementation plan
+2. Retention and compliance implementation plan
 
 Reasoning:
 
 - the broad product-surface questions are now intentionally resolved around the customer workspace
 - the remaining code risk is concentrated in large modules and incomplete executable coverage
-- relation search and retention work are meaningful, but less tied to immediate feature correctness than the billing and sync flow tests
+- retention work is meaningful, but less tied to immediate feature correctness than the billing and sync flow tests
 
 ## Planning Rule
 

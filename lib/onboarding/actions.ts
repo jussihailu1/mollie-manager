@@ -39,14 +39,11 @@ import {
   deriveFirstPaymentLinkAmount,
   deriveFirstPaymentLinkStatus,
 } from "@/lib/onboarding/first-payment-link-record";
+import { buildFirstPaymentPlan } from "@/lib/onboarding/first-payment-plan";
 import { syncPaymentLinkByMollieId } from "@/lib/reliability/sync";
 import { buildSubscriptionConsentReturnUrl } from "@/lib/subscription-consent";
 import { ensureTenantSubscriptionPolicyDefaults } from "@/lib/subscription-policy-defaults";
-import {
-  buildConsentPlanSnapshot,
-  REQUIRED_CONSENT_CHECKBOX_KEYS,
-  type BillingInterval,
-} from "@/lib/subscription-policy";
+import { REQUIRED_CONSENT_CHECKBOX_KEYS } from "@/lib/subscription-policy";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 
 const createCustomerSchema = z.object({
@@ -182,66 +179,6 @@ function redirectWithMessage(
       notice: options.notice,
     }),
   );
-}
-
-function normalizeAmountValue(value: string) {
-  const normalized = value.replace(",", ".").trim();
-
-  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
-    throw new Error("Enter a valid amount using up to two decimals.");
-  }
-
-  return Number(normalized).toFixed(2);
-}
-
-function normalizeDateInput(value: string, label: string) {
-  const normalized = value.trim();
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-    throw new Error(`${label} must use YYYY-MM-DD.`);
-  }
-
-  const parsed = new Date(`${normalized}T00:00:00Z`);
-
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Error(`${label} is not a valid date.`);
-  }
-
-  return normalized;
-}
-
-function normalizeOptionalDateInput(value: string | undefined) {
-  if (!value || value.trim().length === 0) {
-    return null;
-  }
-
-  return normalizeDateInput(value, "Service end date");
-}
-
-function validateFixedTermInput(input: {
-  firstPaymentMode: "real_installment" | "mandate_only";
-  subscriptionTermMode: "open_ended" | "fixed_term";
-  totalPayments: number | null;
-}) {
-  if (input.subscriptionTermMode === "open_ended") {
-    if (input.totalPayments !== null) {
-      throw new Error("Total payments must be empty for open-ended subscriptions.");
-    }
-
-    return;
-  }
-
-  if (input.totalPayments === null) {
-    throw new Error("Total payments is required for fixed-term subscriptions.");
-  }
-
-  if (input.firstPaymentMode === "real_installment" && input.totalPayments < 2) {
-    throw new Error("Fixed-term subscriptions with a real first installment require at least 2 total payments.");
-  }
-
-  if (input.firstPaymentMode === "mandate_only" && input.totalPayments < 1) {
-    throw new Error("Fixed-term subscriptions with a mandate-only first payment require at least 1 total payment.");
-  }
 }
 
 function serializeError(error: unknown) {
@@ -1082,32 +1019,14 @@ export async function createFirstPaymentAction(formData: FormData) {
 
   try {
     const tenantPolicy = await ensureTenantSubscriptionPolicyDefaults();
-    const subscriptionAmountValue = normalizeAmountValue(
-      parsed.data.subscriptionAmountValue,
-    );
-    const subscriptionStartDate = normalizeDateInput(
-      parsed.data.subscriptionStartDate,
-      "Subscription start date",
-    );
-    const serviceEndAt = normalizeOptionalDateInput(parsed.data.serviceEndAt);
-    const subscriptionTermMode = parsed.data.subscriptionTermMode;
-    const totalPayments =
-      subscriptionTermMode === "fixed_term" ? parsed.data.totalPayments : null;
-    validateFixedTermInput({
+    const firstPaymentPlan = buildFirstPaymentPlan({
       firstPaymentMode: parsed.data.firstPaymentMode,
-      subscriptionTermMode,
-      totalPayments,
-    });
-    const planSnapshot = buildConsentPlanSnapshot({
-      billingInterval: parsed.data.subscriptionInterval as BillingInterval,
-      cancellationEffect: tenantPolicy.defaultCancellationEffect,
-      cancellationEmail: tenantPolicy.cancellationEmail,
-      description: parsed.data.subscriptionDescription,
-      explicitServiceEndAt: serviceEndAt,
-      firstPaymentMode: parsed.data.firstPaymentMode,
-      startDate: subscriptionStartDate,
-      subscriptionAmountValue,
-      subscriptionTermMode,
+      serviceEndAt: parsed.data.serviceEndAt,
+      subscriptionAmountValue: parsed.data.subscriptionAmountValue,
+      subscriptionDescription: parsed.data.subscriptionDescription,
+      subscriptionInterval: parsed.data.subscriptionInterval,
+      subscriptionStartDate: parsed.data.subscriptionStartDate,
+      subscriptionTermMode: parsed.data.subscriptionTermMode,
       tenantPolicy: {
         cancellationEmail: tenantPolicy.cancellationEmail,
         defaultCancellationEffect: tenantPolicy.defaultCancellationEffect,
@@ -1115,13 +1034,8 @@ export async function createFirstPaymentAction(formData: FormData) {
         termsUrl: tenantPolicy.termsUrl,
         termsVersion: tenantPolicy.termsVersion,
       },
-      totalPayments,
+      totalPayments: parsed.data.totalPayments,
     });
-    const amountValue = planSnapshot.firstPaymentAmountValue;
-    const paymentDescription =
-      parsed.data.firstPaymentMode === "mandate_only"
-        ? "Mandate setup payment"
-        : parsed.data.subscriptionDescription;
     const mollie = getMollieClient(selectedMode);
     const localPaymentLinkId = crypto.randomUUID();
     const localConsentId = crypto.randomUUID();
@@ -1133,10 +1047,10 @@ export async function createFirstPaymentAction(formData: FormData) {
       allowedMethods: [PaymentMethod.ideal],
       amount: {
         currency: "EUR",
-        value: amountValue,
+        value: firstPaymentPlan.amountValue,
       },
       customerId: mollieCustomerId,
-      description: paymentDescription,
+      description: firstPaymentPlan.paymentDescription,
       idempotencyKey: crypto.randomUUID(),
       redirectUrl,
       reusable: false,
@@ -1144,7 +1058,10 @@ export async function createFirstPaymentAction(formData: FormData) {
       webhookUrl,
     });
     const paymentLinkStatus = deriveFirstPaymentLinkStatus(paymentLink);
-    const paymentLinkAmount = deriveFirstPaymentLinkAmount(paymentLink, amountValue);
+    const paymentLinkAmount = deriveFirstPaymentLinkAmount(
+      paymentLink,
+      firstPaymentPlan.amountValue,
+    );
     const paymentLinkMetadata = buildFirstPaymentLinkMetadata({
       mollieCustomerId,
       paymentLink,
@@ -1216,7 +1133,7 @@ export async function createFirstPaymentAction(formData: FormData) {
             ${tenantPolicy.termsVersion},
             ${JSON.stringify([...REQUIRED_CONSENT_CHECKBOX_KEYS])}::jsonb,
             '[]'::jsonb,
-            ${JSON.stringify(planSnapshot)}::jsonb,
+            ${JSON.stringify(firstPaymentPlan.planSnapshot)}::jsonb,
             null,
             null,
             null,
