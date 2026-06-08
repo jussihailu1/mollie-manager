@@ -35,6 +35,7 @@ import {
   buildConsentTokenStorage,
   createConsentToken,
 } from "@/lib/onboarding/consent-token-storage";
+import { updateActionPath } from "@/lib/onboarding/action-path";
 import { getCustomerDetail } from "@/lib/onboarding/data";
 import {
   buildFirstPaymentLinkMetadata,
@@ -147,36 +148,12 @@ type CustomerRepairResult = {
   reason?: "archived" | "missing_customer" | "not_linked";
 };
 
-function buildPath(pathname: string, params?: URLSearchParams) {
-  const search = params?.toString();
-  return search ? `${pathname}?${search}` : pathname;
-}
-
-function updatePath(
-  pathname: string,
-  updates: Record<string, string | null | undefined>,
-) {
-  const [basePath, existingSearch] = pathname.split("?", 2);
-  const params = new URLSearchParams(existingSearch ?? "");
-
-  for (const [key, value] of Object.entries(updates)) {
-    if (value === null || value === undefined || value.length === 0) {
-      params.delete(key);
-      continue;
-    }
-
-    params.set(key, value);
-  }
-
-  return buildPath(basePath, params);
-}
-
 function redirectWithMessage(
   pathname: string,
   options: { error?: string; notice?: string },
 ): never {
   redirect(
-    updatePath(pathname, {
+    updateActionPath(pathname, {
       error: options.error,
       notice: options.notice,
     }),
@@ -531,7 +508,7 @@ export async function archiveCustomerAction(formData: FormData) {
   const session = await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
   const detail = await getCustomerDetail(parsed.data.customerId, selectedMode);
-  const returnTo = updatePath(parsed.data.returnTo, {
+  const returnTo = updateActionPath(parsed.data.returnTo, {
     focus: null,
   });
 
@@ -611,7 +588,7 @@ export async function restoreCustomerAction(formData: FormData) {
   const session = await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
   const detail = await getCustomerDetail(parsed.data.customerId, selectedMode);
-  const returnTo = updatePath(parsed.data.returnTo, {
+  const returnTo = updateActionPath(parsed.data.returnTo, {
     focus: parsed.data.customerId,
     view: null,
   });
@@ -786,7 +763,7 @@ export async function createCustomerAction(formData: FormData) {
       );
     });
 
-    const returnTo = updatePath(parsed.data.returnTo, {
+    const returnTo = updateActionPath(parsed.data.returnTo, {
       focus: localCustomerId,
     });
 
@@ -827,7 +804,7 @@ export async function linkEboekhoudenRelationAction(formData: FormData) {
 
   const session = await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
-  const returnTo = updatePath(parsed.data.returnTo, {
+  const returnTo = updateActionPath(parsed.data.returnTo, {
     focus: parsed.data.customerId,
   });
   const customer = await getLocalCustomer(parsed.data.customerId, selectedMode);
@@ -940,7 +917,7 @@ export async function createFirstPaymentAction(formData: FormData) {
 
   const selectedMode = await getSelectedMollieMode();
   const customer = await getLocalCustomer(parsed.data.customerId, selectedMode);
-  const returnTo = updatePath(parsed.data.returnTo, {
+  const returnTo = updateActionPath(parsed.data.returnTo, {
     focus: parsed.data.customerId,
   });
 
@@ -1159,7 +1136,7 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
 
   const session = await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
-  const returnTo = updatePath(parsed.data.returnTo, {
+  const returnTo = updateActionPath(parsed.data.returnTo, {
     focus: parsed.data.customerId,
   });
 
@@ -1215,7 +1192,7 @@ export async function createSubscriptionAction(formData: FormData) {
 
   const session = await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
-  const returnTo = updatePath(parsed.data.returnTo, {
+  const returnTo = updateActionPath(parsed.data.returnTo, {
     focus: parsed.data.customerId,
   });
 
