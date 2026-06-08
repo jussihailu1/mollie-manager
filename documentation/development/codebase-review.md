@@ -64,6 +64,7 @@ Implemented so far:
 - the standalone Track A onboarding hardening plan has been retired; the remaining hardening work now lives in the active docs below
 - product scope has been narrowed so subscriptions stay inside customer workflows and payment links stay inside onboarding instead of becoming standalone workspaces
 - deep technical settings controls remain acceptable for developer-operated use, but should be moved behind advanced/developer/admin-only access before the product is offered as a service to other users
+- e-Boekhouden relation search no longer hydrates every list result with a detail request; full relation detail is fetched only after the operator selects one relation
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as materially mitigated rather than still open.
 
@@ -253,24 +254,24 @@ Recommended direction:
 Webhook ingestion/status handling now has executable coverage around the route helper; replay behavior remains partially covered by source-scope tests.
 Consent form parsing, required-checkbox policy, and acceptance orchestration now have executable coverage around injected dependencies.
 
-### P3: e-Boekhouden relation search is operationally expensive
+### P3: e-Boekhouden relation search fan-out is now reduced
 
-One search request can fan out into several upstream requests.
+One search request previously fanned out into several upstream requests and then hydrated each returned relation with a detail request. The list route now returns lightweight list rows and leaves full detail hydration to the existing per-relation selection endpoint.
 
 Observed paths:
 
 - search fan-out in [lib/eboekhouden/client.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/eboekhouden/client.ts:287>)
 - per-item hydration in [app/api/eboekhouden/relations/route.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/app/api/eboekhouden/relations/route.ts:47>)
 
-Why this is unhealthy:
+Why this still matters:
 
-- unnecessary latency under search-heavy operator sessions
-- greater chance of rate-limit pain upstream
+- the search API still fans out across name, contact, email, and code when the operator enters a query
+- detail hydration is now bounded to one selected relation instead of every list row
 
 Recommended direction:
 
-- reduce detail hydration during search
-- fetch full relation detail only when the operator drills into one item
+- keep full relation detail loading on the `/api/eboekhouden/relations/[id]` path
+- only revisit query fan-out if upstream rate limits become a real operational problem
 
 ## Maintainability Notes
 

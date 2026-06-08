@@ -12,11 +12,7 @@ type SessionCache = {
 
 type RelationListResponse = {
   count?: number;
-  items?: {
-    code?: string | null;
-    id: number;
-    type?: string | null;
-  }[];
+  items?: EboekhoudenRelation[];
 };
 
 export type EboekhoudenListResponse<T> = {

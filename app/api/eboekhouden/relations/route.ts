@@ -2,11 +2,10 @@ import { sql } from "drizzle-orm";
 import { type NextRequest } from "next/server";
 
 import {
-  getEboekhoudenRelation,
   searchEboekhoudenRelations,
   toPublicEboekhoudenError,
 } from "@/lib/eboekhouden/client";
-import { relationToLocalFields } from "@/lib/eboekhouden/relation-mapping";
+import { toRelationSearchResultItems } from "@/lib/eboekhouden/relation-search-results";
 import { requireViewerSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
@@ -41,35 +40,14 @@ export async function GET(request: NextRequest) {
       }),
       excludeLinked ? getLinkedRelationIds() : Promise.resolve(new Set<number>()),
     ]);
-    const unlinkedItems = (relationsList.items ?? []).filter(
-      (item) => !linkedRelationIds.has(item.id),
-    );
-    const hydratedItems = await Promise.all(
-      unlinkedItems.map(async (item) => {
-        try {
-          const relation = await getEboekhoudenRelation(item.id);
-          return {
-            code: relation.code ?? item.code ?? "",
-            id: item.id,
-            localFields: relationToLocalFields(relation),
-            name: relation.name ?? "",
-            type: relation.type ?? item.type ?? "B",
-          };
-        } catch {
-          return {
-            code: item.code ?? "",
-            id: item.id,
-            localFields: null,
-            name: "",
-            type: item.type ?? "B",
-          };
-        }
-      }),
+    const items = toRelationSearchResultItems(
+      relationsList.items ?? [],
+      linkedRelationIds,
     );
 
     return Response.json({
-      count: relationsList.count ?? hydratedItems.length,
-      items: hydratedItems,
+      count: relationsList.count ?? items.length,
+      items,
     });
   } catch (error) {
     const publicError = toPublicEboekhoudenError(error);
