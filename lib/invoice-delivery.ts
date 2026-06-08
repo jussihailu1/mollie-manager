@@ -16,6 +16,7 @@ import {
   buildTrustedInvoicePdfAttachment,
   normalizeTrustedInvoicePdfUrl,
 } from "@/lib/invoice-pdf";
+import { retryInvoiceDeliveryEmailsBatchWithDependencies } from "@/lib/invoice-delivery-batch";
 import { sendEmailTo } from "@/lib/notifications/email";
 import { deliverAlertEmail, openAlert } from "@/lib/reliability/alerts";
 
@@ -37,6 +38,8 @@ type DeliveryInput = {
   plannedCollectionDate?: string | null;
   subscriptionId: string | null;
 };
+
+type RetryDeliveryCandidate = Omit<DeliveryInput, "actor">;
 
 type InvoiceDeliveryBatchResult = {
   attemptedCount: number;
@@ -499,6 +502,7 @@ export async function deliverCustomerInvoiceEmail(input: DeliveryInput) {
   }
 }
 
+
 async function listCreatedUnsentFirstPaymentInvoiceDeliveries(
   mode: MollieMode,
   limit: number,
@@ -545,7 +549,17 @@ async function listCreatedUnsentFirstPaymentInvoiceDeliveries(
     limit ${Math.max(1, limit)}
   `);
 
-  return result.rows;
+  return result.rows.map<RetryDeliveryCandidate>((row) => ({
+    customerEmail: row.customerEmail,
+    customerId: row.customerId,
+    eboekhoudenInvoiceId: row.eboekhoudenInvoiceId,
+    eboekhoudenInvoiceNumber: row.eboekhoudenInvoiceNumber,
+    mode: row.mode,
+    plannedCollectionDate: null,
+    entityId: row.paymentId,
+    invoiceType: "first_payment",
+    subscriptionId: row.subscriptionId,
+  }));
 }
 
 async function listCreatedUnsentRecurringInvoiceDeliveries(
@@ -595,7 +609,17 @@ async function listCreatedUnsentRecurringInvoiceDeliveries(
     limit ${Math.max(1, limit)}
   `);
 
-  return result.rows;
+  return result.rows.map<RetryDeliveryCandidate>((row) => ({
+    customerEmail: row.customerEmail,
+    customerId: row.customerId,
+    eboekhoudenInvoiceId: row.eboekhoudenInvoiceId,
+    eboekhoudenInvoiceNumber: row.eboekhoudenInvoiceNumber,
+    mode: row.mode,
+    plannedCollectionDate: row.plannedCollectionDate,
+    entityId: row.scheduleId,
+    invoiceType: "recurring",
+    subscriptionId: row.subscriptionId,
+  }));
 }
 
 export async function retryUnsentFirstPaymentInvoiceEmailsBatch(input: {
@@ -603,46 +627,10 @@ export async function retryUnsentFirstPaymentInvoiceEmailsBatch(input: {
   limit?: number;
   mode: MollieMode;
 }): Promise<InvoiceDeliveryBatchResult> {
-  const candidates = await listCreatedUnsentFirstPaymentInvoiceDeliveries(
-    input.mode,
-    input.limit ?? 25,
-  );
-  let sentCount = 0;
-  let failedCount = 0;
-  let skippedCount = 0;
-
-  for (const candidate of candidates) {
-    const result = await deliverCustomerInvoiceEmail({
-      actor: input.actor,
-      customerEmail: candidate.customerEmail,
-      customerId: candidate.customerId,
-      eboekhoudenInvoiceId: candidate.eboekhoudenInvoiceId,
-      eboekhoudenInvoiceNumber: candidate.eboekhoudenInvoiceNumber,
-      entityId: candidate.paymentId,
-      invoiceType: "first_payment",
-      mode: candidate.mode,
-      subscriptionId: candidate.subscriptionId,
-    });
-
-    if (result.status === "sent") {
-      sentCount += 1;
-      continue;
-    }
-
-    if (result.status === "failed") {
-      failedCount += 1;
-      continue;
-    }
-
-    skippedCount += 1;
-  }
-
-  return {
-    attemptedCount: candidates.length,
-    failedCount,
-    sentCount,
-    skippedCount,
-  };
+  return retryInvoiceDeliveryEmailsBatchWithDependencies(input, {
+    deliverCustomerInvoiceEmail,
+    loadCandidates: listCreatedUnsentFirstPaymentInvoiceDeliveries,
+  });
 }
 
 export async function retryUnsentRecurringInvoiceEmailsBatch(input: {
@@ -650,47 +638,10 @@ export async function retryUnsentRecurringInvoiceEmailsBatch(input: {
   limit?: number;
   mode: MollieMode;
 }): Promise<InvoiceDeliveryBatchResult> {
-  const candidates = await listCreatedUnsentRecurringInvoiceDeliveries(
-    input.mode,
-    input.limit ?? 25,
-  );
-  let sentCount = 0;
-  let failedCount = 0;
-  let skippedCount = 0;
-
-  for (const candidate of candidates) {
-    const result = await deliverCustomerInvoiceEmail({
-      actor: input.actor,
-      customerEmail: candidate.customerEmail,
-      customerId: candidate.customerId,
-      eboekhoudenInvoiceId: candidate.eboekhoudenInvoiceId,
-      eboekhoudenInvoiceNumber: candidate.eboekhoudenInvoiceNumber,
-      entityId: candidate.scheduleId,
-      invoiceType: "recurring",
-      mode: candidate.mode,
-      plannedCollectionDate: candidate.plannedCollectionDate,
-      subscriptionId: candidate.subscriptionId,
-    });
-
-    if (result.status === "sent") {
-      sentCount += 1;
-      continue;
-    }
-
-    if (result.status === "failed") {
-      failedCount += 1;
-      continue;
-    }
-
-    skippedCount += 1;
-  }
-
-  return {
-    attemptedCount: candidates.length,
-    failedCount,
-    sentCount,
-    skippedCount,
-  };
+  return retryInvoiceDeliveryEmailsBatchWithDependencies(input, {
+    deliverCustomerInvoiceEmail,
+    loadCandidates: listCreatedUnsentRecurringInvoiceDeliveries,
+  });
 }
 
 export async function getInvoiceDeliveryQueueSummary(

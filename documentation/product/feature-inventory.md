@@ -68,6 +68,7 @@ Reference: `../development/codebase-review.md`
 - [ ] Harden invoice PDF fetch and attachment handling with trusted-host, timeout, and size controls
   Status: trusted e-Boekhouden-only URL handling, redirect/timeout/size controls, and payment-drawer attachment status are now in place; the remaining work is broader ops-surface visibility only if it proves necessary.
 - [ ] Add integration coverage for consent, webhook sync, first-payment invoice creation, recurring invoice delivery retry, and repair flows
+  Status: flow coverage now exists for the invoice delivery retry batch helper and the targeted repair surface; webhook sync, consent, and first-payment creation coverage still need deeper executable tests.
 - [ ] Refactor oversized billing/orchestration modules into smaller policy, state-transition, and integration units
 
 ## Deferred Or Later
