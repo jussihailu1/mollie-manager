@@ -65,6 +65,7 @@ Implemented so far:
 - product scope has been narrowed so subscriptions stay inside customer workflows and payment links stay inside onboarding instead of becoming standalone workspaces
 - deep technical settings controls remain acceptable for developer-operated use, but should be moved behind advanced/developer/admin-only access before the product is offered as a service to other users
 - e-Boekhouden relation search no longer hydrates every list result with a detail request; full relation detail is fetched only after the operator selects one relation
+- the customer drawer now exposes protected customer-centered billing history for subscriptions, mandates, and payments
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as materially mitigated rather than still open.
 

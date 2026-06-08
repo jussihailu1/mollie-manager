@@ -46,7 +46,8 @@ Canonical policy docs:
   Status: both surfaces now share the same reliability ops snapshot for webhook health, invoice automation, delivery retries, and cron heartbeat; CLI scripts still remain as deeper fallbacks.
 - [x] Deep technical operations controls can remain in settings during developer-operated use
   Status: this is acceptable while the developer is the operator. Before deploying the product as a service for other users, these controls should move behind an advanced/developer/admin-only surface or equivalent protected access.
-- [ ] Detailed subscription, mandate, and payment history is available in the data model, but not all of it is surfaced in dense customer-centered operator views
+- [x] Detailed subscription, mandate, and payment history is surfaced in dense customer-centered operator views
+  Status: the customer drawer now lazy-loads protected billing history and shows compact subscription, mandate, and payment rows without adding standalone subscription or payment-link workspaces.
 
 ## Planned Next
 

@@ -146,6 +146,41 @@ type EboekhoudenRelationDetail = {
   };
 };
 
+type CustomerBillingHistory = {
+  mandates: {
+    createdAt: string;
+    id: string;
+    isValid: boolean;
+    method: string | null;
+    mollieMandateId: string;
+    mollieStatus: string | null;
+  }[];
+  payments: {
+    amountCurrency: string;
+    amountValue: string;
+    createdAt: string;
+    failedAt: string | null;
+    id: string;
+    method: string | null;
+    molliePaymentId: string | null;
+    mollieStatus: string | null;
+    paidAt: string | null;
+    paymentType: string;
+  }[];
+  subscriptions: {
+    amountCurrency: string;
+    amountValue: string;
+    createdAt: string;
+    description: string;
+    id: string;
+    interval: string;
+    lastChargeDate: string | null;
+    localStatus: string;
+    mollieStatus: string | null;
+    nextPaymentDate: string | null;
+  }[];
+};
+
 export type CustomerStage =
   | "new"
   | "payment_pending"
@@ -268,6 +303,29 @@ function getPaymentStatusBadge(status: CustomerFlowRecord["latestPaymentStatus"]
   }
 }
 
+function formatHistoryPaymentType(type: string | null) {
+  return type === "first" || type === "recurring" ? formatPaymentType(type) : formatLabel(type);
+}
+
+function getHistoryPaymentStatusBadge(status: string | null) {
+  switch (status) {
+    case "pending":
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100/80">
+          Pending
+        </Badge>
+      );
+    case "paid":
+      return <Badge variant="default">Paid</Badge>;
+    case "failed":
+      return <Badge variant="destructive">Failed</Badge>;
+    case "expired":
+      return <Badge variant="outline">Expired</Badge>;
+    default:
+      return <Badge variant="outline">{formatLabel(status)}</Badge>;
+  }
+}
+
 function getSubscriptionStatusBadge(status: CustomerFlowRecord["latestSubscriptionStatus"]) {
   if (status === "active") {
     return <Badge variant="default">Active</Badge>;
@@ -282,6 +340,31 @@ function getSubscriptionStatusBadge(status: CustomerFlowRecord["latestSubscripti
   }
 
   return <Badge variant="outline">{formatLabel(status)}</Badge>;
+}
+
+function HistoryRow({
+  detail,
+  label,
+  meta,
+  status,
+}: Readonly<{
+  detail: ReactNode;
+  label: ReactNode;
+  meta: ReactNode;
+  status: ReactNode;
+}>) {
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-md border px-3 py-2 text-sm">
+      <div className="min-w-0">
+        <div className="truncate font-medium">{label}</div>
+        <div className="mt-0.5 text-xs text-muted-foreground">{meta}</div>
+      </div>
+      <div className="text-right">
+        <div>{status}</div>
+        <div className="mt-1 text-xs text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
 }
 
 function SubscriptionSummaryRow({
@@ -1318,6 +1401,9 @@ export function CustomerDrawer({
   const [isRepairing, setIsRepairing] = useState(false);
   const [latestConsentUrl, setLatestConsentUrl] = useState<string | null>(null);
   const [isConsentLinkLoading, setIsConsentLinkLoading] = useState(false);
+  const [billingHistory, setBillingHistory] = useState<CustomerBillingHistory | null>(null);
+  const [billingHistoryError, setBillingHistoryError] = useState<string | null>(null);
+  const [isBillingHistoryLoading, setIsBillingHistoryLoading] = useState(false);
   const currentCustomerId = customer?.id ?? null;
 
   useEffect(() => {
@@ -1456,6 +1542,67 @@ export function CustomerDrawer({
     }
 
     loadConsentLink();
+
+    return () => {
+      active = false;
+    };
+  }, [currentCustomerId, open]);
+
+  useEffect(() => {
+    const customerId = currentCustomerId;
+
+    if (!open || !customerId) {
+      setBillingHistory(null);
+      setBillingHistoryError(null);
+      setIsBillingHistoryLoading(false);
+      return;
+    }
+
+    let active = true;
+    const resolvedCustomerId = customerId;
+    setBillingHistory(null);
+    setBillingHistoryError(null);
+    setIsBillingHistoryLoading(true);
+
+    async function loadBillingHistory() {
+      try {
+        const response = await fetch(
+          `/api/customers/${encodeURIComponent(resolvedCustomerId)}/billing-history`,
+          {
+            cache: "no-store",
+          },
+        );
+        const payload = (await response.json().catch(() => null)) as
+          | (CustomerBillingHistory & { error?: string })
+          | null;
+
+        if (!response.ok) {
+          throw new Error(
+            payload && typeof payload.error === "string"
+              ? payload.error
+              : "Failed to load customer billing history.",
+          );
+        }
+
+        if (active) {
+          setBillingHistory(payload);
+        }
+      } catch (historyError) {
+        if (active) {
+          setBillingHistoryError(
+            historyError instanceof Error
+              ? historyError.message
+              : "Failed to load customer billing history.",
+          );
+        }
+      } finally {
+        if (active) {
+          setIsBillingHistoryLoading(false);
+        }
+      }
+    }
+
+    loadBillingHistory();
 
     return () => {
       active = false;
@@ -1718,6 +1865,89 @@ export function CustomerDrawer({
               </div>
             </>
           ) : null}
+
+          <Separator />
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Billing history
+            </h3>
+            {isBillingHistoryLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+                Loading history...
+              </div>
+            ) : null}
+            {billingHistoryError ? (
+              <p className="text-sm text-destructive">{billingHistoryError}</p>
+            ) : null}
+            {billingHistory ? (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Subscriptions
+                  </p>
+                  {billingHistory.subscriptions.length > 0 ? (
+                    billingHistory.subscriptions.slice(0, 4).map((subscription) => (
+                      <HistoryRow
+                        key={subscription.id}
+                        label={subscription.description}
+                        meta={`${formatCurrency(
+                          subscription.amountValue,
+                          subscription.amountCurrency,
+                        )} · ${formatSubscriptionInterval(subscription.interval)}`}
+                        status={getSubscriptionStatusBadge(subscription.localStatus)}
+                        detail={`Next ${formatDate(subscription.nextPaymentDate)}`}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No subscription rows.</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Mandates
+                  </p>
+                  {billingHistory.mandates.length > 0 ? (
+                    billingHistory.mandates.slice(0, 4).map((mandate) => (
+                      <HistoryRow
+                        key={mandate.id}
+                        label={mandate.mollieMandateId}
+                        meta={formatLabel(mandate.method)}
+                        status={
+                          <Badge variant={mandate.isValid ? "default" : "outline"}>
+                            {formatLabel(mandate.mollieStatus)}
+                          </Badge>
+                        }
+                        detail={formatDate(mandate.createdAt)}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No mandate rows.</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Payments
+                  </p>
+                  {billingHistory.payments.length > 0 ? (
+                    billingHistory.payments.slice(0, 6).map((payment) => (
+                      <HistoryRow
+                        key={payment.id}
+                        label={formatHistoryPaymentType(payment.paymentType)}
+                        meta={formatCurrency(payment.amountValue, payment.amountCurrency)}
+                        status={getHistoryPaymentStatusBadge(payment.mollieStatus)}
+                        detail={formatDate(payment.paidAt ?? payment.failedAt ?? payment.createdAt)}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No payment rows.</p>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
 
           {showOnboardingSections ? (
             <>
