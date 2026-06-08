@@ -59,6 +59,7 @@ Implemented so far:
 - settings reconciliation now exposes explicit `sync_only` versus `full` modes so operators can refresh Mollie state without automatically triggering invoice or activation follow-ups
 - the standalone Track A onboarding hardening plan has been retired; the remaining hardening work now lives in the active docs below
 - product scope has been narrowed so subscriptions stay inside customer workflows and payment links stay inside onboarding instead of becoming standalone workspaces
+- deep technical settings controls remain acceptable for developer-operated use, but should be moved behind advanced/developer/admin-only access before the product is offered as a service to other users
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as materially mitigated rather than still open.
 
@@ -410,6 +411,7 @@ Status:
 - `/api/health` now separates public liveness from authenticated diagnostics
 - webhook URLs are secret-free and no longer persisted into generic metadata
 - settings exposes failed-only webhook replay, targeted repair, and explicit reconciliation modes
+- future service deployment should gate the deep technical settings surface behind advanced/developer/admin-only access instead of showing it to ordinary operators
 
 ### Active: Module And Test Refactor
 

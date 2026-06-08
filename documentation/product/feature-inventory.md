@@ -44,6 +44,8 @@ Canonical policy docs:
   Status: the settings ops surface now exposes a failed-webhook replay queue with failed-only replay controls and explicit replay confirmation, plus a targeted repair form for single customer/payment/subscription resyncs.
 - [x] Reliability and invoice automation health is unified across `/settings` and authenticated `/api/health`
   Status: both surfaces now share the same reliability ops snapshot for webhook health, invoice automation, delivery retries, and cron heartbeat; CLI scripts still remain as deeper fallbacks.
+- [x] Deep technical operations controls can remain in settings during developer-operated use
+  Status: this is acceptable while the developer is the operator. Before deploying the product as a service for other users, these controls should move behind an advanced/developer/admin-only surface or equivalent protected access.
 - [ ] Detailed subscription, mandate, and payment history is available in the data model, but not all of it is surfaced in dense customer-centered operator views
 
 ## Planned Next
@@ -89,4 +91,5 @@ Reference: `../development/codebase-review.md`
 - e-Boekhouden stays the invoice and accounting source of truth.
 - `mandate_only` EUR 0.01 flows must not create normal subscription invoices.
 - Billing settings are accounting configuration, not subscription policy.
+- The current deep technical settings controls are acceptable for developer-operated use, but future SaaS/operator rollout should gate or hide them behind advanced, developer, or admin-only access.
 - Continue future policy work from `subscription-policy.md` and `recurring-billing-policy.md`, not from archived handoff notes.
