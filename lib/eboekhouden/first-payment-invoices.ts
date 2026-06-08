@@ -27,6 +27,7 @@ import {
 } from "@/lib/eboekhouden/invoice-flow-helpers";
 import { buildFirstPaymentInvoiceReference } from "@/lib/eboekhouden/invoice-reference";
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
+import { buildInvoiceRetryQueuedMetadata } from "@/lib/eboekhouden/invoice-retry-metadata";
 import { createInvoiceBatchWithDependencies } from "@/lib/invoice-creation-batch";
 import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
@@ -484,11 +485,12 @@ export async function queueRetryForSafeFailedFirstPaymentInvoicesBatch(input: {
     set
       invoice_state = 'pending_invoice',
       invoice_failed_at = null,
-      metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
-        invoiceRetryQueuedAt: new Date().toISOString(),
-        invoiceRetryQueuedBy: input.actor.email ?? null,
-        invoiceRetryAllowedFailureCodes: SAFE_INVOICE_RETRY_FAILURE_CODES,
-      })}::jsonb,
+      metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(
+        buildInvoiceRetryQueuedMetadata({
+          actorEmail: input.actor.email,
+          includeAllowedFailureCodes: true,
+        }),
+      )}::jsonb,
       updated_at = now()
     where id = any(${safePaymentIds}::text[])
       and mode = ${input.mode}
@@ -598,11 +600,12 @@ export async function queueRetryForFailedFirstPaymentInvoicesBatch(input: {
       set
         invoice_state = 'pending_invoice',
         invoice_failed_at = null,
-        metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
-          invoiceRetryQueuedAt: new Date().toISOString(),
-          invoiceRetryQueuedBy: input.actor.email ?? null,
-          invoiceRetryAllowedFailureCodes: SAFE_INVOICE_RETRY_FAILURE_CODES,
-        })}::jsonb,
+        metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(
+          buildInvoiceRetryQueuedMetadata({
+            actorEmail: input.actor.email,
+            includeAllowedFailureCodes: true,
+          }),
+        )}::jsonb,
         updated_at = now()
       where id = ${paymentId}
         and mode = ${input.mode}

@@ -22,6 +22,7 @@ import {
 } from "@/lib/eboekhouden/invoice-flow-helpers";
 import { buildRecurringInvoiceReference } from "@/lib/eboekhouden/invoice-reference";
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
+import { buildInvoiceRetryQueuedMetadata } from "@/lib/eboekhouden/invoice-retry-metadata";
 import { createInvoiceBatchWithDependencies } from "@/lib/invoice-creation-batch";
 import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
@@ -470,10 +471,11 @@ export async function queueRetryForFailedRecurringInvoice(input: {
     set
       invoice_state = 'pending_invoice',
       invoice_failed_at = null,
-      metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
-        invoiceRetryQueuedAt: new Date().toISOString(),
-        invoiceRetryQueuedBy: input.actor.email ?? null,
-      })}::jsonb,
+      metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(
+        buildInvoiceRetryQueuedMetadata({
+          actorEmail: input.actor.email,
+        }),
+      )}::jsonb,
       updated_at = now()
     where id = ${input.scheduleId}
       and mode = ${input.mode}

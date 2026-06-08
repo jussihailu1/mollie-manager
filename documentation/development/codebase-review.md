@@ -242,6 +242,7 @@ Progress:
 - Mollie mode fallback and strict-mode selection now live in [lib/reliability/mollie-mode-selection.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/mollie-mode-selection.ts>) with focused node coverage
 - subscription sync billing-day, terminal-state, and metadata mapping now live in [lib/reliability/subscription-sync-record.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/subscription-sync-record.ts>) with focused node coverage
 - first-payment and recurring invoice modules now share count, amount, error, date, and duplicate-reference helpers in [lib/eboekhouden/invoice-flow-helpers.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/eboekhouden/invoice-flow-helpers.ts>) with focused node coverage
+- first-payment and recurring invoice retry metadata now share [lib/eboekhouden/invoice-retry-metadata.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/eboekhouden/invoice-retry-metadata.ts>) with focused node coverage
 - customer onboarding relation-field normalization and e-Boekhouden patch detection now live in [lib/onboarding/customer-relation-fields.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/customer-relation-fields.ts>) with focused node coverage
 
 ### P2: Highest-risk flows now have focused seam coverage; broader DB-backed integration remains optional hardening
