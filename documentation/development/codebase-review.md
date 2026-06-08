@@ -56,6 +56,7 @@ Implemented so far:
 - settings now also surfaces a targeted repair form for single customer, payment, or subscription resyncs
 - invoice creation batch handling now has a shared helper and executable coverage for first-payment and recurring batch mapping
 - invoice delivery retry batch handling now has a shared helper and executable coverage for first-payment and recurring retry mapping
+- Mollie webhook ingestion now routes through an injectable helper with executable coverage for JSON/form parsing, supported resource checks, pending event storage, processed/failed status updates, and preferred-mode behavior
 - settings reconciliation now exposes explicit `sync_only` versus `full` modes so operators can refresh Mollie state without automatically triggering invoice or activation follow-ups
 - the standalone Track A onboarding hardening plan has been retired; the remaining hardening work now lives in the active docs below
 - product scope has been narrowed so subscriptions stay inside customer workflows and payment links stay inside onboarding instead of becoming standalone workspaces
@@ -245,10 +246,11 @@ Recommended direction:
 
 - add focused integration-style tests around:
   - consent acceptance and token handling
-  - webhook ingestion and replay
   - first-payment sync -> invoice create
   - recurring invoice create/delivery retry
   - repair flows with mixed happy and failure paths
+
+Webhook ingestion/status handling now has executable coverage around the route helper; replay behavior remains partially covered by source-scope tests.
 
 ### P3: e-Boekhouden relation search is operationally expensive
 

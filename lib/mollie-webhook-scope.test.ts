@@ -20,9 +20,14 @@ describe("mollie webhook scope", () => {
 
   it("requires webhook resources to resolve to managed local state", () => {
     const routeSource = readFileSync(resolve("app/api/webhooks/mollie/route.ts"), "utf8");
+    const processingSource = readFileSync(
+      resolve("lib/reliability/webhook-processing.ts"),
+      "utf8",
+    );
     const syncSource = readFileSync(resolve("lib/reliability/sync.ts"), "utf8");
 
-    assert.match(routeSource, /supportedResourceIdPattern/);
+    assert.match(routeSource, /handleMollieWebhookRequest/);
+    assert.match(processingSource, /supportedWebhookResourceIdPattern/);
     assert.match(routeSource, /requireManagedResource: true/);
     assert.match(syncSource, /Payment webhook is not linked to a managed local resource\./);
     assert.match(syncSource, /Payment-link webhook is not linked to a managed local resource\./);

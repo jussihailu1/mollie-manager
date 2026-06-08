@@ -7,55 +7,14 @@ import {
   syncPaymentLinkByMollieId,
   syncSubscriptionByMollieId,
 } from "@/lib/reliability/sync";
+import {
+  handleMollieWebhookRequest,
+  type WebhookResourceSyncResult,
+} from "@/lib/reliability/webhook-processing";
 
 type ExistingResourceMode = {
   mode: "live" | "test";
 };
-
-const supportedResourceIdPattern = /^(tr|sub|pl)_[A-Za-z0-9]+$/;
-
-function serializeError(error: unknown) {
-  if (error instanceof Error) {
-    return error.message.slice(0, 180);
-  }
-
-  return "Webhook processing failed.";
-}
-
-async function parseWebhookRequest(request: Request) {
-  const contentType = request.headers.get("content-type") ?? "";
-
-  if (contentType.includes("application/json")) {
-    const payload = (await request.json()) as Record<string, unknown>;
-
-    return {
-      payload,
-      resourceId:
-        typeof payload.id === "string"
-          ? payload.id
-          : typeof payload.resourceId === "string"
-            ? payload.resourceId
-            : null,
-      resourceType:
-        typeof payload.resource === "string"
-          ? payload.resource
-          : typeof payload.resourceType === "string"
-            ? payload.resourceType
-            : null,
-    };
-  }
-
-  const formData = await request.formData();
-  const payload = Object.fromEntries(formData.entries());
-  const resourceId = formData.get("id");
-  const resourceType = formData.get("resource");
-
-  return {
-    payload,
-    resourceId: typeof resourceId === "string" ? resourceId : null,
-    resourceType: typeof resourceType === "string" ? resourceType : null,
-  };
-}
 
 async function processWebhookResource(
   resourceId: string,
@@ -105,40 +64,26 @@ async function processWebhookResource(
 }
 
 export async function POST(request: Request) {
-  const parsed = await parseWebhookRequest(request);
-
-  if (!parsed.resourceId) {
-    return new Response("Missing resource id", {
-      status: 400,
-    });
-  }
-
-  if (!supportedResourceIdPattern.test(parsed.resourceId)) {
-    return new Response("Unsupported resource id", {
-      status: 400,
-    });
-  }
-
-  const webhookEventId = crypto.randomUUID();
-  const existingModeResult =
-    (
-      await getDb().execute<ExistingResourceMode>(sql`
+  const result = await handleMollieWebhookRequest(request, {
+    findExistingResourceMode: async (resourceId) =>
+      (
+        await getDb().execute<ExistingResourceMode>(sql`
           select mode
           from payments
-          where mollie_payment_id = ${parsed.resourceId}
+          where mollie_payment_id = ${resourceId}
           union all
           select mode
           from subscriptions
-          where mollie_subscription_id = ${parsed.resourceId}
+          where mollie_subscription_id = ${resourceId}
           union all
           select mode
           from payment_links
-          where mollie_payment_link_id = ${parsed.resourceId}
+          where mollie_payment_link_id = ${resourceId}
           limit 1
         `)
-    ).rows[0]?.mode ?? null;
-
-  await getDb().execute(sql`
+      ).rows[0]?.mode ?? null,
+    insertWebhookEvent: async (input) => {
+      await getDb().execute(sql`
       insert into webhook_events (
         id,
         mode,
@@ -149,55 +94,51 @@ export async function POST(request: Request) {
         payload,
         processing_status
       ) values (
-        ${webhookEventId},
-        ${existingModeResult ?? "test"},
-        ${parsed.resourceType ?? null},
-        ${parsed.resourceId},
-        ${parsed.resourceType ?? "mollie-webhook"},
-        ${request.headers.get("x-request-id") ?? null},
-        ${JSON.stringify(parsed.payload)}::jsonb,
+        ${input.id},
+        ${input.mode},
+        ${input.resourceType ?? null},
+        ${input.resourceId},
+        ${input.topic},
+        ${input.requestId},
+        ${JSON.stringify(input.payload)}::jsonb,
         'pending'
       )
     `);
+    },
+    markWebhookEventFailed: async (input) => {
+      await getDb().execute(sql`
+        update webhook_events
+        set
+          processing_status = 'failed',
+          error_message = ${input.errorMessage},
+          retry_count = retry_count + 1,
+          last_attempt_at = now()
+        where id = ${input.id}
+      `);
+    },
+    markWebhookEventProcessed: async (input) => {
+      const resourceResult: WebhookResourceSyncResult = input.result;
 
-  try {
-    const result = await processWebhookResource(
-      parsed.resourceId,
-      existingModeResult,
-    );
-
-    await getDb().execute(sql`
+      await getDb().execute(sql`
         update webhook_events
         set
           mode = coalesce(
-            (select mode from payments where id = ${result.paymentId} limit 1),
-            (select mode from subscriptions where id = ${result.subscriptionId} limit 1),
-            (select mode from payment_links where id = ${result.paymentLinkId} limit 1),
+            (select mode from payments where id = ${resourceResult.paymentId} limit 1),
+            (select mode from subscriptions where id = ${resourceResult.subscriptionId} limit 1),
+            (select mode from payment_links where id = ${resourceResult.paymentLinkId} limit 1),
             mode
           ),
           processing_status = 'processed',
           error_message = null,
           last_attempt_at = now(),
           processed_at = now()
-        where id = ${webhookEventId}
+        where id = ${input.id}
       `);
+    },
+    syncResource: processWebhookResource,
+  });
 
-    return new Response("OK", {
-      status: 200,
-    });
-  } catch (error) {
-    await getDb().execute(sql`
-        update webhook_events
-        set
-          processing_status = 'failed',
-          error_message = ${serializeError(error)},
-          retry_count = retry_count + 1,
-          last_attempt_at = now()
-        where id = ${webhookEventId}
-      `);
-
-    return new Response("Webhook processing failed", {
-      status: 500,
-    });
-  }
+  return new Response(result.body, {
+    status: result.status,
+  });
 }
