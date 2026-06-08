@@ -34,6 +34,11 @@ import {
   createConsentToken,
 } from "@/lib/onboarding/consent-token-storage";
 import { getCustomerDetail } from "@/lib/onboarding/data";
+import {
+  buildFirstPaymentLinkMetadata,
+  deriveFirstPaymentLinkAmount,
+  deriveFirstPaymentLinkStatus,
+} from "@/lib/onboarding/first-payment-link-record";
 import { syncPaymentLinkByMollieId } from "@/lib/reliability/sync";
 import { buildSubscriptionConsentReturnUrl } from "@/lib/subscription-consent";
 import { ensureTenantSubscriptionPolicyDefaults } from "@/lib/subscription-policy-defaults";
@@ -1138,15 +1143,13 @@ export async function createFirstPaymentAction(formData: FormData) {
       sequenceType: SequenceType.first,
       webhookUrl,
     });
-    const paymentLinkStatus = paymentLink.archived
-      ? "archived"
-      : paymentLink.paidAt
-        ? "paid"
-        : "open";
-    const paymentLinkAmount = paymentLink.amount ?? {
-      currency: "EUR",
-      value: amountValue,
-    };
+    const paymentLinkStatus = deriveFirstPaymentLinkStatus(paymentLink);
+    const paymentLinkAmount = deriveFirstPaymentLinkAmount(paymentLink, amountValue);
+    const paymentLinkMetadata = buildFirstPaymentLinkMetadata({
+      mollieCustomerId,
+      paymentLink,
+      redirectUrl,
+    });
 
     await transaction(async (client) => {
       await client.execute(sql`
@@ -1176,17 +1179,7 @@ export async function createFirstPaymentAction(formData: FormData) {
             ${paymentLinkAmount.currency},
             ${paymentLink.getPaymentUrl()},
             ${paymentLink.expiresAt ?? null}::timestamptz,
-            ${JSON.stringify({
-              allowedMethods: paymentLink.allowedMethods ?? [PaymentMethod.ideal],
-              latestPaymentId: null,
-              latestPaymentStatus: null,
-              mollieCustomerId,
-              paymentType: "first",
-              redirectUrl,
-              reusable: paymentLink.reusable ?? false,
-              sequenceType: paymentLink.sequenceType ?? SequenceType.first,
-              source: "subscription_onboarding",
-            })}::jsonb,
+            ${JSON.stringify(paymentLinkMetadata)}::jsonb,
             coalesce(${paymentLink.createdAt ?? null}::timestamptz, now()),
             now(),
             now()
