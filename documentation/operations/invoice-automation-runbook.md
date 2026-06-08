@@ -69,6 +69,8 @@ Authenticated `/api/health?mode=<test|live>` includes:
 
 Use these authenticated diagnostics to confirm scheduler liveness without checking platform logs first. The `/settings` ops overview now surfaces same signals for normal operator use, while raw JSON stays available for direct inspection.
 
+The `/settings` and authenticated `/api/health` surfaces now share the same reliability ops snapshot, so webhook health, invoice automation, delivery retries, and cron heartbeat stay aligned across both views.
+
 Operator reconciliation from `/settings` now has explicit modes:
 
 - `sync_only`: refresh Mollie-backed local state only

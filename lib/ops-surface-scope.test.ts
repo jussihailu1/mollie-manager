@@ -19,9 +19,14 @@ describe("ops surface hardening", () => {
     const source = readFileSync(resolve("app/(dashboard)/settings/page.tsx"), "utf8");
 
     assert.match(source, /Operations overview/);
-    assert.match(source, /Open JSON diagnostics/);
+    assert.match(
+      source,
+      /Shared reliability snapshot for \/settings and authenticated \/api\/health/,
+    );
+    assert.match(source, /Open authenticated diagnostics/);
     assert.match(source, /Failed webhook replay queue/);
     assert.match(source, /replayWebhookEventAction/);
+    assert.match(source, /confirmMessage=\{`Replay failed/);
   });
 
   it("defaults operator reconciliation to sync-only mode", () => {
@@ -45,6 +50,15 @@ describe("ops surface hardening", () => {
     assert.match(settingsSource, /parseReconciliationSummary/);
     assert.match(actionSource, /reconciliationSummary/);
     assert.match(actionSource, /serializeReconciliationSummary/);
+  });
+
+  it("shares the same reliability ops snapshot between settings and health diagnostics", () => {
+    const settingsSource = readFileSync(resolve("app/(dashboard)/settings/page.tsx"), "utf8");
+    const healthSource = readFileSync(resolve("app/api/health/route.ts"), "utf8");
+
+    assert.match(settingsSource, /getReliabilityOpsSnapshot/);
+    assert.match(healthSource, /getReliabilityOpsSnapshot/);
+    assert.match(healthSource, /opsSnapshot/);
   });
 
   it("gates billing follow-ups behind explicit full reconciliation mode", () => {

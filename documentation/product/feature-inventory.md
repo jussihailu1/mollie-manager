@@ -38,9 +38,9 @@ Canonical policy docs:
 - [ ] Payment-link functionality exists, but there is no separate primary payment-links workspace
 - [ ] Legacy `/alerts` and `/payment-links` routes are compatibility redirects, not active standalone modules
 - [ ] Manual webhook replay exists in backend actions, but it is not a prominent operator workflow
-  Status: the settings ops surface now exposes a failed-webhook replay queue with failed-only replay controls for the selected mode.
-- [ ] Reliability and invoice automation health is spread across `/settings`, `/api/health`, and CLI scripts rather than one unified ops screen
-  Status: `/settings` now includes an operator-focused ops overview with health snapshot, failed webhook replay queue, and recent reliability activity; CLI scripts and JSON diagnostics still remain available for deeper inspection.
+  Status: the settings ops surface now exposes a failed-webhook replay queue with failed-only replay controls and explicit replay confirmation for the selected mode.
+- [x] Reliability and invoice automation health is unified across `/settings` and authenticated `/api/health`
+  Status: both surfaces now share the same reliability ops snapshot for webhook health, invoice automation, delivery retries, and cron heartbeat; CLI scripts still remain as deeper fallbacks.
 - [ ] Detailed subscription, mandate, and payment history is available in the data model, but not all of it is surfaced in dense first-class operator views
 
 ## Planned Next

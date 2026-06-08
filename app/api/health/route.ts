@@ -1,15 +1,10 @@
 import { checkDatabaseConnection } from "@/lib/db";
 import { env, getSetupStatus, type MollieMode } from "@/lib/env";
-import {
-  getInvoiceAutomationCronHeartbeat,
-  getInvoiceAutomationSnapshot,
-} from "@/lib/invoice-automation-metrics";
-import { getInvoiceDeliveryQueueSummary } from "@/lib/invoice-delivery";
 import { getAcceptedCronSecrets, isBearerAuthorized } from "@/lib/cron-auth";
 import { isMollieConfigured } from "@/lib/mollie/client";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
-import { getReliabilitySnapshot } from "@/lib/reliability/data";
 import { getViewerSession } from "@/lib/auth/session";
+import { getReliabilityOpsSnapshot } from "@/lib/reliability/ops-snapshot";
 
 function resolveMode(request: Request): MollieMode {
   const mode = new URL(request.url).searchParams.get("mode");
@@ -47,18 +42,9 @@ export async function GET(request: Request) {
 
   const mode = resolveMode(request);
   const setupStatus = getSetupStatus();
-  const [
-    database,
-    reliability,
-    invoiceAutomation,
-    invoiceAutomationCron,
-    invoiceDeliveryQueue,
-  ] = await Promise.all([
+  const [database, opsSnapshot] = await Promise.all([
     checkDatabaseConnection(),
-    getReliabilitySnapshot({ mode }),
-    getInvoiceAutomationSnapshot(mode),
-    getInvoiceAutomationCronHeartbeat(mode),
-    getInvoiceDeliveryQueueSummary(mode),
+    getReliabilityOpsSnapshot({ mode }),
   ]);
 
   return Response.json({
@@ -75,10 +61,11 @@ export async function GET(request: Request) {
       notificationsConfigured: notificationsAreConfigured(),
       mollieTestConfigured: isMollieConfigured("test"),
     },
-    invoiceAutomation,
-    invoiceAutomationCron,
-    invoiceDeliveryQueue,
-    reliability,
+    invoiceAutomation: opsSnapshot.invoiceAutomation,
+    invoiceAutomationCron: opsSnapshot.invoiceAutomationCron,
+    invoiceDeliveryQueue: opsSnapshot.invoiceDeliveryQueue,
+    opsSnapshot,
+    reliability: opsSnapshot.reliability,
     setupStatus,
     timestamp: new Date().toISOString(),
   });

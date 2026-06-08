@@ -30,15 +30,10 @@ import {
 } from "@/lib/eboekhouden/recurring-invoices";
 import { formatDateTime, formatLabel, getSingleSearchParam } from "@/lib/format";
 import {
-  getInvoiceAutomationCronHeartbeat,
-  getInvoiceAutomationSnapshot,
-} from "@/lib/invoice-automation-metrics";
-import { getInvoiceDeliveryQueueSummary } from "@/lib/invoice-delivery";
-import {
-  getReliabilitySnapshot,
   listFailedWebhookEvents,
   listRecentAuditActivity,
 } from "@/lib/reliability/data";
+import { getReliabilityOpsSnapshot } from "@/lib/reliability/ops-snapshot";
 import { env } from "@/lib/env";
 import {
   parseReconciliationSummary,
@@ -160,21 +155,25 @@ export default async function SettingsPage({
       !ledgers.some((ledger) => ledger.id === billingSettings.revenueLedgerId),
   );
   const billingSettingsComplete = billingSettingsAreComplete(billingSettings);
-  const invoiceAutomationCronHeartbeat = await getInvoiceAutomationCronHeartbeat(
-    selectedMode,
-  );
-  const reliabilitySnapshot = await getReliabilitySnapshot({ mode: selectedMode });
-  const [failedWebhookEvents, recentAuditActivity] = await Promise.all([
+  const [reliabilityOpsSnapshot, failedWebhookEvents, recentAuditActivity] = await Promise.all([
+    getReliabilityOpsSnapshot({
+      billingSettingsComplete,
+      mode: selectedMode,
+    }),
     listFailedWebhookEvents({ limit: 8, mode: selectedMode }),
     listRecentAuditActivity({ mode: selectedMode }),
   ]);
+  const {
+    invoiceAutomation,
+    invoiceAutomationCron,
+    invoiceDeliveryQueue,
+    reliability,
+  } = reliabilityOpsSnapshot;
   const [
     dueInvoiceSummary,
     dueFirstPaymentInvoiceSummary,
     failedRecurringRetrySummary,
     failedFirstPaymentRetrySummary,
-    invoiceAutomationSnapshot,
-    invoiceDeliveryQueueSummary,
   ] =
     billingSettingsComplete
     ? await Promise.all([
@@ -182,8 +181,6 @@ export default async function SettingsPage({
         getDueFirstPaymentInvoiceQueueSummary(selectedMode),
         getFailedRecurringInvoiceRetrySummary(selectedMode),
         getFailedFirstPaymentInvoiceRetrySummary(selectedMode),
-        getInvoiceAutomationSnapshot(selectedMode),
-        getInvoiceDeliveryQueueSummary(selectedMode),
       ])
     : [
         {
@@ -203,20 +200,6 @@ export default async function SettingsPage({
         {
           retryableCount: 0,
           totalFailedCount: 0,
-        },
-        {
-          dueFirstPaymentPendingCount: 0,
-          dueRecurringPendingCount: 0,
-          failedFirstPaymentCount: 0,
-          failedFirstPaymentRecoverableCount: 0,
-          failedRecurringCount: 0,
-          failedRecurringRecoverableCount: 0,
-        },
-        {
-          dueRetryFirstPaymentCount: 0,
-          dueRetryRecurringCount: 0,
-          permanentFailureFirstPaymentCount: 0,
-          permanentFailureRecurringCount: 0,
         },
       ];
 
@@ -263,12 +246,12 @@ export default async function SettingsPage({
             <div className="space-y-1">
               <CardTitle className="text-lg">Operations overview</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Unified operator view for authenticated diagnostics, webhook repair, and recent reliability actions.
+                Shared reliability snapshot for /settings and authenticated /api/health, plus webhook replay and recent repair activity.
               </p>
             </div>
             <Button asChild variant="outline">
               <Link href={`/api/health?mode=${selectedMode}`} target="_blank">
-                Open JSON diagnostics
+                Open authenticated diagnostics
               </Link>
             </Button>
           </div>
@@ -277,37 +260,67 @@ export default async function SettingsPage({
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl border border-border p-4">
               <p className="text-sm font-medium">Webhook health</p>
-              <p className="mt-2 text-2xl font-semibold">{reliabilitySnapshot.failedWebhookCount}</p>
+              <p className="mt-2 text-2xl font-semibold">{reliability.failedWebhookCount}</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                failed events in {selectedMode} mode
+                failed events in {selectedMode} mode; last received{" "}
+                {reliability.lastReceivedWebhookAt
+                  ? formatDateTime(reliability.lastReceivedWebhookAt)
+                  : "never"}
               </p>
             </div>
             <div className="rounded-xl border border-border p-4">
-              <p className="text-sm font-medium">Unresolved alerts</p>
-              <p className="mt-2 text-2xl font-semibold">{reliabilitySnapshot.unresolvedAlertCount}</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                open + acknowledged alert rows
-              </p>
-            </div>
-            <div className="rounded-xl border border-border p-4">
-              <p className="text-sm font-medium">Due email retries</p>
+              <p className="text-sm font-medium">Invoice automation</p>
               <p className="mt-2 text-2xl font-semibold">
-                {invoiceDeliveryQueueSummary.dueRetryFirstPaymentCount +
-                  invoiceDeliveryQueueSummary.dueRetryRecurringCount}
+                {billingSettingsComplete
+                  ? invoiceAutomation.dueFirstPaymentPendingCount +
+                    invoiceAutomation.dueRecurringPendingCount
+                  : "n/a"}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                first-payment + recurring delivery retries
+                {billingSettingsComplete ? (
+                  <>
+                    due creates; safe retries{" "}
+                    {invoiceAutomation.failedFirstPaymentRecoverableCount}/
+                    {invoiceAutomation.failedRecurringRecoverableCount}
+                  </>
+                ) : (
+                  "Finish accounting settings before invoice automation counts are shown."
+                )}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border p-4">
+              <p className="text-sm font-medium">Delivery retries</p>
+              <p className="mt-2 text-2xl font-semibold">
+                {billingSettingsComplete
+                  ? invoiceDeliveryQueue.dueRetryFirstPaymentCount +
+                    invoiceDeliveryQueue.dueRetryRecurringCount
+                  : "n/a"}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {billingSettingsComplete ? (
+                  <>
+                    first-payment + recurring retries; permanent failures{" "}
+                    {invoiceDeliveryQueue.permanentFailureFirstPaymentCount}/
+                    {invoiceDeliveryQueue.permanentFailureRecurringCount}
+                  </>
+                ) : (
+                  "Finish accounting settings before delivery retry counts are shown."
+                )}
               </p>
             </div>
             <div className="rounded-xl border border-border p-4">
               <p className="text-sm font-medium">Cron heartbeat</p>
               <p className="mt-2 text-sm font-semibold">
-                {invoiceAutomationCronHeartbeat.lastCronRunOutcome ?? "n/a"}
+                {invoiceAutomationCron.lastCronRunOutcome ?? "n/a"}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                last run {invoiceAutomationCronHeartbeat.lastCronRunAt ?? "never"}
+                last run {invoiceAutomationCron.lastCronRunAt ?? "never"}
               </p>
             </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+            This snapshot is the same one returned by authenticated <code>/api/health</code> diagnostics, so operators can read one set of reliability numbers in both places.
           </div>
 
           <div className="grid gap-6 xl:grid-cols-[1.4fr,1fr]">
@@ -357,10 +370,11 @@ export default async function SettingsPage({
                               <input type="hidden" name="returnTo" value="/settings" />
                               <input type="hidden" name="webhookEventId" value={event.id} />
                               <FormActionButton
+                                confirmMessage={`Replay failed ${event.resourceType ?? "webhook"} ${event.resourceId ?? event.id}? This only reprocesses failed stored events in the current mode.`}
                                 pendingLabel="Replaying..."
                                 variant="secondary"
                               >
-                                Replay
+                                Replay failed event
                               </FormActionButton>
                             </form>
                           </TableCell>
@@ -375,7 +389,7 @@ export default async function SettingsPage({
             <div className="rounded-xl border border-border p-4">
               <p className="text-sm font-medium">Recent reliability activity</p>
               <p className="text-sm text-muted-foreground">
-                Latest audit rows for repair, replay, and operator-triggered billing operations.
+                Latest audit rows for repair, replay, reconciliation, and operator-triggered billing operations.
               </p>
 
               {recentAuditActivity.length === 0 ? (
@@ -404,22 +418,22 @@ export default async function SettingsPage({
             <div className="space-y-2">
               <p className="text-sm font-medium">Automation health snapshot</p>
               <p className="text-sm text-muted-foreground">
-                Current mode: {selectedMode}. Pending first-payment creates: {invoiceAutomationSnapshot.dueFirstPaymentPendingCount}. Pending recurring creates due now: {invoiceAutomationSnapshot.dueRecurringPendingCount}.
+                Current mode: {selectedMode}. Pending first-payment creates: {invoiceAutomation.dueFirstPaymentPendingCount}. Pending recurring creates due now: {invoiceAutomation.dueRecurringPendingCount}.
               </p>
               <p className="text-sm text-muted-foreground">
-                Failed first-payment rows: {invoiceAutomationSnapshot.failedFirstPaymentCount} (recoverable: {invoiceAutomationSnapshot.failedFirstPaymentRecoverableCount}). Failed recurring rows: {invoiceAutomationSnapshot.failedRecurringCount} (recoverable: {invoiceAutomationSnapshot.failedRecurringRecoverableCount}).
+                Failed first-payment rows: {invoiceAutomation.failedFirstPaymentCount} (recoverable: {invoiceAutomation.failedFirstPaymentRecoverableCount}). Failed recurring rows: {invoiceAutomation.failedRecurringCount} (recoverable: {invoiceAutomation.failedRecurringRecoverableCount}).
               </p>
               <p className="text-sm text-muted-foreground">
-                Webhooks received / processed: {reliabilitySnapshot.lastReceivedWebhookAt ? formatDateTime(reliabilitySnapshot.lastReceivedWebhookAt) : "never"} / {reliabilitySnapshot.lastProcessedWebhookAt ? formatDateTime(reliabilitySnapshot.lastProcessedWebhookAt) : "never"}.
+                Webhooks received / processed: {reliability.lastReceivedWebhookAt ? formatDateTime(reliability.lastReceivedWebhookAt) : "never"} / {reliability.lastProcessedWebhookAt ? formatDateTime(reliability.lastProcessedWebhookAt) : "never"}.
               </p>
               <p className="text-sm text-muted-foreground">
-                Failed webhook events: {reliabilitySnapshot.failedWebhookCount}. Open alerts: {reliabilitySnapshot.openAlertCount}. Unresolved alerts: {reliabilitySnapshot.unresolvedAlertCount}.
+                Failed webhook events: {reliability.failedWebhookCount}. Open alerts: {reliability.openAlertCount}. Unresolved alerts: {reliability.unresolvedAlertCount}.
               </p>
               <p className="text-sm text-muted-foreground">
-                Email retries due now (first-payment/recurring): {invoiceDeliveryQueueSummary.dueRetryFirstPaymentCount}/{invoiceDeliveryQueueSummary.dueRetryRecurringCount}. Permanent delivery failures (first-payment/recurring): {invoiceDeliveryQueueSummary.permanentFailureFirstPaymentCount}/{invoiceDeliveryQueueSummary.permanentFailureRecurringCount}.
+                Email retries due now (first-payment/recurring): {invoiceDeliveryQueue.dueRetryFirstPaymentCount}/{invoiceDeliveryQueue.dueRetryRecurringCount}. Permanent delivery failures (first-payment/recurring): {invoiceDeliveryQueue.permanentFailureFirstPaymentCount}/{invoiceDeliveryQueue.permanentFailureRecurringCount}.
               </p>
               <p className="text-sm text-muted-foreground">
-                Last automation cron run: {invoiceAutomationCronHeartbeat.lastCronRunAt ?? "never"} ({invoiceAutomationCronHeartbeat.lastCronRunOutcome ?? "n/a"}). Last success: {invoiceAutomationCronHeartbeat.lastCronSuccessAt ?? "never"}. Last failure: {invoiceAutomationCronHeartbeat.lastCronFailureAt ?? "never"}.
+                Last automation cron run: {invoiceAutomationCron.lastCronRunAt ?? "never"} ({invoiceAutomationCron.lastCronRunOutcome ?? "n/a"}). Last success: {invoiceAutomationCron.lastCronSuccessAt ?? "never"}. Last failure: {invoiceAutomationCron.lastCronFailureAt ?? "never"}.
               </p>
             </div>
           </div>
