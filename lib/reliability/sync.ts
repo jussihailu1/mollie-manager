@@ -17,12 +17,6 @@ import {
   upsertRecurringBillingScheduleForSubscription,
 } from "@/lib/recurring-billing-schedule";
 import {
-  classifyRecurringCollection,
-  DEFAULT_RECURRING_BILLING_POLICY,
-  isCollectionReviewState,
-  type RecurringCollectionState,
-} from "@/lib/recurring-billing-policy";
-import {
   deliverAlertEmail,
   openAlert,
   resolveAlertsForEntity,
@@ -43,6 +37,15 @@ import {
   derivePaymentLinkSyncStatus,
   type PaymentLinkSyncSource,
 } from "@/lib/reliability/payment-link-sync-record";
+import {
+  buildPaymentSyncMetadata,
+  deriveCollectionReviewRequiredAt,
+  derivePaymentRecurringCollectionState,
+  hasPaymentChargeback,
+  resolveFirstPaymentMode,
+  resolvePaymentSyncType,
+  serializePaymentStatusReason,
+} from "@/lib/reliability/payment-sync-record";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 
 type MolliePaymentLink = {
@@ -154,55 +157,6 @@ function buildModesToTry(preferredMode?: MollieMode, strictMode = false) {
     (mode, index, array): mode is MollieMode =>
       array.indexOf(mode) === index && isMollieConfigured(mode),
   );
-}
-
-function resolvePaymentType(payment: Payment) {
-  if (payment.subscriptionId || payment.sequenceType === "recurring") {
-    return "recurring";
-  }
-
-  if (payment.sequenceType === "first") {
-    return "first";
-  }
-
-  return "manual";
-}
-
-function hasChargeback(payment: Payment) {
-  return Boolean(
-    payment.amountChargedBack && payment.amountChargedBack.value !== "0.00",
-  );
-}
-
-function serializeStatusReason(statusReason: Payment["statusReason"]) {
-  if (!statusReason) {
-    return null;
-  }
-
-  if (typeof statusReason === "string") {
-    return statusReason;
-  }
-
-  return [statusReason.code, statusReason.message].filter(Boolean).join(": ");
-}
-
-function getRecurringCollectionState(payment: Payment) {
-  return classifyRecurringCollection({
-    hasChargeback: hasChargeback(payment),
-    paymentType: resolvePaymentType(payment),
-    status: payment.status,
-    statusReason: serializeStatusReason(payment.statusReason),
-  });
-}
-
-function getReviewRequiredAt(state: RecurringCollectionState) {
-  return isCollectionReviewState(state) ? new Date().toISOString() : null;
-}
-
-function getFirstPaymentMode(metadata: Record<string, unknown>) {
-  return metadata.firstPaymentMode === "mandate_only"
-    ? "mandate_only"
-    : "real_installment";
 }
 
 async function findPaymentAcrossModes(
@@ -653,8 +607,8 @@ async function handlePaymentAlerts(input: {
   payment: Payment;
   subscriptionId: string | null;
 }) {
-  const paymentType = resolvePaymentType(input.payment);
-  const recurringCollectionState = getRecurringCollectionState(input.payment);
+  const paymentType = resolvePaymentSyncType(input.payment);
+  const recurringCollectionState = derivePaymentRecurringCollectionState(input.payment);
 
   if (paymentType === "recurring") {
     if (recurringCollectionState === "pending_return_window") {
@@ -697,7 +651,7 @@ async function handlePaymentAlerts(input: {
         payload: {
           policy: "recurring_billing_policy",
           recurringCollectionState,
-          statusReason: serializeStatusReason(input.payment.statusReason),
+          statusReason: serializePaymentStatusReason(input.payment.statusReason),
         },
         severity: "critical",
         subscriptionId: input.subscriptionId,
@@ -754,7 +708,7 @@ async function handlePaymentAlerts(input: {
     }
   }
 
-  if (hasChargeback(input.payment)) {
+  if (hasPaymentChargeback(input.payment)) {
     const alert = await openAlert({
       customerId: input.customerId,
       message:
@@ -896,9 +850,11 @@ export async function syncPaymentByMollieId(
     throw new Error("Payment webhook is not linked to a managed local resource.");
   }
 
-  const paymentType = resolvePaymentType(payment);
-  const recurringCollectionState = getRecurringCollectionState(payment);
-  const collectionReviewRequiredAt = getReviewRequiredAt(recurringCollectionState);
+  const paymentType = resolvePaymentSyncType(payment);
+  const recurringCollectionState = derivePaymentRecurringCollectionState(payment);
+  const collectionReviewRequiredAt = deriveCollectionReviewRequiredAt(
+    recurringCollectionState,
+  );
   let localPaymentId = crypto.randomUUID();
 
   await transaction(async (client) => {
@@ -960,21 +916,10 @@ export async function syncPaymentByMollieId(
           ${payment.expiresAt ?? null}::timestamptz,
           ${payment.paidAt ?? null}::timestamptz,
           ${payment.failedAt ?? null}::timestamptz,
-          ${hasChargeback(payment) ? new Date().toISOString() : null}::timestamptz,
+          ${hasPaymentChargeback(payment) ? new Date().toISOString() : null}::timestamptz,
           ${recurringCollectionState},
           ${collectionReviewRequiredAt}::timestamptz,
-          ${JSON.stringify({
-            description: payment.description,
-            recurringBillingPolicy:
-              paymentType === "recurring"
-                ? {
-                    sepaPendingReturnWindowDays:
-                      DEFAULT_RECURRING_BILLING_POLICY.sepaPendingReturnWindowDays,
-                  }
-                : null,
-            redirectUrl: payment.redirectUrl ?? null,
-            statusReason: serializeStatusReason(payment.statusReason),
-          })}::jsonb,
+          ${JSON.stringify(buildPaymentSyncMetadata({ payment, paymentType }))}::jsonb,
           ${payment.createdAt}::timestamptz,
           now(),
           now()
@@ -1235,7 +1180,7 @@ export async function syncSubscriptionByLocalId(
       actor,
       amountCurrency: subscription.amount.currency,
       amountValue: subscription.amount.value,
-      firstPaymentMode: getFirstPaymentMode(localSubscription.metadata),
+      firstPaymentMode: resolveFirstPaymentMode(localSubscription.metadata),
       interval: subscription.interval,
       mode: localSubscription.mode,
       nextPaymentDate: subscription.nextPaymentDate ?? null,
@@ -1259,9 +1204,9 @@ export async function syncSubscriptionByLocalId(
         localMandateId ??
         null;
       const localPaymentId = existingPayment.rows[0]?.id ?? crypto.randomUUID();
-      const paymentType = resolvePaymentType(payment);
-      const recurringCollectionState = getRecurringCollectionState(payment);
-      const collectionReviewRequiredAt = getReviewRequiredAt(
+      const paymentType = resolvePaymentSyncType(payment);
+      const recurringCollectionState = derivePaymentRecurringCollectionState(payment);
+      const collectionReviewRequiredAt = deriveCollectionReviewRequiredAt(
         recurringCollectionState,
       );
 
@@ -1307,21 +1252,10 @@ export async function syncSubscriptionByLocalId(
             ${payment.expiresAt ?? null}::timestamptz,
             ${payment.paidAt ?? null}::timestamptz,
             ${payment.failedAt ?? null}::timestamptz,
-            ${hasChargeback(payment) ? new Date().toISOString() : null}::timestamptz,
+            ${hasPaymentChargeback(payment) ? new Date().toISOString() : null}::timestamptz,
             ${recurringCollectionState},
             ${collectionReviewRequiredAt}::timestamptz,
-            ${JSON.stringify({
-              description: payment.description,
-              recurringBillingPolicy:
-                paymentType === "recurring"
-                  ? {
-                      sepaPendingReturnWindowDays:
-                        DEFAULT_RECURRING_BILLING_POLICY.sepaPendingReturnWindowDays,
-                    }
-                  : null,
-              redirectUrl: payment.redirectUrl ?? null,
-              statusReason: serializeStatusReason(payment.statusReason),
-            })}::jsonb,
+            ${JSON.stringify(buildPaymentSyncMetadata({ payment, paymentType }))}::jsonb,
             ${payment.createdAt}::timestamptz,
             now(),
             now()
