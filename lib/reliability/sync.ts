@@ -12,7 +12,6 @@ import {
   createEboekhoudenInvoiceForFirstPayment,
   normalizeFirstPaymentInvoiceStates,
 } from "@/lib/eboekhouden/first-payment-invoices";
-import { upsertRecurringBillingScheduleForSubscription } from "@/lib/recurring-billing-schedule";
 import {
   buildInvoiceStateDeltaSummary,
   FIRST_PAYMENT_INVOICE_STATES,
@@ -30,25 +29,17 @@ import {
   type PaymentLinkSyncSource,
 } from "@/lib/reliability/payment-link-sync-record";
 import {
-  deriveCollectionReviewRequiredAt,
-  derivePaymentRecurringCollectionState,
-  resolveFirstPaymentMode,
-  resolvePaymentSyncType,
-} from "@/lib/reliability/payment-sync-record";
-import {
   handlePaymentAlerts,
   handleSubscriptionAlerts,
 } from "@/lib/reliability/sync-alerts";
 import {
-  persistSyncedPayment,
-  type SyncActor,
-} from "@/lib/reliability/sync-persistence";
+  deriveCollectionReviewRequiredAt,
+  derivePaymentRecurringCollectionState,
+  resolvePaymentSyncType,
+} from "@/lib/reliability/payment-sync-record";
+import { persistSyncedPayment, type SyncActor } from "@/lib/reliability/sync-persistence";
+import { persistSyncedSubscriptionPayments } from "@/lib/reliability/subscription-sync-persistence";
 import { buildConfiguredMollieModeOrder } from "@/lib/reliability/mollie-mode-selection";
-import {
-  buildSubscriptionSyncMetadata,
-  deriveSubscriptionBillingDay,
-  shouldStopSubscriptionAfterCurrentPeriod,
-} from "@/lib/reliability/subscription-sync-record";
 import { findMollieResourceAcrossModes } from "@/lib/reliability/mollie-resource-lookup";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 
@@ -81,10 +72,6 @@ type LocalSubscriptionLink = {
   mollieSubscriptionId: string | null;
   subscriptionTermMode: "fixed_term" | "open_ended";
   totalPayments: number | null;
-};
-
-type LocalPaymentRow = {
-  id: string;
 };
 
 type LocalStoredPaymentLink = {
@@ -796,7 +783,8 @@ export async function syncSubscriptionByLocalId(
     options?.strictMode,
   );
   const resolvedSubscriptionId = localSubscription.id;
-  const normalizedFirstPayments: { id: string; isPaid: boolean }[] = [];
+  let normalizedFirstPayments: { id: string; isPaid: boolean }[] = [];
+  let persistedPayments: { localPaymentId: string; payment: Payment }[] = [];
 
   await transaction(async (client) => {
     const localCustomer = {
@@ -810,110 +798,31 @@ export async function syncSubscriptionByLocalId(
         ? mandateIdMap.get(subscription.mandateId) ?? null
         : null) ??
       (await findLocalMandateId(localSubscription.mode, subscription.mandateId, client));
-    const localStatus = mapSubscriptionLifecycle(subscription.status);
-
-    await client.execute(sql`
-        update subscriptions
-        set
-          mandate_id = ${localMandateId},
-          local_status = ${localStatus},
-          mollie_status = ${subscription.status},
-          description = ${subscription.description},
-          interval = ${subscription.interval},
-          amount_value = ${subscription.amount.value},
-          amount_currency = ${subscription.amount.currency},
-          billing_day = ${deriveSubscriptionBillingDay(subscription)},
-          start_date = ${subscription.startDate}::date,
-          stop_after_current_period = ${shouldStopSubscriptionAfterCurrentPeriod(subscription)},
-          canceled_at = ${subscription.canceledAt ?? null}::timestamptz,
-          metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(buildSubscriptionSyncMetadata(subscription))}::jsonb,
-          updated_at = now(),
-          last_synced_at = now()
-        where id = ${localSubscription.id}
-      `);
-
-    await upsertRecurringBillingScheduleForSubscription(client, {
+    const persistedSubscription = await persistSyncedSubscriptionPayments(client, {
       actor,
-      amountCurrency: subscription.amount.currency,
-      amountValue: subscription.amount.value,
-      firstPaymentMode: resolveFirstPaymentMode(localSubscription.metadata),
-      interval: subscription.interval,
-      mode: localSubscription.mode,
-      nextPaymentDate: subscription.nextPaymentDate ?? null,
-      periodLimit: 1,
-      startDate: null,
-      subscriptionId: localSubscription.id,
-      subscriptionTermMode: localSubscription.subscriptionTermMode,
-      totalPayments: localSubscription.totalPayments,
+      localMandateId,
+      localSubscription,
+      payments,
+      resolvePaymentMandateId: async (paymentMandateId) =>
+        (paymentMandateId ? mandateIdMap.get(paymentMandateId) ?? null : null) ??
+        (await findLocalMandateId(
+          localSubscription.mode,
+          paymentMandateId ?? undefined,
+          client,
+        )),
+      subscription,
     });
-
-    for (const payment of payments) {
-      const linkedMandateId =
-        (payment.mandateId ? mandateIdMap.get(payment.mandateId) ?? null : null) ??
-        (await findLocalMandateId(localSubscription.mode, payment.mandateId, client)) ??
-        localMandateId ??
-        null;
-      const paymentType = resolvePaymentSyncType(payment);
-      const recurringCollectionState = derivePaymentRecurringCollectionState(payment);
-      const collectionReviewRequiredAt = deriveCollectionReviewRequiredAt(
-        recurringCollectionState,
-      );
-
-      const persistedPaymentId = await persistSyncedPayment(client, {
-        actor,
-        collectionReviewRequiredAt,
-        customerId: localSubscription.customerId,
-        localMandateId: linkedMandateId,
-        localSubscriptionId: localSubscription.id,
-        mode: localSubscription.mode,
-        payment,
-        paymentType,
-        recurringCollectionState,
-      });
-
-      if (paymentType === "first") {
-        normalizedFirstPayments.push({
-          id: persistedPaymentId,
-          isPaid: payment.status === "paid",
-        });
-      }
-    }
-
-    await writeAuditLog(
-      {
-        action: "subscription.sync",
-        details: {
-          localSubscriptionId: localSubscription.id,
-          mollieSubscriptionId: localSubscription.mollieSubscriptionId,
-          paymentCount: payments.length,
-        },
-        entityId: localSubscription.id,
-        entityType: "subscription",
-        mode: localSubscription.mode,
-        outcome: "success",
-        summary: "Refreshed the subscription and its payments from Mollie.",
-      },
-      client,
-      actor,
-    );
+    normalizedFirstPayments = persistedSubscription.normalizedFirstPayments;
+    persistedPayments = persistedSubscription.persistedPayments;
   });
 
-  for (const payment of payments) {
-    const syncedPayment = await getDb().execute<LocalPaymentRow>(sql`
-        select id
-        from payments
-        where mode = ${localSubscription.mode} and mollie_payment_id = ${payment.id}
-        limit 1
-      `);
-
-    if (syncedPayment.rows[0]?.id) {
-      await handlePaymentAlerts({
-        customerId: localSubscription.customerId,
-        localPaymentId: syncedPayment.rows[0].id,
-        payment,
-        subscriptionId: localSubscription.id,
-      });
-    }
+  for (const persistedPayment of persistedPayments) {
+    await handlePaymentAlerts({
+      customerId: localSubscription.customerId,
+      localPaymentId: persistedPayment.localPaymentId,
+      payment: persistedPayment.payment,
+      subscriptionId: localSubscription.id,
+    });
   }
 
   for (const firstPayment of normalizedFirstPayments) {
