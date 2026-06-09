@@ -2,11 +2,25 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  buildInvoiceCreationClaimMetadata,
   buildInvoiceCreationFailureMetadata,
   buildInvoiceCreationSuccessMetadata,
 } from "@/lib/eboekhouden/invoice-creation-metadata";
 
 describe("invoice creation metadata helpers", () => {
+  it("builds claim metadata with actor evidence", () => {
+    assert.deepEqual(
+      buildInvoiceCreationClaimMetadata({
+        actorEmail: "ops@example.test",
+        claimedAt: "2026-06-09T09:00:00.000Z",
+      }),
+      {
+        invoiceCreationClaimedAt: "2026-06-09T09:00:00.000Z",
+        invoiceCreationClaimedBy: "ops@example.test",
+      },
+    );
+  });
+
   it("builds success metadata with invoice snapshot", () => {
     const invoice = { id: 123, invoiceNumber: "2026-001" };
 

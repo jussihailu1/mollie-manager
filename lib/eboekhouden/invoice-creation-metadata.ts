@@ -1,5 +1,15 @@
 import type { EboekhoudenInvoice } from "@/lib/eboekhouden/client";
 
+export function buildInvoiceCreationClaimMetadata(input: {
+  actorEmail?: string | null;
+  claimedAt?: string;
+}) {
+  return {
+    invoiceCreationClaimedAt: input.claimedAt ?? new Date().toISOString(),
+    invoiceCreationClaimedBy: input.actorEmail ?? null,
+  };
+}
+
 export function buildInvoiceCreationSuccessMetadata(input: {
   completedAt?: string;
   invoice: EboekhoudenInvoice;

@@ -29,6 +29,7 @@ import { buildFirstPaymentInvoiceReference } from "@/lib/eboekhouden/invoice-ref
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
 import { buildInvoiceRetryQueuedMetadata } from "@/lib/eboekhouden/invoice-retry-metadata";
 import {
+  buildInvoiceCreationClaimMetadata,
   buildInvoiceCreationFailureMetadata,
   buildInvoiceCreationSuccessMetadata,
 } from "@/lib/eboekhouden/invoice-creation-metadata";
@@ -255,10 +256,11 @@ async function claimPaymentForInvoice(input: {
       invoice_state = 'invoice_creating',
       invoice_failed_at = null,
       updated_at = now(),
-      metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
-        invoiceCreationClaimedAt: new Date().toISOString(),
-        invoiceCreationClaimedBy: input.actor.email ?? null,
-      })}::jsonb
+      metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(
+        buildInvoiceCreationClaimMetadata({
+          actorEmail: input.actor.email,
+        }),
+      )}::jsonb
     where id = ${input.paymentId}
       and mode = ${input.mode}
       and payment_type = 'first'
