@@ -58,6 +58,7 @@ Implemented so far:
 - invoice delivery retry batch handling now has a shared helper and executable coverage for first-payment and recurring retry mapping
 - payment sync persistence now lives in a shared helper with executable boundary coverage for the sync orchestrator
 - subscription sync persistence now lives in a shared helper with executable boundary coverage for the sync orchestrator
+- customer billing repair now lives in a dedicated onboarding helper with executable boundary coverage
 - Mollie webhook ingestion now routes through an injectable helper with executable coverage for JSON/form parsing, supported resource checks, pending event storage, processed/failed status updates, and preferred-mode behavior
 - consent form acceptance parsing and required-checkbox policy now live in a pure helper with executable coverage
 - consent acceptance orchestration now routes through an injectable helper with executable coverage for invalid forms, missing records, missing checkout URLs, already-accepted consent, missing required acknowledgements, and successful acceptance updates
