@@ -42,6 +42,7 @@ import {
   deriveFirstPaymentLinkAmount,
   deriveFirstPaymentLinkStatus,
 } from "@/lib/onboarding/first-payment-link-record";
+import { resolveFirstPaymentCreationBlocker } from "@/lib/onboarding/first-payment-blocker";
 import { buildFirstPaymentPlan } from "@/lib/onboarding/first-payment-plan";
 import { syncPaymentLinkByMollieId } from "@/lib/reliability/sync";
 import { buildSubscriptionConsentReturnUrl } from "@/lib/subscription-consent";
@@ -111,13 +112,6 @@ const createSubscriptionSchema = z.object({
   customerId: z.string().uuid(),
   returnTo: z.string().trim().startsWith("/").default("/customers"),
 });
-
-const renewableFirstPaymentLinkStatuses = new Set([
-  "archived",
-  "canceled",
-  "expired",
-  "failed",
-]);
 
 const archiveBlockedSubscriptionStatuses = new Set([
   "active",
@@ -936,33 +930,14 @@ export async function createFirstPaymentAction(formData: FormData) {
   const mollieCustomerId = customer.mollieCustomerId;
 
   const detail = await getCustomerDetail(customer.id, selectedMode);
-  const existingFirstPayment = detail?.payments.find(
-    (payment) =>
-      payment.paymentType === "first" &&
-      payment.mollieStatus !== "failed" &&
-      payment.mollieStatus !== "expired" &&
-      payment.mollieStatus !== "canceled",
-  );
-  const existingFirstPaymentLink = detail?.paymentLinks.find(
-    (paymentLink) =>
-      !renewableFirstPaymentLinkStatuses.has(paymentLink.mollieStatus ?? "open"),
-  );
+  const firstPaymentBlocker = resolveFirstPaymentCreationBlocker({
+    paymentLinks: detail?.paymentLinks ?? [],
+    payments: detail?.payments ?? [],
+  });
 
-  if (existingFirstPayment) {
+  if (firstPaymentBlocker) {
     redirectWithMessage(returnTo, {
-      error:
-        existingFirstPayment.mollieStatus === "paid"
-          ? "A paid first payment already exists for this customer."
-          : "A first payment already exists for this customer. Reuse or sync it before creating another one.",
-    });
-  }
-
-  if (existingFirstPaymentLink) {
-    redirectWithMessage(returnTo, {
-      error:
-        existingFirstPaymentLink.mollieStatus === "paid"
-          ? "A paid first payment link already exists for this customer. Sync it before creating another one."
-          : "A first payment link already exists for this customer. Reuse or sync it before creating another one.",
+      error: firstPaymentBlocker,
     });
   }
 
