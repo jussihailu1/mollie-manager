@@ -12,10 +12,7 @@ import {
   createEboekhoudenInvoiceForFirstPayment,
   normalizeFirstPaymentInvoiceStates,
 } from "@/lib/eboekhouden/first-payment-invoices";
-import {
-  upsertRecurringBillingScheduleForPayment,
-  upsertRecurringBillingScheduleForSubscription,
-} from "@/lib/recurring-billing-schedule";
+import { upsertRecurringBillingScheduleForSubscription } from "@/lib/recurring-billing-schedule";
 import {
   buildInvoiceStateDeltaSummary,
   FIRST_PAYMENT_INVOICE_STATES,
@@ -33,10 +30,8 @@ import {
   type PaymentLinkSyncSource,
 } from "@/lib/reliability/payment-link-sync-record";
 import {
-  buildPaymentSyncMetadata,
   deriveCollectionReviewRequiredAt,
   derivePaymentRecurringCollectionState,
-  hasPaymentChargeback,
   resolveFirstPaymentMode,
   resolvePaymentSyncType,
 } from "@/lib/reliability/payment-sync-record";
@@ -44,6 +39,10 @@ import {
   handlePaymentAlerts,
   handleSubscriptionAlerts,
 } from "@/lib/reliability/sync-alerts";
+import {
+  persistSyncedPayment,
+  type SyncActor,
+} from "@/lib/reliability/sync-persistence";
 import { buildConfiguredMollieModeOrder } from "@/lib/reliability/mollie-mode-selection";
 import {
   buildSubscriptionSyncMetadata,
@@ -62,11 +61,6 @@ type MolliePaymentLink = {
   id: string;
   webhookUrl?: string;
 } & PaymentLinkSyncSource;
-
-type SyncActor = {
-  email?: string | null;
-  kind: "system" | "user";
-};
 
 export type ReconciliationMode = "full" | "sync_only";
 
@@ -637,120 +631,17 @@ export async function syncPaymentByMollieId(
       (await findLocalMandateId(mode, payment.mandateId, client)) ??
       localSubscription?.mandateId ??
       null;
-    const existingPayment = await client.execute<LocalPaymentRow>(sql`
-        select id
-        from payments
-        where mode = ${mode} and mollie_payment_id = ${payment.id}
-        limit 1
-      `);
-    localPaymentId = existingPayment.rows[0]?.id ?? localPaymentId;
-
-    await client.execute(sql`
-        insert into payments (
-          id,
-          customer_id,
-          subscription_id,
-          mandate_id,
-          mode,
-          payment_type,
-          mollie_payment_id,
-          mollie_status,
-          sequence_type,
-          method,
-          amount_value,
-          amount_currency,
-          checkout_url,
-          expires_at,
-          paid_at,
-          failed_at,
-          disputed_at,
-          recurring_collection_state,
-          collection_review_required_at,
-          metadata,
-          created_at,
-          updated_at,
-          last_synced_at
-        ) values (
-          ${localPaymentId},
-          ${resolvedCustomerId},
-          ${localSubscription?.id ?? null},
-          ${localMandateId},
-          ${mode},
-          ${paymentType},
-          ${payment.id},
-          ${payment.status},
-          ${payment.sequenceType},
-          ${payment.method ?? null},
-          ${payment.amount.value},
-          ${payment.amount.currency},
-          ${payment.getCheckoutUrl()},
-          ${payment.expiresAt ?? null}::timestamptz,
-          ${payment.paidAt ?? null}::timestamptz,
-          ${payment.failedAt ?? null}::timestamptz,
-          ${hasPaymentChargeback(payment) ? new Date().toISOString() : null}::timestamptz,
-          ${recurringCollectionState},
-          ${collectionReviewRequiredAt}::timestamptz,
-          ${JSON.stringify(buildPaymentSyncMetadata({ payment, paymentType }))}::jsonb,
-          ${payment.createdAt}::timestamptz,
-          now(),
-          now()
-        )
-        on conflict (mode, mollie_payment_id)
-        do update set
-          customer_id = excluded.customer_id,
-          subscription_id = excluded.subscription_id,
-          mandate_id = excluded.mandate_id,
-          payment_type = excluded.payment_type,
-          mollie_status = excluded.mollie_status,
-          sequence_type = excluded.sequence_type,
-          method = excluded.method,
-          amount_value = excluded.amount_value,
-          amount_currency = excluded.amount_currency,
-          checkout_url = excluded.checkout_url,
-          expires_at = excluded.expires_at,
-          paid_at = excluded.paid_at,
-          failed_at = excluded.failed_at,
-          disputed_at = excluded.disputed_at,
-          recurring_collection_state = excluded.recurring_collection_state,
-          collection_review_required_at = case
-            when excluded.collection_review_required_at is null then null
-            else coalesce(payments.collection_review_required_at, excluded.collection_review_required_at)
-          end,
-          metadata = excluded.metadata,
-          updated_at = now(),
-          last_synced_at = now()
-      `);
-
-    if (paymentType === "recurring" && localSubscription) {
-      await upsertRecurringBillingScheduleForPayment(client, {
-        amountCurrency: payment.amount.currency,
-        amountValue: payment.amount.value,
-        collectionState: recurringCollectionState,
-        mode,
-        paymentCreatedAt: payment.createdAt,
-        paymentId: localPaymentId,
-        subscriptionId: localSubscription.id,
-      });
-    }
-
-    await writeAuditLog(
-      {
-        action: "payment.sync",
-        details: {
-          localPaymentId,
-          molliePaymentId: payment.id,
-          mollieStatus: payment.status,
-          recurringCollectionState,
-        },
-        entityId: localPaymentId,
-        entityType: "payment",
-        mode,
-        outcome: "success",
-        summary: "Refreshed a payment from Mollie.",
-      },
-      client,
+    localPaymentId = await persistSyncedPayment(client, {
       actor,
-    );
+      collectionReviewRequiredAt,
+      customerId: resolvedCustomerId,
+      localMandateId,
+      localSubscriptionId: localSubscription?.id ?? null,
+      mode,
+      payment,
+      paymentType,
+      recurringCollectionState,
+    });
   });
 
   await handlePaymentAlerts({
@@ -957,115 +848,32 @@ export async function syncSubscriptionByLocalId(
     });
 
     for (const payment of payments) {
-      const existingPayment = await client.execute<LocalPaymentRow>(sql`
-          select id
-          from payments
-          where mode = ${localSubscription.mode} and mollie_payment_id = ${payment.id}
-          limit 1
-        `);
       const linkedMandateId =
         (payment.mandateId ? mandateIdMap.get(payment.mandateId) ?? null : null) ??
         (await findLocalMandateId(localSubscription.mode, payment.mandateId, client)) ??
         localMandateId ??
         null;
-      const localPaymentId = existingPayment.rows[0]?.id ?? crypto.randomUUID();
       const paymentType = resolvePaymentSyncType(payment);
       const recurringCollectionState = derivePaymentRecurringCollectionState(payment);
       const collectionReviewRequiredAt = deriveCollectionReviewRequiredAt(
         recurringCollectionState,
       );
 
-      await client.execute(sql`
-          insert into payments (
-            id,
-            customer_id,
-            subscription_id,
-            mandate_id,
-            mode,
-            payment_type,
-            mollie_payment_id,
-            mollie_status,
-            sequence_type,
-            method,
-            amount_value,
-            amount_currency,
-            checkout_url,
-            expires_at,
-            paid_at,
-            failed_at,
-            disputed_at,
-            recurring_collection_state,
-            collection_review_required_at,
-            metadata,
-            created_at,
-            updated_at,
-            last_synced_at
-          ) values (
-            ${localPaymentId},
-            ${localSubscription.customerId},
-            ${localSubscription.id},
-            ${linkedMandateId},
-            ${localSubscription.mode},
-            ${paymentType},
-            ${payment.id},
-            ${payment.status},
-            ${payment.sequenceType},
-            ${payment.method ?? null},
-            ${payment.amount.value},
-            ${payment.amount.currency},
-            ${payment.getCheckoutUrl()},
-            ${payment.expiresAt ?? null}::timestamptz,
-            ${payment.paidAt ?? null}::timestamptz,
-            ${payment.failedAt ?? null}::timestamptz,
-            ${hasPaymentChargeback(payment) ? new Date().toISOString() : null}::timestamptz,
-            ${recurringCollectionState},
-            ${collectionReviewRequiredAt}::timestamptz,
-            ${JSON.stringify(buildPaymentSyncMetadata({ payment, paymentType }))}::jsonb,
-            ${payment.createdAt}::timestamptz,
-            now(),
-            now()
-          )
-          on conflict (mode, mollie_payment_id)
-          do update set
-            customer_id = excluded.customer_id,
-            subscription_id = excluded.subscription_id,
-            mandate_id = excluded.mandate_id,
-            payment_type = excluded.payment_type,
-            mollie_status = excluded.mollie_status,
-            sequence_type = excluded.sequence_type,
-            method = excluded.method,
-            amount_value = excluded.amount_value,
-            amount_currency = excluded.amount_currency,
-            checkout_url = excluded.checkout_url,
-            expires_at = excluded.expires_at,
-            paid_at = excluded.paid_at,
-            failed_at = excluded.failed_at,
-            disputed_at = excluded.disputed_at,
-            recurring_collection_state = excluded.recurring_collection_state,
-            collection_review_required_at = case
-              when excluded.collection_review_required_at is null then null
-              else coalesce(payments.collection_review_required_at, excluded.collection_review_required_at)
-            end,
-            metadata = excluded.metadata,
-            updated_at = now(),
-            last_synced_at = now()
-        `);
-
-      if (paymentType === "recurring") {
-        await upsertRecurringBillingScheduleForPayment(client, {
-          amountCurrency: payment.amount.currency,
-          amountValue: payment.amount.value,
-          collectionState: recurringCollectionState,
-          mode: localSubscription.mode,
-          paymentCreatedAt: payment.createdAt,
-          paymentId: localPaymentId,
-          subscriptionId: localSubscription.id,
-        });
-      }
+      const persistedPaymentId = await persistSyncedPayment(client, {
+        actor,
+        collectionReviewRequiredAt,
+        customerId: localSubscription.customerId,
+        localMandateId: linkedMandateId,
+        localSubscriptionId: localSubscription.id,
+        mode: localSubscription.mode,
+        payment,
+        paymentType,
+        recurringCollectionState,
+      });
 
       if (paymentType === "first") {
         normalizedFirstPayments.push({
-          id: localPaymentId,
+          id: persistedPaymentId,
           isPaid: payment.status === "paid",
         });
       }
