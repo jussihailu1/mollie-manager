@@ -50,6 +50,7 @@ import {
   deriveSubscriptionBillingDay,
   shouldStopSubscriptionAfterCurrentPeriod,
 } from "@/lib/reliability/subscription-sync-record";
+import { findMollieResourceAcrossModes } from "@/lib/reliability/mollie-resource-lookup";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 
 type MolliePaymentLink = {
@@ -161,21 +162,16 @@ async function findPaymentAcrossModes(
   preferredMode?: MollieMode,
   strictMode = false,
 ) {
-  let lastError: unknown;
+  const result = await findMollieResourceAcrossModes(
+    buildModesToTry(preferredMode, strictMode),
+    (mode) => getMollieClient(mode).payments.get(molliePaymentId),
+    "Payment was not found in Mollie.",
+  );
 
-  for (const mode of buildModesToTry(preferredMode, strictMode)) {
-    try {
-      const payment = await getMollieClient(mode).payments.get(molliePaymentId);
-      return {
-        mode,
-        payment,
-      };
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw lastError ?? new Error("Payment was not found in Mollie.");
+  return {
+    mode: result.mode,
+    payment: result.resource,
+  };
 }
 
 async function findPaymentLinkAcrossModes(
@@ -183,23 +179,19 @@ async function findPaymentLinkAcrossModes(
   preferredMode?: MollieMode,
   strictMode = false,
 ) {
-  let lastError: unknown;
-
-  for (const mode of buildModesToTry(preferredMode, strictMode)) {
-    try {
-      const paymentLink = (await getMollieClient(mode).paymentLinks.get(
+  const result = await findMollieResourceAcrossModes(
+    buildModesToTry(preferredMode, strictMode),
+    (mode) =>
+      getMollieClient(mode).paymentLinks.get(
         molliePaymentLinkId,
-      )) as unknown as MolliePaymentLink;
-      return {
-        mode,
-        paymentLink,
-      };
-    } catch (error) {
-      lastError = error;
-    }
-  }
+      ) as unknown as Promise<MolliePaymentLink>,
+    "Payment link was not found in Mollie.",
+  );
 
-  throw lastError ?? new Error("Payment link was not found in Mollie.");
+  return {
+    mode: result.mode,
+    paymentLink: result.resource,
+  };
 }
 
 async function findSubscriptionAcrossModes(
@@ -208,10 +200,9 @@ async function findSubscriptionAcrossModes(
   preferredMode?: MollieMode,
   strictMode = false,
 ) {
-  let lastError: unknown;
-
-  for (const mode of buildModesToTry(preferredMode, strictMode)) {
-    try {
+  const result = await findMollieResourceAcrossModes(
+    buildModesToTry(preferredMode, strictMode),
+    async (mode) => {
       const client = getMollieClient(mode);
       const subscription = await client.customerSubscriptions.get(
         mollieSubscriptionId,
@@ -225,16 +216,17 @@ async function findSubscriptionAcrossModes(
       });
 
       return {
-        mode,
         payments,
         subscription,
       };
-    } catch (error) {
-      lastError = error;
-    }
-  }
+    },
+    "Subscription was not found in Mollie.",
+  );
 
-  throw lastError ?? new Error("Subscription was not found in Mollie.");
+  return {
+    mode: result.mode,
+    ...result.resource,
+  };
 }
 
 async function getLocalCustomerByMollieId(
