@@ -28,6 +28,7 @@ import {
   buildInvoiceCreationFailureMetadata,
   buildInvoiceCreationSuccessMetadata,
 } from "@/lib/eboekhouden/invoice-creation-metadata";
+import { countSafeInvoiceRetryFailures } from "@/lib/eboekhouden/invoice-retry-summary";
 import { createInvoiceBatchWithDependencies } from "@/lib/invoice-creation-batch";
 import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
@@ -429,17 +430,7 @@ export async function getFailedRecurringInvoiceRetrySummary(
       and rbs.eboekhouden_invoice_number is null
   `);
 
-  let retryableCount = 0;
-  for (const row of result.rows) {
-    if (isSafeInvoiceRetryFailure(row.errorMessage)) {
-      retryableCount += 1;
-    }
-  }
-
-  return {
-    retryableCount,
-    totalFailedCount: result.rows.length,
-  };
+  return countSafeInvoiceRetryFailures(result.rows);
 }
 
 export async function queueRetryForFailedRecurringInvoice(input: {
