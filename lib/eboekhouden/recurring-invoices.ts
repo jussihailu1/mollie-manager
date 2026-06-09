@@ -23,6 +23,10 @@ import {
 import { buildRecurringInvoiceReference } from "@/lib/eboekhouden/invoice-reference";
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
 import { buildInvoiceRetryQueuedMetadata } from "@/lib/eboekhouden/invoice-retry-metadata";
+import {
+  buildInvoiceCreationFailureMetadata,
+  buildInvoiceCreationSuccessMetadata,
+} from "@/lib/eboekhouden/invoice-creation-metadata";
 import { createInvoiceBatchWithDependencies } from "@/lib/invoice-creation-batch";
 import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
@@ -190,11 +194,9 @@ async function storeInvoiceCreationSuccess(input: {
         eboekhouden_invoice_number = ${invoiceNumber},
         invoice_created_at = now(),
         invoice_failed_at = null,
-        metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
-          eboekhoudenInvoice: input.invoice,
-          invoiceCreationCompletedAt: new Date().toISOString(),
-          invoiceCreationStatus: "success",
-        })}::jsonb,
+        metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(
+          buildInvoiceCreationSuccessMetadata({ invoice: input.invoice }),
+        )}::jsonb,
         updated_at = now()
       where id = ${input.candidate.scheduleId}
         and invoice_state = 'invoice_creating'
@@ -281,11 +283,9 @@ async function storeInvoiceCreationFailure(input: {
       set
         invoice_state = 'invoice_failed',
         invoice_failed_at = now(),
-        metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
-          invoiceCreationCompletedAt: new Date().toISOString(),
-          invoiceCreationError: errorMessage,
-          invoiceCreationStatus: "failure",
-        })}::jsonb,
+        metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(
+          buildInvoiceCreationFailureMetadata({ errorMessage }),
+        )}::jsonb,
         updated_at = now()
       where id = ${input.candidate.scheduleId}
         and invoice_state = 'invoice_creating'
