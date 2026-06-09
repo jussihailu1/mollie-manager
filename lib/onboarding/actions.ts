@@ -32,6 +32,10 @@ import {
   toCustomerRelationFields,
 } from "@/lib/onboarding/customer-relation-fields";
 import {
+  resolveCustomerArchiveBlocker,
+  resolveCustomerRestoreBlocker,
+} from "@/lib/onboarding/customer-archive-policy";
+import {
   buildConsentTokenStorage,
   createConsentToken,
 } from "@/lib/onboarding/consent-token-storage";
@@ -112,14 +116,6 @@ const createSubscriptionSchema = z.object({
   customerId: z.string().uuid(),
   returnTo: z.string().trim().startsWith("/").default("/customers"),
 });
-
-const archiveBlockedSubscriptionStatuses = new Set([
-  "active",
-  "awaiting_first_payment",
-  "draft",
-  "mandate_pending",
-  "payment_action_required",
-]);
 
 type LocalPaymentRecord = {
   id: string;
@@ -512,19 +508,15 @@ export async function archiveCustomerAction(formData: FormData) {
     });
   }
 
-  if (detail.customer.archivedAt) {
-    redirectWithMessage(returnTo, {
-      notice: "Customer is already archived.",
-    });
-  }
+  const archiveBlocker = resolveCustomerArchiveBlocker({
+    archivedAt: detail.customer.archivedAt,
+    subscriptions: detail.subscriptions,
+  });
 
-  const blockingSubscription = detail.subscriptions.find((subscription) =>
-    archiveBlockedSubscriptionStatuses.has(subscription.localStatus),
-  );
-
-  if (blockingSubscription) {
+  if (archiveBlocker) {
     redirectWithMessage(returnTo, {
-      error: "Cancel or stop active billing before archiving this customer.",
+      error: archiveBlocker.kind === "error" ? archiveBlocker.message : undefined,
+      notice: archiveBlocker.kind === "notice" ? archiveBlocker.message : undefined,
     });
   }
 
@@ -593,9 +585,11 @@ export async function restoreCustomerAction(formData: FormData) {
     });
   }
 
-  if (!detail.customer.archivedAt) {
+  const restoreBlocker = resolveCustomerRestoreBlocker(detail.customer.archivedAt);
+
+  if (restoreBlocker) {
     redirectWithMessage(returnTo, {
-      notice: "Customer is already active.",
+      notice: restoreBlocker.message,
     });
   }
 
