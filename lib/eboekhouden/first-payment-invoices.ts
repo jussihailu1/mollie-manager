@@ -33,6 +33,7 @@ import {
   buildInvoiceCreationFailureMetadata,
   buildInvoiceCreationSuccessMetadata,
 } from "@/lib/eboekhouden/invoice-creation-metadata";
+import { filterSafeFailedInvoiceRetryIds } from "@/lib/eboekhouden/invoice-retry-candidates";
 import { countSafeInvoiceRetryFailures } from "@/lib/eboekhouden/invoice-retry-summary";
 import { createInvoiceBatchWithDependencies } from "@/lib/invoice-creation-batch";
 import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
@@ -458,10 +459,10 @@ export async function queueRetryForSafeFailedFirstPaymentInvoicesBatch(input: {
 }): Promise<FailedFirstPaymentRetryBatchResult> {
   const failedRows = await getDb().execute<{
     errorMessage: string | null;
-    paymentId: string;
+    id: string;
   }>(sql`
     select
-      p.id as "paymentId",
+      p.id as id,
       (p.metadata ->> 'invoiceCreationError') as "errorMessage"
     from payments p
     where p.mode = ${input.mode}
@@ -472,9 +473,7 @@ export async function queueRetryForSafeFailedFirstPaymentInvoicesBatch(input: {
     order by p.updated_at asc, p.created_at asc
     limit ${Math.max(1, input.limit ?? DEFAULT_BATCH_SIZE)}
   `);
-  const safePaymentIds = failedRows.rows
-    .filter((row) => isSafeInvoiceRetryFailure(row.errorMessage))
-    .map((row) => row.paymentId);
+  const safePaymentIds = filterSafeFailedInvoiceRetryIds(failedRows.rows);
 
   if (safePaymentIds.length === 0) {
     return {

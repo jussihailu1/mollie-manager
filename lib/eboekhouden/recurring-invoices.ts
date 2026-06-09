@@ -28,6 +28,7 @@ import {
   buildInvoiceCreationFailureMetadata,
   buildInvoiceCreationSuccessMetadata,
 } from "@/lib/eboekhouden/invoice-creation-metadata";
+import { filterSafeFailedInvoiceRetryIds } from "@/lib/eboekhouden/invoice-retry-candidates";
 import { countSafeInvoiceRetryFailures } from "@/lib/eboekhouden/invoice-retry-summary";
 import { createInvoiceBatchWithDependencies } from "@/lib/invoice-creation-batch";
 import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
@@ -539,10 +540,10 @@ export async function queueRetryForSafeFailedRecurringInvoicesBatch(input: {
 }) {
   const failedRows = await getDb().execute<{
     errorMessage: string | null;
-    scheduleId: string;
+    id: string;
   }>(sql`
     select
-      rbs.id as "scheduleId",
+      rbs.id as id,
       (rbs.metadata ->> 'invoiceCreationError') as "errorMessage"
     from recurring_billing_schedules rbs
     where rbs.mode = ${input.mode}
@@ -552,9 +553,7 @@ export async function queueRetryForSafeFailedRecurringInvoicesBatch(input: {
     order by rbs.updated_at asc, rbs.created_at asc
     limit ${Math.max(1, input.limit ?? DEFAULT_BATCH_SIZE)}
   `);
-  const safeScheduleIds = failedRows.rows
-    .filter((row) => isSafeInvoiceRetryFailure(row.errorMessage))
-    .map((row) => row.scheduleId);
+  const safeScheduleIds = filterSafeFailedInvoiceRetryIds(failedRows.rows);
 
   if (safeScheduleIds.length === 0) {
     return {
