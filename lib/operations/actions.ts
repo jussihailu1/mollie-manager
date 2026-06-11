@@ -10,7 +10,8 @@ import { requireViewerSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { transaction } from "@/lib/db";
 import { getMollieClient } from "@/lib/mollie/client";
-import { getManagedSubscription, syncSubscriptionByLocalId } from "@/lib/reliability/sync";
+import { syncSubscriptionByLocalId } from "@/lib/reliability/sync";
+import { getManagedSubscription } from "@/lib/reliability/sync-resource-state";
 
 const manageSubscriptionSchema = z.object({
   returnTo: z.string().trim().startsWith("/").default("/customers"),
