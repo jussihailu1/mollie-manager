@@ -8,11 +8,7 @@ import { getDb, transaction, type DbClient, type DbTransaction } from "@/lib/db"
 import type { MollieMode } from "@/lib/env";
 import { getMollieClient, isMollieConfigured } from "@/lib/mollie/client";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
-import {
-  createEboekhoudenInvoiceForFirstPayment,
-  normalizeFirstPaymentInvoiceStates,
-} from "@/lib/eboekhouden/first-payment-invoices";
-import { runFirstPaymentInvoiceCreationFollowUp } from "@/lib/reliability/first-payment-invoice-followup";
+import { runFirstPaymentInvoiceSyncFollowUp } from "@/lib/reliability/first-payment-sync-followup";
 import {
   buildInvoiceStateDeltaSummary,
   FIRST_PAYMENT_INVOICE_STATES,
@@ -651,20 +647,15 @@ export async function syncPaymentByMollieId(
         );
 
   if (paymentType === "first") {
-    await normalizeFirstPaymentInvoiceStates({
+    await runFirstPaymentInvoiceSyncFollowUp({
+      actor,
+      failureSummary:
+        "Automatic first-payment invoice create skipped or failed after paid sync.",
+      isPaid: payment.status === "paid",
       mode,
       paymentId: localPaymentId,
+      reconciliationMode,
     });
-
-    if (payment.status === "paid" && shouldRunBillingFollowups(reconciliationMode)) {
-      await runFirstPaymentInvoiceCreationFollowUp({
-        actor,
-        failureSummary:
-          "Automatic first-payment invoice create skipped or failed after paid sync.",
-        mode,
-        paymentId: localPaymentId,
-      });
-    }
   }
 
   if (
@@ -813,21 +804,14 @@ export async function syncSubscriptionByLocalId(
   }
 
   for (const firstPayment of normalizedFirstPayments) {
-    await normalizeFirstPaymentInvoiceStates({
-      mode: localSubscription.mode,
-      paymentId: firstPayment.id,
-    });
-
-    if (!firstPayment.isPaid || !shouldRunBillingFollowups(reconciliationMode)) {
-      continue;
-    }
-
-    await runFirstPaymentInvoiceCreationFollowUp({
+    await runFirstPaymentInvoiceSyncFollowUp({
       actor,
       failureSummary:
         "Automatic first-payment invoice create skipped or failed after subscription sync.",
+      isPaid: firstPayment.isPaid,
       mode: localSubscription.mode,
       paymentId: firstPayment.id,
+      reconciliationMode,
     });
   }
 
