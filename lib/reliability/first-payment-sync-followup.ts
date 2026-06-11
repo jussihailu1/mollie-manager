@@ -1,5 +1,7 @@
 import type { MollieMode } from "@/lib/env";
-import { normalizeFirstPaymentInvoiceStates } from "@/lib/eboekhouden/first-payment-invoices";
+import {
+  normalizeFirstPaymentInvoiceStates,
+} from "@/lib/eboekhouden/first-payment-invoice-queue";
 import { runFirstPaymentInvoiceCreationFollowUp } from "@/lib/reliability/first-payment-invoice-followup";
 import {
   shouldRunBillingFollowups,
