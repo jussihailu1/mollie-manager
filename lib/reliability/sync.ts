@@ -12,6 +12,7 @@ import {
   createEboekhoudenInvoiceForFirstPayment,
   normalizeFirstPaymentInvoiceStates,
 } from "@/lib/eboekhouden/first-payment-invoices";
+import { runFirstPaymentInvoiceCreationFollowUp } from "@/lib/reliability/first-payment-invoice-followup";
 import {
   buildInvoiceStateDeltaSummary,
   FIRST_PAYMENT_INVOICE_STATES,
@@ -656,29 +657,13 @@ export async function syncPaymentByMollieId(
     });
 
     if (payment.status === "paid" && shouldRunBillingFollowups(reconciliationMode)) {
-      try {
-        await createEboekhoudenInvoiceForFirstPayment(localPaymentId, {
-          actor,
-        });
-      } catch (error) {
-        await writeAuditLog(
-          {
-            action: "first_payment_invoice.auto_create",
-            details: {
-              error: error instanceof Error ? error.message : String(error),
-              paymentId: localPaymentId,
-            },
-            entityId: localPaymentId,
-            entityType: "payment",
-            mode,
-            outcome: "failure",
-            summary:
-              "Automatic first-payment invoice create skipped or failed after paid sync.",
-          },
-          undefined,
-          actor,
-        );
-      }
+      await runFirstPaymentInvoiceCreationFollowUp({
+        actor,
+        failureSummary:
+          "Automatic first-payment invoice create skipped or failed after paid sync.",
+        mode,
+        paymentId: localPaymentId,
+      });
     }
   }
 
@@ -837,29 +822,13 @@ export async function syncSubscriptionByLocalId(
       continue;
     }
 
-    try {
-      await createEboekhoudenInvoiceForFirstPayment(firstPayment.id, {
-        actor,
-      });
-    } catch (error) {
-      await writeAuditLog(
-        {
-          action: "first_payment_invoice.auto_create",
-          details: {
-            error: error instanceof Error ? error.message : String(error),
-            paymentId: firstPayment.id,
-          },
-          entityId: firstPayment.id,
-          entityType: "payment",
-          mode: localSubscription.mode,
-          outcome: "failure",
-          summary:
-            "Automatic first-payment invoice create skipped or failed after subscription sync.",
-        },
-        undefined,
-        actor,
-      );
-    }
+    await runFirstPaymentInvoiceCreationFollowUp({
+      actor,
+      failureSummary:
+        "Automatic first-payment invoice create skipped or failed after subscription sync.",
+      mode: localSubscription.mode,
+      paymentId: firstPayment.id,
+    });
   }
 
   await handleSubscriptionAlerts({
