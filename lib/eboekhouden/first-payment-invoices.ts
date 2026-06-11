@@ -23,7 +23,6 @@ import {
   serializeInvoiceErrorMessage,
   toInvoiceAmountNumber,
   toInvoiceCount,
-  toInvoiceDateString,
 } from "@/lib/eboekhouden/invoice-flow-helpers";
 import { buildFirstPaymentInvoiceReference } from "@/lib/eboekhouden/invoice-reference";
 import {
@@ -33,6 +32,7 @@ import {
 import {
   describeFirstPaymentInvoiceEligibility,
 } from "@/lib/eboekhouden/first-payment-invoice-eligibility";
+import { resolveFirstPaymentInvoiceDate } from "@/lib/eboekhouden/first-payment-invoice-date";
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
 import { buildInvoiceRetryQueuedMetadata } from "@/lib/eboekhouden/invoice-retry-metadata";
 import {
@@ -147,9 +147,10 @@ function serializeErrorMessage(error: unknown) {
 
 function buildReference(candidate: FirstPaymentInvoiceCandidate) {
   return buildFirstPaymentInvoiceReference({
-    invoiceDate:
-      toInvoiceDateString(candidate.paidAt) ??
-      toInvoiceDateString(candidate.paymentCreatedAt),
+    invoiceDate: resolveFirstPaymentInvoiceDate({
+      paidAt: candidate.paidAt,
+      paymentCreatedAt: candidate.paymentCreatedAt,
+    }),
     paymentId: candidate.paymentId,
   });
 }
@@ -857,9 +858,10 @@ export async function createEboekhoudenInvoiceForFirstPayment(
     };
   }
 
-  const invoiceDate =
-    toInvoiceDateString(candidate.paidAt) ??
-    toInvoiceDateString(candidate.paymentCreatedAt);
+  const invoiceDate = resolveFirstPaymentInvoiceDate({
+    paidAt: candidate.paidAt,
+    paymentCreatedAt: candidate.paymentCreatedAt,
+  });
   if (!invoiceDate) {
     const errorMessage = await storeInvoiceCreationFailure({
       actor,
@@ -1061,9 +1063,10 @@ export async function recoverFailedFirstPaymentInvoicesBatch(input: {
   let ambiguousCount = 0;
 
   for (const candidate of candidates) {
-    const invoiceDate =
-      toInvoiceDateString(candidate.paidAt) ??
-      toInvoiceDateString(candidate.paymentCreatedAt);
+    const invoiceDate = resolveFirstPaymentInvoiceDate({
+      paidAt: candidate.paidAt,
+      paymentCreatedAt: candidate.paymentCreatedAt,
+    });
     if (!invoiceDate) {
       continue;
     }
