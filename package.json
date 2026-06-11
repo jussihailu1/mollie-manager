@@ -18,6 +18,7 @@
     "ops:invoice-readiness": "node scripts/invoice-automation-readiness.mjs",
     "ops:invoice-requeue-safe-failed": "node scripts/invoice-automation-requeue-safe-failed.mjs",
     "ops:invoice-self-heal": "node scripts/invoice-automation-self-heal.mjs",
+    "ops:retention-report": "node scripts/retention-report.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/db-apply.mjs",
     "db:smoke": "node scripts/db-smoke.mjs",

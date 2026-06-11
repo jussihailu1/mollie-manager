@@ -59,6 +59,7 @@ Implemented so far:
 - payment sync persistence now lives in a shared helper with executable boundary coverage for the sync orchestrator
 - subscription sync persistence now lives in a shared helper with executable boundary coverage for the sync orchestrator
 - customer billing repair now lives in a dedicated onboarding helper with executable boundary coverage
+- retention inventory reporting now exists as a read-only ops command for audit logs, webhook events, and consent evidence
 - Mollie webhook ingestion now routes through an injectable helper with executable coverage for JSON/form parsing, supported resource checks, pending event storage, processed/failed status updates, and preferred-mode behavior
 - consent form acceptance parsing and required-checkbox policy now live in a pure helper with executable coverage
 - consent acceptance orchestration now routes through an injectable helper with executable coverage for invalid forms, missing records, missing checkout URLs, already-accepted consent, missing required acknowledgements, and successful acceptance updates
@@ -340,7 +341,7 @@ Observed persistence points:
 
 Current gap:
 
-- no clear retention/purge policy was found for audit logs, webhook events, consent evidence minimization, or metadata cleanup
+- no clear retention/purge policy was found for audit logs, webhook events, consent evidence minimization, or metadata cleanup; read-only inventory tooling now exists, but purge thresholds and deletion rules are still undecided
 
 Operational implication:
 
@@ -462,6 +463,31 @@ Suggested work:
 - extract pure decision helpers from large orchestration files
 - add integration tests for onboarding, webhook sync, invoice creation, and delivery retry
 - reduce JSONB metadata dependence where fields deserve first-class schema columns
+
+### Active: Retention And Compliance Prep
+
+Goals:
+
+- define retention windows and minimization rules before any destructive cleanup
+- keep cleanup tooling report-only until policy is confirmed
+- avoid broad purge defaults that could destroy audit or compliance evidence too early
+
+Feature overlap:
+
+- ops visibility into stale data and cleanup candidates
+- safer, explicit lifecycle management for logs, webhook history, and consent evidence
+
+Suggested work:
+
+- add a read-only retention inventory command first
+- define policy thresholds for audit logs, webhook events, and consent evidence
+- only then add dry-run cleanup and scoped purge tooling
+
+Status:
+
+- the read-only retention inventory command now exists as `npm run ops:retention-report`
+- destructive cleanup is intentionally not implemented yet
+- policy decisions are still needed before any purge action can be made safe
 
 ## Recommended Current Order
 

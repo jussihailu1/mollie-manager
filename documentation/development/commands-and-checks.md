@@ -20,6 +20,7 @@ Audience: developers and operators
 - `npm run db:generate`: generate Drizzle migration files from schema changes
 - `npm run db:smoke`: basic database smoke check
 - `npm run db:check-raw`: validate raw SQL assumptions and migration state
+- `npm run ops:retention-report -- [mode] [auditDays] [webhookDays] [consentDays]`: inspect retention exposure without changing data
 
 ## UI
 
@@ -38,6 +39,17 @@ Example:
 - `npm run ops:invoice-autonomy-report -- <mode> <backlogLimit> <gateLimit>`: combined readiness, backlog, and gate report
 - `npm run ops:invoice-requeue-safe-failed -- <mode> [--apply]`: queue safe retry rows
 - `npm run ops:invoice-self-heal -- <mode> [--apply-requeue] [--run-cron-check]`: controlled cleanup flow
+
+## Retention And Compliance Ops
+
+- `npm run ops:retention-report -- [mode] [auditDays] [webhookDays] [consentDays]`: read-only inventory of audit logs, webhook events, and consent evidence
+
+Defaults:
+
+- `mode`: `all`
+- `auditDays`: `365`
+- `webhookDays`: `180`
+- `consentDays`: `365`
 
 ## Recommended Local Validation Before Shipping
 
