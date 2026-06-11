@@ -246,6 +246,7 @@ Progress:
 
 - first-payment plan normalization, term validation, and consent-plan construction now live in [lib/onboarding/first-payment-plan.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/first-payment-plan.ts>) with focused node coverage
 - onboarding action redirect path mutation now lives in [lib/onboarding/action-path.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/action-path.ts>) with focused node coverage
+- onboarding action redirect, serialization, and relation-availability helpers now live in [lib/onboarding/action-helpers.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/action-helpers.ts>) with focused node coverage
 - first-payment duplicate/create-blocker policy now lives in [lib/onboarding/first-payment-blocker.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/first-payment-blocker.ts>) with focused node coverage
 - customer archive/restore decision policy now lives in [lib/onboarding/customer-archive-policy.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/customer-archive-policy.ts>) with focused node coverage
 - payment-link sync status, amount fallback, and metadata mapping now live in [lib/reliability/payment-link-sync-record.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/payment-link-sync-record.ts>) with focused node coverage
