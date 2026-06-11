@@ -44,6 +44,7 @@ import { getCustomerDetail } from "@/lib/onboarding/data";
 import { resolveFirstPaymentCreationBlocker } from "@/lib/onboarding/first-payment-blocker";
 import { buildFirstPaymentPlan } from "@/lib/onboarding/first-payment-plan";
 import { buildFirstPaymentOnboardingRecords } from "@/lib/onboarding/first-payment-onboarding-records";
+import { persistFirstPaymentOnboardingRecords } from "@/lib/onboarding/first-payment-onboarding-persistence";
 import { describeSubscriptionActivationResult } from "@/lib/onboarding/subscription-activation-result";
 import { buildSubscriptionConsentReturnUrl } from "@/lib/subscription-consent";
 import { ensureTenantSubscriptionPolicyDefaults } from "@/lib/subscription-policy-defaults";
@@ -365,7 +366,7 @@ export async function createCustomerAction(formData: FormData) {
     });
   }
 
-  await requireViewerSession();
+  const session = await requireViewerSession();
 
   try {
     const localCustomerId = crypto.randomUUID();
@@ -615,7 +616,7 @@ export async function createFirstPaymentAction(formData: FormData) {
     });
   }
 
-  await requireViewerSession();
+  const session = await requireViewerSession();
 
   const selectedMode = await getSelectedMollieMode();
   const customer = await getLocalCustomer(parsed.data.customerId, selectedMode);
@@ -704,92 +705,13 @@ export async function createFirstPaymentAction(formData: FormData) {
       termsVersion: tenantPolicy.termsVersion,
     });
 
-    await transaction(async (client) => {
-      await client.execute(sql`
-          insert into payment_links (
-            id,
-            customer_id,
-            mode,
-            mollie_payment_link_id,
-            mollie_status,
-            description,
-            amount_value,
-            amount_currency,
-            checkout_url,
-            expires_at,
-            metadata,
-            created_at,
-            updated_at,
-            last_synced_at
-          ) values (
-            ${onboardingRecords.auditDetails.localPaymentLinkId},
-            ${onboardingRecords.paymentLinkRecord.customerId},
-            ${onboardingRecords.paymentLinkRecord.mode},
-            ${onboardingRecords.paymentLinkRecord.molliePaymentLinkId},
-            ${onboardingRecords.paymentLinkRecord.mollieStatus},
-            ${onboardingRecords.paymentLinkRecord.description},
-            ${onboardingRecords.paymentLinkRecord.amountValue},
-            ${onboardingRecords.paymentLinkRecord.amountCurrency},
-            ${onboardingRecords.paymentLinkRecord.checkoutUrl},
-            ${onboardingRecords.paymentLinkRecord.expiresAt}::timestamptz,
-            ${JSON.stringify(onboardingRecords.paymentLinkRecord.metadata)}::jsonb,
-            coalesce(${onboardingRecords.paymentLinkRecord.createdAt}::timestamptz, now()),
-            now(),
-            now()
-          )
-        `);
-      await client.execute(sql`
-          insert into subscription_onboarding_consents (
-            id,
-            mode,
-            customer_id,
-            payment_link_id,
-            consent_token,
-            consent_token_hash,
-            consent_token_ciphertext,
-            first_payment_mode,
-            terms_version,
-            required_checkbox_keys,
-            accepted_checkbox_keys,
-            plan_snapshot,
-            accepted_at,
-            accepted_ip,
-            accepted_user_agent,
-            created_at,
-            updated_at
-          ) values (
-            ${onboardingRecords.consentRecord.id},
-            ${onboardingRecords.consentRecord.mode},
-            ${onboardingRecords.consentRecord.customerId},
-            ${onboardingRecords.consentRecord.paymentLinkId},
-            ${onboardingRecords.consentRecord.consentToken},
-            ${onboardingRecords.consentRecord.consentTokenHash},
-            ${onboardingRecords.consentRecord.consentTokenCiphertext},
-            ${onboardingRecords.consentRecord.firstPaymentMode},
-            ${onboardingRecords.consentRecord.termsVersion},
-            ${JSON.stringify(onboardingRecords.consentRecord.requiredCheckboxKeys)}::jsonb,
-            ${JSON.stringify(onboardingRecords.consentRecord.acceptedCheckboxKeys)}::jsonb,
-            ${JSON.stringify(onboardingRecords.consentRecord.planSnapshot)}::jsonb,
-            ${onboardingRecords.consentRecord.acceptedAt},
-            ${onboardingRecords.consentRecord.acceptedIp},
-            ${onboardingRecords.consentRecord.acceptedUserAgent},
-            now(),
-            now()
-          )
-        `);
-
-      await writeAuditLog(
-        {
-          action: "payment_link.first.create",
-          details: onboardingRecords.auditDetails,
-          entityId: onboardingRecords.auditDetails.localPaymentLinkId,
-          entityType: "payment_link",
-          mode: selectedMode,
-          outcome: "success",
-          summary: "Created a durable first-payment link for mandate setup.",
-        },
-        client,
-      );
+    await persistFirstPaymentOnboardingRecords({
+      actor: {
+        email: session.user.email ?? null,
+        kind: "user",
+      },
+      onboardingRecords,
+      selectedMode,
     });
 
     revalidatePath("/");

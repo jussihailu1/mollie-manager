@@ -88,3 +88,7 @@ export function buildFirstPaymentOnboardingRecords(
     },
   };
 }
+
+export type FirstPaymentOnboardingRecords = ReturnType<
+  typeof buildFirstPaymentOnboardingRecords
+>;
