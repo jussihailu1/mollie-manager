@@ -10,14 +10,7 @@ import { getMollieClient, isMollieConfigured } from "@/lib/mollie/client";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
 import { runFirstPaymentInvoiceSyncFollowUp } from "@/lib/reliability/first-payment-sync-followup";
 import {
-  buildInvoiceStateDeltaSummary,
-  FIRST_PAYMENT_INVOICE_STATES,
-  mapInvoiceStateCounts,
-  RECURRING_INVOICE_STATES,
-  type FirstPaymentInvoiceState,
-  type InvoiceStateCountMap,
   type ReconciliationSummary,
-  type RecurringInvoiceState,
 } from "@/lib/reliability/reconciliation-summary";
 import {
   buildPaymentLinkSyncMetadata,
@@ -43,6 +36,9 @@ import {
   type ReconciliationMode,
 } from "@/lib/reliability/reconciliation-mode";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
+import {
+  reconcileOperationalData as reconcileOperationalDataImpl,
+} from "@/lib/reliability/reconciliation-operations";
 
 type MolliePaymentLink = {
   createdAt?: string;
@@ -90,44 +86,6 @@ type WebhookProcessingResult = {
   paymentLinkId: string | null;
   subscriptionId: string | null;
 };
-
-type InvoiceStateCountRow<TState extends string> = {
-  count: number | string;
-  state: TState;
-};
-
-async function getFirstPaymentInvoiceStateCounts(
-  mode?: MollieMode | null,
-): Promise<InvoiceStateCountMap<FirstPaymentInvoiceState>> {
-  const modeParam = mode ?? null;
-  const result = await getDb().execute<InvoiceStateCountRow<FirstPaymentInvoiceState>>(sql`
-      select
-        invoice_state as state,
-        count(*)::int as count
-      from payments
-      where payment_type = 'first'
-        and (${modeParam}::mollie_mode is null or mode = ${modeParam})
-      group by invoice_state
-    `);
-
-  return mapInvoiceStateCounts(FIRST_PAYMENT_INVOICE_STATES, result.rows);
-}
-
-async function getRecurringInvoiceStateCounts(
-  mode?: MollieMode | null,
-): Promise<InvoiceStateCountMap<RecurringInvoiceState>> {
-  const modeParam = mode ?? null;
-  const result = await getDb().execute<InvoiceStateCountRow<RecurringInvoiceState>>(sql`
-      select
-        invoice_state as state,
-        count(*)::int as count
-      from recurring_billing_schedules
-      where (${modeParam}::mollie_mode is null or mode = ${modeParam})
-      group by invoice_state
-    `);
-
-  return mapInvoiceStateCounts(RECURRING_INVOICE_STATES, result.rows);
-}
 
 async function findPaymentAcrossModes(
   molliePaymentId: string,
@@ -864,119 +822,12 @@ export async function reconcileOperationalData(input?: {
   mode?: MollieMode;
   reconciliationMode?: ReconciliationMode;
 }): Promise<ReconciliationSummary> {
-  const effectiveActor = input?.actor ?? {
-    kind: "system" as const,
-  };
-  const modeParam = input?.mode ?? null;
-  const reconciliationMode = input?.reconciliationMode ?? "full";
-  const [
-    beforeFirstPaymentInvoiceStates,
-    beforeRecurringInvoiceStates,
-    subscriptions,
-    firstPayments,
-    paymentLinks,
-  ] = await Promise.all([
-    getFirstPaymentInvoiceStateCounts(modeParam),
-    getRecurringInvoiceStateCounts(modeParam),
-    getDb().execute<{ id: string }>(sql`
-      select id
-      from subscriptions
-      where (${modeParam}::mollie_mode is null or mode = ${modeParam})
-      order by created_at desc
-    `),
-    getDb().execute<{ molliePaymentId: string }>(sql`
-      select mollie_payment_id as "molliePaymentId"
-      from payments
-      where payment_type = 'first'
-        and mollie_payment_id is not null
-        and (${modeParam}::mollie_mode is null or mode = ${modeParam})
-      order by created_at desc
-    `),
-    getDb().execute<{ molliePaymentLinkId: string }>(sql`
-      select mollie_payment_link_id as "molliePaymentLinkId"
-      from payment_links
-      where mollie_payment_link_id is not null
-        and (${modeParam}::mollie_mode is null or mode = ${modeParam})
-        and metadata ->> 'source' = 'subscription_onboarding'
-        and metadata ->> 'paymentType' = 'first'
-      order by created_at desc
-    `),
-  ]);
-
-  for (const subscription of subscriptions.rows) {
-    await syncSubscriptionByLocalId(subscription.id, {
-      actor: effectiveActor,
-      reconciliationMode,
-      strictMode: Boolean(input?.mode),
-    });
-  }
-
-  for (const paymentLink of paymentLinks.rows) {
-    await syncPaymentLinkByMollieId(paymentLink.molliePaymentLinkId, {
-      actor: effectiveActor,
-      preferredMode: input?.mode,
-      strictMode: Boolean(input?.mode),
-    });
-  }
-
-  for (const payment of firstPayments.rows) {
-    await syncPaymentByMollieId(payment.molliePaymentId, {
-      actor: effectiveActor,
-      preferredMode: input?.mode,
-      reconciliationMode,
-      strictMode: Boolean(input?.mode),
-    });
-  }
-
-  const [afterFirstPaymentInvoiceStates, afterRecurringInvoiceStates] =
-    await Promise.all([
-      getFirstPaymentInvoiceStateCounts(modeParam),
-      getRecurringInvoiceStateCounts(modeParam),
-    ]);
-
-  const result: ReconciliationSummary = {
-    firstPaymentInvoiceStateDelta: buildInvoiceStateDeltaSummary(
-      FIRST_PAYMENT_INVOICE_STATES,
-      beforeFirstPaymentInvoiceStates,
-      afterFirstPaymentInvoiceStates,
-    ),
-    firstPaymentsChecked: firstPayments.rows.length,
-    mode: modeParam,
-    paymentLinksChecked: paymentLinks.rows.length,
-    ranAt: new Date().toISOString(),
-    reconciliationMode,
-    recurringInvoiceStateDelta: buildInvoiceStateDeltaSummary(
-      RECURRING_INVOICE_STATES,
-      beforeRecurringInvoiceStates,
-      afterRecurringInvoiceStates,
-    ),
-    subscriptionsChecked: subscriptions.rows.length,
-  };
-
-  await writeAuditLog(
-    {
-      action: "reconciliation.run",
-      details: {
-        firstPaymentCount: result.firstPaymentsChecked,
-        firstPaymentInvoiceStateDelta: result.firstPaymentInvoiceStateDelta,
-        paymentLinkCount: result.paymentLinksChecked,
-        ranAt: result.ranAt,
-        reconciliationMode,
-        recurringInvoiceStateDelta: result.recurringInvoiceStateDelta,
-        subscriptionCount: result.subscriptionsChecked,
-      },
-      entityId: "system",
-      entityType: "reconciliation",
-      mode: input?.mode,
-      outcome: "success",
-      summary:
-        reconciliationMode === "sync_only"
-          ? "Completed a sync-only reconciliation pass against Mollie."
-          : "Completed a full reconciliation pass against Mollie.",
-    },
-    undefined,
-    effectiveActor,
-  );
-
-  return result;
+  return reconcileOperationalDataImpl({
+    actor: input?.actor,
+    mode: input?.mode,
+    reconciliationMode: input?.reconciliationMode,
+    syncPaymentByMollieId,
+    syncPaymentLinkByMollieId,
+    syncSubscriptionByLocalId,
+  });
 }
