@@ -12,10 +12,12 @@ import { getDb, transaction } from "@/lib/db";
 import { env } from "@/lib/env";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { deliverAlertEmail } from "@/lib/reliability/alerts";
+import {
+  formatReconciliationMode,
+} from "@/lib/reliability/reconciliation-mode";
 import { serializeReconciliationSummary } from "@/lib/reliability/reconciliation-summary";
 import {
   reconcileOperationalData,
-  type ReconciliationMode,
   syncPaymentByMollieId,
   syncPaymentLinkByMollieId,
   syncSubscriptionByMollieId,
@@ -214,10 +216,6 @@ export async function runReconciliationAction(formData: FormData) {
       error: serializeError(error),
     });
   }
-}
-
-function formatReconciliationMode(mode: ReconciliationMode) {
-  return mode === "sync_only" ? "Sync-only" : "Full";
 }
 
 function formatRepairTargetKind(kind: "customer" | "payment" | "subscription") {

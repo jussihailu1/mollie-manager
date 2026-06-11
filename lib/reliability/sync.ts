@@ -41,6 +41,10 @@ import { persistSyncedPayment, type SyncActor } from "@/lib/reliability/sync-per
 import { persistSyncedSubscriptionPayments } from "@/lib/reliability/subscription-sync-persistence";
 import { buildConfiguredMollieModeOrder } from "@/lib/reliability/mollie-mode-selection";
 import { findMollieResourceAcrossModes } from "@/lib/reliability/mollie-resource-lookup";
+import {
+  shouldRunBillingFollowups,
+  type ReconciliationMode,
+} from "@/lib/reliability/reconciliation-mode";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 
 type MolliePaymentLink = {
@@ -52,8 +56,6 @@ type MolliePaymentLink = {
   id: string;
   webhookUrl?: string;
 } & PaymentLinkSyncSource;
-
-export type ReconciliationMode = "full" | "sync_only";
 
 type LocalCustomerLink = {
   id: string;
@@ -413,10 +415,6 @@ async function collectPaymentLinkPayments(paymentLink: MolliePaymentLink) {
   }
 
   return payments;
-}
-
-function shouldRunBillingFollowups(mode: ReconciliationMode) {
-  return mode === "full";
 }
 
 async function upsertPaymentLinkFromMollie(

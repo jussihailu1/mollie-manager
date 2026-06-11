@@ -62,10 +62,17 @@ describe("ops surface hardening", () => {
   });
 
   it("gates billing follow-ups behind explicit full reconciliation mode", () => {
-    const source = readFileSync(resolve("lib/reliability/sync.ts"), "utf8");
+    const syncSource = readFileSync(resolve("lib/reliability/sync.ts"), "utf8");
+    const modeSource = readFileSync(
+      resolve("lib/reliability/reconciliation-mode.ts"),
+      "utf8",
+    );
 
-    assert.match(source, /export type ReconciliationMode = "full" \| "sync_only"/);
-    assert.match(source, /shouldRunBillingFollowups/);
-    assert.match(source, /reconciliationMode = options\?\.reconciliationMode \?\? "full"/);
+    assert.match(modeSource, /export type ReconciliationMode = "full" \| "sync_only"/);
+    assert.match(modeSource, /export function shouldRunBillingFollowups/);
+    assert.match(modeSource, /export function formatReconciliationMode/);
+    assert.doesNotMatch(syncSource, /function shouldRunBillingFollowups/);
+    assert.match(syncSource, /shouldRunBillingFollowups/);
+    assert.match(syncSource, /reconciliationMode = options\?\.reconciliationMode \?\? "full"/);
   });
 });
