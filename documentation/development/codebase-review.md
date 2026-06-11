@@ -64,6 +64,7 @@ Implemented so far:
 - first-payment invoice match CTE and filter logic now live in a shared helper with focused coverage
 - first-payment onboarding payment-link and consent record mapping now live in a shared helper with focused coverage
 - recurring invoice due and retry filter logic now live in a shared helper with focused coverage
+- subscription activation result messaging now lives in a shared helper with focused coverage
 - Mollie webhook ingestion now routes through an injectable helper with executable coverage for JSON/form parsing, supported resource checks, pending event storage, processed/failed status updates, and preferred-mode behavior
 - consent form acceptance parsing and required-checkbox policy now live in a pure helper with executable coverage
 - consent acceptance orchestration now routes through an injectable helper with executable coverage for invalid forms, missing records, missing checkout URLs, already-accepted consent, missing required acknowledgements, and successful acceptance updates
@@ -256,6 +257,8 @@ Progress:
 - first-payment invoice match query construction now lives in [lib/eboekhouden/first-payment-invoice-match-query.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/eboekhouden/first-payment-invoice-match-query.ts>) with focused node coverage
 - first-payment onboarding record mapping now lives in [lib/onboarding/first-payment-onboarding-records.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/first-payment-onboarding-records.ts>) with focused node coverage
 - recurring invoice query filtering now lives in [lib/eboekhouden/recurring-invoice-query.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/eboekhouden/recurring-invoice-query.ts>) with focused node coverage
+- subscription activation result messaging now lives in [lib/onboarding/subscription-activation-result.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/subscription-activation-result.ts>) with focused node coverage
+- first-payment invoice eligibility policy now lives in [lib/eboekhouden/first-payment-invoice-eligibility.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/eboekhouden/first-payment-invoice-eligibility.ts>) with focused node coverage
 - subscription sync billing-day, terminal-state, and metadata mapping now live in [lib/reliability/subscription-sync-record.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/subscription-sync-record.ts>) with focused node coverage
 - first-payment and recurring invoice modules now share count, amount, error, date, and duplicate-reference helpers in [lib/eboekhouden/invoice-flow-helpers.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/eboekhouden/invoice-flow-helpers.ts>) with focused node coverage
 - first-payment and recurring invoice creation claim/success/failure metadata now share [lib/eboekhouden/invoice-creation-metadata.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/eboekhouden/invoice-creation-metadata.ts>) with focused node coverage

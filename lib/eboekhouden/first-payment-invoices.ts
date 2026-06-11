@@ -30,6 +30,9 @@ import {
   buildDeterministicMatchCte,
   buildFirstPaymentFilter,
 } from "@/lib/eboekhouden/first-payment-invoice-match-query";
+import {
+  describeFirstPaymentInvoiceEligibility,
+} from "@/lib/eboekhouden/first-payment-invoice-eligibility";
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
 import { buildInvoiceRetryQueuedMetadata } from "@/lib/eboekhouden/invoice-retry-metadata";
 import {
@@ -821,38 +824,24 @@ export async function createEboekhoudenInvoiceForFirstPayment(
     );
   }
 
-  if (!candidate) {
-    return {
-      paymentId,
-      reason: "First payment was not found or did not match a deterministic accepted onboarding consent.",
-      status: "skipped",
-    };
-  }
+  const eligibility = describeFirstPaymentInvoiceEligibility(
+    candidate
+      ? {
+          consentAcceptedAt: candidate.consentAcceptedAt,
+          eboekhoudenRelationId: candidate.eboekhoudenRelationId,
+          firstPaymentMode: candidate.firstPaymentMode,
+        }
+      : null,
+  );
 
-  if (!candidate.eboekhoudenRelationId) {
+  if (eligibility.status === "skipped") {
     return {
       paymentId,
-      reason:
-        "Customer is not linked to an e-Boekhouden relation. Link the customer before creating the invoice.",
+      reason: eligibility.reason,
       status: "skipped",
     };
   }
-
-  if (!candidate.consentAcceptedAt) {
-    return {
-      paymentId,
-      reason: "The matched onboarding consent is not accepted yet.",
-      status: "skipped",
-    };
-  }
-
-  if (candidate.firstPaymentMode !== "real_installment") {
-    return {
-      paymentId,
-      reason: "Mandate-only first payments must not create a normal invoice.",
-      status: "skipped",
-    };
-  }
+  const eligibleCandidate = eligibility.candidate;
 
   const claimedPaymentId = await claimPaymentForInvoice({
     actor,
@@ -890,7 +879,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
     const existing = await findExistingEboekhoudenInvoiceByReference({
       date: invoiceDate,
       reference,
-      relationId: candidate.eboekhoudenRelationId,
+      relationId: eligibleCandidate.eboekhoudenRelationId,
     });
 
     if (existing.status === "ambiguous") {
@@ -949,7 +938,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       ],
       print: false,
       reference,
-      relationId: candidate.eboekhoudenRelationId,
+      relationId: eligibleCandidate.eboekhoudenRelationId,
       templateId: settings!.invoiceTemplateId!,
       termOfPayment: 0,
     });
@@ -982,7 +971,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       const existing = await findExistingEboekhoudenInvoiceByReference({
         date: invoiceDate,
         reference,
-        relationId: candidate.eboekhoudenRelationId,
+        relationId: eligibleCandidate.eboekhoudenRelationId,
       });
 
       if (existing.status === "found") {

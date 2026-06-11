@@ -44,6 +44,7 @@ import { getCustomerDetail } from "@/lib/onboarding/data";
 import { resolveFirstPaymentCreationBlocker } from "@/lib/onboarding/first-payment-blocker";
 import { buildFirstPaymentPlan } from "@/lib/onboarding/first-payment-plan";
 import { buildFirstPaymentOnboardingRecords } from "@/lib/onboarding/first-payment-onboarding-records";
+import { describeSubscriptionActivationResult } from "@/lib/onboarding/subscription-activation-result";
 import { buildSubscriptionConsentReturnUrl } from "@/lib/subscription-consent";
 import { ensureTenantSubscriptionPolicyDefaults } from "@/lib/subscription-policy-defaults";
 export const repairCustomerBillingState = repairCustomerBillingStateImpl;
@@ -889,55 +890,18 @@ export async function createSubscriptionAction(formData: FormData) {
       mode: selectedMode,
       trigger: "manual",
     });
+    const feedback = describeSubscriptionActivationResult(result);
 
-    if (result.status === "created") {
+    if (feedback.shouldRevalidate) {
       revalidatePath("/");
       revalidatePath("/customers");
       revalidatePath("/payments");
       revalidatePath("/notifications");
-      redirectWithMessage(returnTo, {
-        notice:
-          result.firstPaymentMode === "real_installment"
-            ? "Subscription activation retried successfully. Future charges are now scheduled in Mollie."
-            : "Subscription created. Future charges are now scheduled in Mollie.",
-      });
-    }
-
-    if (result.status === "already_exists") {
-      redirectWithMessage(returnTo, {
-        notice:
-          result.reason === "consent_already_used"
-            ? "A subscription already exists for this onboarding flow."
-            : "This customer already has a local subscription record in progress or active.",
-      });
-    }
-
-    if (result.status === "skipped") {
-      redirectWithMessage(returnTo, {
-        error:
-          "This onboarding flow is mandate-only. Create the recurring subscription manually when you are ready.",
-      });
-    }
-
-    if (result.status === "pending_prerequisites") {
-      const error =
-        result.reason === "archived"
-          ? "Restore this customer before creating a subscription."
-          : result.reason === "customer_not_linked"
-            ? "Customer not found in the selected Mollie mode or not linked to Mollie."
-            : result.reason === "missing_consent"
-              ? "No accepted consent was found yet. Complete the consent flow first."
-              : result.reason === "missing_mandate"
-                ? "No pending or valid direct debit mandate is available yet. Sync the customer first."
-                : "A successful first payment is required before creating the subscription.";
-
-      redirectWithMessage(returnTo, {
-        error,
-      });
     }
 
     redirectWithMessage(returnTo, {
-      error: result.message,
+      error: feedback.error ?? undefined,
+      notice: feedback.notice ?? undefined,
     });
   } catch (error) {
     unstable_rethrow(error);
