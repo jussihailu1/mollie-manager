@@ -20,7 +20,6 @@ import {
 } from "@/lib/eboekhouden/invoice-failure-retry";
 import {
   isEboekhoudenReferenceAlreadyExistsError,
-  serializeInvoiceErrorMessage,
   toInvoiceAmountNumber,
   toInvoiceCount,
 } from "@/lib/eboekhouden/invoice-flow-helpers";
@@ -33,20 +32,22 @@ import {
   describeFirstPaymentInvoiceEligibility,
 } from "@/lib/eboekhouden/first-payment-invoice-eligibility";
 import { buildFirstPaymentInvoiceDelivery } from "@/lib/eboekhouden/first-payment-invoice-delivery";
+import {
+  claimFirstPaymentInvoiceForCreation,
+  storeFirstPaymentInvoiceCreationFailure,
+  storeFirstPaymentInvoiceCreationSuccess,
+  type FirstPaymentInvoiceActor,
+} from "@/lib/eboekhouden/first-payment-invoice-persistence";
 import { resolveFirstPaymentInvoiceDate } from "@/lib/eboekhouden/first-payment-invoice-date";
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
 import { buildInvoiceRetryQueuedMetadata } from "@/lib/eboekhouden/invoice-retry-metadata";
-import {
-  buildInvoiceCreationClaimMetadata,
-  buildInvoiceCreationFailureMetadata,
-  buildInvoiceCreationSuccessMetadata,
-} from "@/lib/eboekhouden/invoice-creation-metadata";
 import { filterSafeFailedInvoiceRetryIds } from "@/lib/eboekhouden/invoice-retry-candidates";
 import { countSafeInvoiceRetryFailures } from "@/lib/eboekhouden/invoice-retry-summary";
 import { createInvoiceBatchWithDependencies } from "@/lib/invoice-creation-batch";
 import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
-import { deliverAlertEmail, openAlert } from "@/lib/reliability/alerts";
+import { openAlert } from "@/lib/reliability/alerts";
+import { deliverAlertEmail } from "@/lib/reliability/alerts";
 import { subscriptionConsentPlanSnapshotSchema } from "@/lib/subscription-consent";
 
 const DEFAULT_BATCH_SIZE = 25;
@@ -57,10 +58,7 @@ const TERMINAL_OR_IN_PROGRESS_STATES = [
   "invoice_sent",
 ] as const;
 
-type InvoiceActor = {
-  email?: string | null;
-  kind: "system" | "user";
-};
+type InvoiceActor = FirstPaymentInvoiceActor;
 
 type FirstPaymentInvoiceCandidate = {
   amountValue: string;
@@ -110,11 +108,6 @@ type FailedFirstPaymentInvoiceRetrySummary = {
   totalFailedCount: number;
 };
 
-type AlertResult = {
-  id: string;
-  isNew: boolean;
-};
-
 type CreateFirstPaymentInvoiceResult =
   | {
       invoiceId: string | null;
@@ -138,13 +131,6 @@ type FailedFirstPaymentRecoveryCandidate = {
   paymentId: string;
   subscriptionId: string | null;
 };
-
-function serializeErrorMessage(error: unknown) {
-  return serializeInvoiceErrorMessage(
-    error,
-    "First-payment invoice creation failed.",
-  );
-}
 
 function buildReference(candidate: FirstPaymentInvoiceCandidate) {
   return buildFirstPaymentInvoiceReference({
@@ -183,211 +169,6 @@ async function getFirstPaymentInvoiceCandidate(paymentId: string) {
   `);
 
   return result.rows[0] ?? null;
-}
-
-async function claimPaymentForInvoice(input: {
-  actor: InvoiceActor;
-  mode: MollieMode;
-  paymentId: string;
-}) {
-  const result = await getDb().execute<{ id: string }>(sql`
-    update payments
-    set
-      invoice_state = 'invoice_creating',
-      invoice_failed_at = null,
-      updated_at = now(),
-      metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(
-        buildInvoiceCreationClaimMetadata({
-          actorEmail: input.actor.email,
-        }),
-      )}::jsonb
-    where id = ${input.paymentId}
-      and mode = ${input.mode}
-      and payment_type = 'first'
-      and mollie_status = 'paid'
-      and invoice_state = 'pending_invoice'
-      and eboekhouden_invoice_id is null
-      and eboekhouden_invoice_number is null
-    returning id
-  `);
-
-  return result.rows[0]?.id ?? null;
-}
-
-async function storeInvoiceCreationSuccess(input: {
-  actor: InvoiceActor;
-  candidate: FirstPaymentInvoiceCandidate;
-  invoice: EboekhoudenInvoice;
-  source?: "created" | "reconciled_existing";
-}) {
-  const invoiceId = input.invoice.id ? String(input.invoice.id) : null;
-  const invoiceNumber = input.invoice.invoiceNumber ?? input.invoice.number ?? null;
-  const source = input.source ?? "created";
-  const alertResult = await transaction<AlertResult>(async (tx) => {
-    await tx.execute(sql`
-      update payments
-      set
-        invoice_state = 'invoice_created',
-        eboekhouden_invoice_id = ${invoiceId},
-        eboekhouden_invoice_number = ${invoiceNumber},
-        invoice_created_at = now(),
-        invoice_failed_at = null,
-        metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(
-          buildInvoiceCreationSuccessMetadata({ invoice: input.invoice }),
-        )}::jsonb,
-        updated_at = now()
-      where id = ${input.candidate.paymentId}
-        and invoice_state = 'invoice_creating'
-    `);
-
-    await writeAuditLog(
-      {
-        action: "first_payment_invoice.create",
-        details: {
-          consentId: input.candidate.consentId,
-          eboekhoudenInvoiceId: invoiceId,
-          eboekhoudenInvoiceNumber: invoiceNumber,
-          source,
-          molliePaymentId: input.candidate.molliePaymentId,
-          paymentId: input.candidate.paymentId,
-          paymentLinkId: input.candidate.paymentLinkId,
-        },
-        entityId: input.candidate.paymentId,
-        entityType: "payment",
-        mode: input.candidate.mode,
-        outcome: "success",
-        summary:
-          source === "created"
-            ? "Created an e-Boekhouden invoice for a paid first payment."
-            : "Recovered an existing e-Boekhouden invoice for a paid first payment.",
-      },
-      tx,
-      input.actor,
-    );
-
-    await tx.execute(sql`
-      update alerts
-      set
-        status = 'resolved',
-        resolved_at = now(),
-        updated_at = now()
-      where status = 'open'
-        and payment_id = ${input.candidate.paymentId}
-        and payload ->> 'kind' = 'first_payment_invoice_creation_failed'
-    `);
-
-    return openAlert(
-      {
-        customerId: input.candidate.customerId,
-        message:
-          source === "created"
-            ? `Created e-Boekhouden invoice ${invoiceNumber ?? invoiceId ?? "without returned number"} for the paid first payment ${input.candidate.paymentId}.`
-            : `Recovered existing e-Boekhouden invoice ${invoiceNumber ?? invoiceId ?? "without returned number"} for the paid first payment ${input.candidate.paymentId}.`,
-        paymentId: input.candidate.paymentId,
-        payload: {
-          consentId: input.candidate.consentId,
-          eboekhoudenInvoiceId: invoiceId,
-          eboekhoudenInvoiceNumber: invoiceNumber,
-          kind: "first_payment_invoice_created",
-          mode: input.candidate.mode,
-          paymentId: input.candidate.paymentId,
-          source,
-        },
-        severity: "info",
-        subscriptionId: input.candidate.subscriptionId,
-        title:
-          source === "created"
-            ? "First-payment invoice created"
-            : "First-payment invoice recovered",
-      },
-      tx,
-    );
-  });
-
-  return {
-    alert: alertResult,
-    invoiceId,
-    invoiceNumber,
-  };
-}
-
-async function storeInvoiceCreationFailure(input: {
-  actor: InvoiceActor;
-  candidate: FirstPaymentInvoiceCandidate;
-  error: unknown;
-}) {
-  const errorMessage = serializeErrorMessage(input.error);
-  const alertResult = await transaction<AlertResult>(async (tx) => {
-    await tx.execute(sql`
-      update payments
-      set
-        invoice_state = 'invoice_failed',
-        invoice_failed_at = now(),
-        metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(
-          buildInvoiceCreationFailureMetadata({ errorMessage }),
-        )}::jsonb,
-        updated_at = now()
-      where id = ${input.candidate.paymentId}
-        and invoice_state = 'invoice_creating'
-    `);
-
-    await writeAuditLog(
-      {
-        action: "first_payment_invoice.create",
-        details: {
-          consentId: input.candidate.consentId,
-          error: errorMessage,
-          molliePaymentId: input.candidate.molliePaymentId,
-          paymentId: input.candidate.paymentId,
-          paymentLinkId: input.candidate.paymentLinkId,
-        },
-        entityId: input.candidate.paymentId,
-        entityType: "payment",
-        mode: input.candidate.mode,
-        outcome: "failure",
-        summary: "First-payment invoice creation failed for a paid first payment.",
-      },
-      tx,
-      input.actor,
-    );
-
-    return openAlert(
-      {
-        customerId: input.candidate.customerId,
-        message: "Could not create the first-payment e-Boekhouden invoice. Review the payment before retrying so a duplicate invoice is not created upstream.",
-        paymentId: input.candidate.paymentId,
-        payload: {
-          consentId: input.candidate.consentId,
-          error: errorMessage,
-          kind: "first_payment_invoice_creation_failed",
-          mode: input.candidate.mode,
-          paymentId: input.candidate.paymentId,
-        },
-        severity: "warning",
-        subscriptionId: input.candidate.subscriptionId,
-        title: "First-payment invoice creation failed",
-      },
-      tx,
-    );
-  });
-
-  if (alertResult.isNew && notificationsAreConfigured()) {
-    await deliverAlertEmail({
-      alertId: alertResult.id,
-      message: [
-        "First-payment e-Boekhouden invoice creation failed.",
-        "",
-        `Customer email: ${input.candidate.customerEmail ?? "unknown"}`,
-        `Payment: ${input.candidate.paymentId}`,
-        `Mollie payment: ${input.candidate.molliePaymentId ?? "unknown"}`,
-        `Consent: ${input.candidate.consentId}`,
-        `Error: ${errorMessage}`,
-      ].join("\n"),
-      title: "First-payment invoice creation failed",
-    });
-  }
-
-  return errorMessage;
 }
 
 export async function queueRetryForSafeFailedFirstPaymentInvoicesBatch(input: {
@@ -845,7 +626,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
   }
   const eligibleCandidate = eligibility.candidate;
 
-  const claimedPaymentId = await claimPaymentForInvoice({
+  const claimedPaymentId = await claimFirstPaymentInvoiceForCreation({
     actor,
     mode: candidate.mode,
     paymentId,
@@ -864,7 +645,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
     paymentCreatedAt: candidate.paymentCreatedAt,
   });
   if (!invoiceDate) {
-    const errorMessage = await storeInvoiceCreationFailure({
+    const failure = await storeFirstPaymentInvoiceCreationFailure({
       actor,
       candidate,
       error: new Error("Could not derive the invoice date for the paid first payment."),
@@ -872,7 +653,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
 
     return {
       paymentId,
-      reason: errorMessage,
+      reason: failure.errorMessage,
       status: "failed",
     };
   }
@@ -892,7 +673,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
     }
 
     if (existing.status === "found") {
-      const storedRecoveredInvoice = await storeInvoiceCreationSuccess({
+      const storedRecoveredInvoice = await storeFirstPaymentInvoiceCreationSuccess({
         actor,
         candidate,
         invoice: existing.invoice,
@@ -946,7 +727,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       templateId: settings!.invoiceTemplateId!,
       termOfPayment: 0,
     });
-    const storedInvoice = await storeInvoiceCreationSuccess({
+    const storedInvoice = await storeFirstPaymentInvoiceCreationSuccess({
       actor,
       candidate,
       invoice,
@@ -980,7 +761,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       });
 
       if (existing.status === "found") {
-        const storedRecoveredInvoice = await storeInvoiceCreationSuccess({
+        const storedRecoveredInvoice = await storeFirstPaymentInvoiceCreationSuccess({
           actor,
           candidate,
           invoice: existing.invoice,
@@ -1009,7 +790,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       }
     }
 
-    const errorMessage = await storeInvoiceCreationFailure({
+    const failure = await storeFirstPaymentInvoiceCreationFailure({
       actor,
       candidate,
       error,
@@ -1017,7 +798,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
 
     return {
       paymentId,
-      reason: errorMessage,
+      reason: failure.errorMessage,
       status: "failed",
     };
   }
