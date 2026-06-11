@@ -41,16 +41,11 @@ import {
 } from "@/lib/onboarding/consent-token-storage";
 import { updateActionPath } from "@/lib/onboarding/action-path";
 import { getCustomerDetail } from "@/lib/onboarding/data";
-import {
-  buildFirstPaymentLinkMetadata,
-  deriveFirstPaymentLinkAmount,
-  deriveFirstPaymentLinkStatus,
-} from "@/lib/onboarding/first-payment-link-record";
 import { resolveFirstPaymentCreationBlocker } from "@/lib/onboarding/first-payment-blocker";
 import { buildFirstPaymentPlan } from "@/lib/onboarding/first-payment-plan";
+import { buildFirstPaymentOnboardingRecords } from "@/lib/onboarding/first-payment-onboarding-records";
 import { buildSubscriptionConsentReturnUrl } from "@/lib/subscription-consent";
 import { ensureTenantSubscriptionPolicyDefaults } from "@/lib/subscription-policy-defaults";
-import { REQUIRED_CONSENT_CHECKBOX_KEYS } from "@/lib/subscription-policy";
 export const repairCustomerBillingState = repairCustomerBillingStateImpl;
 
 const createCustomerSchema = z.object({
@@ -693,15 +688,19 @@ export async function createFirstPaymentAction(formData: FormData) {
       sequenceType: SequenceType.first,
       webhookUrl,
     });
-    const paymentLinkStatus = deriveFirstPaymentLinkStatus(paymentLink);
-    const paymentLinkAmount = deriveFirstPaymentLinkAmount(
-      paymentLink,
-      firstPaymentPlan.amountValue,
-    );
-    const paymentLinkMetadata = buildFirstPaymentLinkMetadata({
+    const onboardingRecords = buildFirstPaymentOnboardingRecords({
+      consentTokenStorage,
+      customerId: customer.id,
+      fallbackAmountValue: firstPaymentPlan.amountValue,
+      firstPaymentMode: parsed.data.firstPaymentMode,
+      localConsentId,
+      localPaymentLinkId,
       mollieCustomerId,
       paymentLink,
+      planSnapshot: firstPaymentPlan.planSnapshot,
       redirectUrl,
+      selectedMode,
+      termsVersion: tenantPolicy.termsVersion,
     });
 
     await transaction(async (client) => {
@@ -722,18 +721,18 @@ export async function createFirstPaymentAction(formData: FormData) {
             updated_at,
             last_synced_at
           ) values (
-            ${localPaymentLinkId},
-            ${customer.id},
-            ${selectedMode},
-            ${paymentLink.id},
-            ${paymentLinkStatus},
-            ${paymentLink.description},
-            ${paymentLinkAmount.value},
-            ${paymentLinkAmount.currency},
-            ${paymentLink.getPaymentUrl()},
-            ${paymentLink.expiresAt ?? null}::timestamptz,
-            ${JSON.stringify(paymentLinkMetadata)}::jsonb,
-            coalesce(${paymentLink.createdAt ?? null}::timestamptz, now()),
+            ${onboardingRecords.auditDetails.localPaymentLinkId},
+            ${onboardingRecords.paymentLinkRecord.customerId},
+            ${onboardingRecords.paymentLinkRecord.mode},
+            ${onboardingRecords.paymentLinkRecord.molliePaymentLinkId},
+            ${onboardingRecords.paymentLinkRecord.mollieStatus},
+            ${onboardingRecords.paymentLinkRecord.description},
+            ${onboardingRecords.paymentLinkRecord.amountValue},
+            ${onboardingRecords.paymentLinkRecord.amountCurrency},
+            ${onboardingRecords.paymentLinkRecord.checkoutUrl},
+            ${onboardingRecords.paymentLinkRecord.expiresAt}::timestamptz,
+            ${JSON.stringify(onboardingRecords.paymentLinkRecord.metadata)}::jsonb,
+            coalesce(${onboardingRecords.paymentLinkRecord.createdAt}::timestamptz, now()),
             now(),
             now()
           )
@@ -758,21 +757,21 @@ export async function createFirstPaymentAction(formData: FormData) {
             created_at,
             updated_at
           ) values (
-            ${localConsentId},
-            ${selectedMode},
-            ${customer.id},
-            ${localPaymentLinkId},
-            null,
-            ${consentTokenStorage.consentTokenHash},
-            ${consentTokenStorage.consentTokenCiphertext},
-            ${parsed.data.firstPaymentMode},
-            ${tenantPolicy.termsVersion},
-            ${JSON.stringify([...REQUIRED_CONSENT_CHECKBOX_KEYS])}::jsonb,
-            '[]'::jsonb,
-            ${JSON.stringify(firstPaymentPlan.planSnapshot)}::jsonb,
-            null,
-            null,
-            null,
+            ${onboardingRecords.consentRecord.id},
+            ${onboardingRecords.consentRecord.mode},
+            ${onboardingRecords.consentRecord.customerId},
+            ${onboardingRecords.consentRecord.paymentLinkId},
+            ${onboardingRecords.consentRecord.consentToken},
+            ${onboardingRecords.consentRecord.consentTokenHash},
+            ${onboardingRecords.consentRecord.consentTokenCiphertext},
+            ${onboardingRecords.consentRecord.firstPaymentMode},
+            ${onboardingRecords.consentRecord.termsVersion},
+            ${JSON.stringify(onboardingRecords.consentRecord.requiredCheckboxKeys)}::jsonb,
+            ${JSON.stringify(onboardingRecords.consentRecord.acceptedCheckboxKeys)}::jsonb,
+            ${JSON.stringify(onboardingRecords.consentRecord.planSnapshot)}::jsonb,
+            ${onboardingRecords.consentRecord.acceptedAt},
+            ${onboardingRecords.consentRecord.acceptedIp},
+            ${onboardingRecords.consentRecord.acceptedUserAgent},
             now(),
             now()
           )
@@ -781,11 +780,8 @@ export async function createFirstPaymentAction(formData: FormData) {
       await writeAuditLog(
         {
           action: "payment_link.first.create",
-          details: {
-            localPaymentLinkId,
-            molliePaymentLinkId: paymentLink.id,
-          },
-          entityId: localPaymentLinkId,
+          details: onboardingRecords.auditDetails,
+          entityId: onboardingRecords.auditDetails.localPaymentLinkId,
           entityType: "payment_link",
           mode: selectedMode,
           outcome: "success",
