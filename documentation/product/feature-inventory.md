@@ -94,4 +94,5 @@ Reference: `../development/codebase-review.md`
 - `mandate_only` EUR 0.01 flows must not create normal subscription invoices.
 - Billing settings are accounting configuration, not subscription policy.
 - The current deep technical settings controls are acceptable for developer-operated use, but future SaaS/operator rollout should gate or hide them behind advanced, developer, or admin-only access.
+- Consider existing packages for generic concerns when they clearly reduce risk or maintenance cost, but keep billing, consent, reconciliation, retry, and accounting policy explicit in local code.
 - Continue future policy work from `subscription-policy.md` and `recurring-billing-policy.md`, not from archived handoff notes.

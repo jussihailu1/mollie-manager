@@ -312,6 +312,12 @@ What is still rough:
 - secret-bearing or compliance-sensitive fields are mixed into generic metadata blobs
 - orchestration code and policy code are too close together in large modules
 
+Dependency posture:
+
+- prefer well-maintained packages for generic hard problems when they reduce risk, complexity, or maintenance cost
+- keep product-specific billing, consent, reconciliation, retry, and accounting policy explicit in local code
+- avoid adding dependencies just to hide domain decisions or small one-off helpers
+
 ## Compliance And Legal Watchlist
 
 This is not legal advice. It is the engineering-side compliance watchlist for the current implementation.
