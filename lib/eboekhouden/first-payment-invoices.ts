@@ -32,6 +32,7 @@ import {
 import {
   describeFirstPaymentInvoiceEligibility,
 } from "@/lib/eboekhouden/first-payment-invoice-eligibility";
+import { buildFirstPaymentInvoiceDelivery } from "@/lib/eboekhouden/first-payment-invoice-delivery";
 import { resolveFirstPaymentInvoiceDate } from "@/lib/eboekhouden/first-payment-invoice-date";
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
 import { buildInvoiceRetryQueuedMetadata } from "@/lib/eboekhouden/invoice-retry-metadata";
@@ -897,18 +898,19 @@ export async function createEboekhoudenInvoiceForFirstPayment(
         invoice: existing.invoice,
         source: "reconciled_existing",
       });
-      await deliverCustomerInvoiceEmail({
-        actor,
-        customerEmail: candidate.customerEmail,
-        customerId: candidate.customerId,
-        eboekhoudenInvoiceId: storedRecoveredInvoice.invoiceId,
-        eboekhoudenInvoiceNumber: storedRecoveredInvoice.invoiceNumber,
-        eboekhoudenInvoicePdfUrl: existing.invoice.urlPdfFile ?? null,
-        entityId: candidate.paymentId,
-        invoiceType: "first_payment",
-        mode: candidate.mode,
-        subscriptionId: candidate.subscriptionId,
-      });
+      await deliverCustomerInvoiceEmail(
+        buildFirstPaymentInvoiceDelivery({
+          actor,
+          customerEmail: candidate.customerEmail,
+          customerId: candidate.customerId,
+          eboekhoudenInvoiceId: storedRecoveredInvoice.invoiceId,
+          eboekhoudenInvoiceNumber: storedRecoveredInvoice.invoiceNumber,
+          eboekhoudenInvoicePdfUrl: existing.invoice.urlPdfFile ?? null,
+          entityId: candidate.paymentId,
+          mode: candidate.mode,
+          subscriptionId: candidate.subscriptionId,
+        }),
+      );
 
       return {
         invoiceId: storedRecoveredInvoice.invoiceId,
@@ -949,18 +951,19 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       candidate,
       invoice,
     });
-    await deliverCustomerInvoiceEmail({
-      actor,
-      customerEmail: candidate.customerEmail,
-      customerId: candidate.customerId,
-      eboekhoudenInvoiceId: storedInvoice.invoiceId,
-      eboekhoudenInvoiceNumber: storedInvoice.invoiceNumber,
-      eboekhoudenInvoicePdfUrl: invoice.urlPdfFile ?? null,
-      entityId: candidate.paymentId,
-      invoiceType: "first_payment",
-      mode: candidate.mode,
-      subscriptionId: candidate.subscriptionId,
-    });
+    await deliverCustomerInvoiceEmail(
+      buildFirstPaymentInvoiceDelivery({
+        actor,
+        customerEmail: candidate.customerEmail,
+        customerId: candidate.customerId,
+        eboekhoudenInvoiceId: storedInvoice.invoiceId,
+        eboekhoudenInvoiceNumber: storedInvoice.invoiceNumber,
+        eboekhoudenInvoicePdfUrl: invoice.urlPdfFile ?? null,
+        entityId: candidate.paymentId,
+        mode: candidate.mode,
+        subscriptionId: candidate.subscriptionId,
+      }),
+    );
 
     return {
       invoiceId: storedInvoice.invoiceId,
@@ -983,18 +986,19 @@ export async function createEboekhoudenInvoiceForFirstPayment(
           invoice: existing.invoice,
           source: "reconciled_existing",
         });
-        await deliverCustomerInvoiceEmail({
-          actor,
-          customerEmail: candidate.customerEmail,
-          customerId: candidate.customerId,
-          eboekhoudenInvoiceId: storedRecoveredInvoice.invoiceId,
-          eboekhoudenInvoiceNumber: storedRecoveredInvoice.invoiceNumber,
-          eboekhoudenInvoicePdfUrl: existing.invoice.urlPdfFile ?? null,
-          entityId: candidate.paymentId,
-          invoiceType: "first_payment",
-          mode: candidate.mode,
-          subscriptionId: candidate.subscriptionId,
-        });
+        await deliverCustomerInvoiceEmail(
+          buildFirstPaymentInvoiceDelivery({
+            actor,
+            customerEmail: candidate.customerEmail,
+            customerId: candidate.customerId,
+            eboekhoudenInvoiceId: storedRecoveredInvoice.invoiceId,
+            eboekhoudenInvoiceNumber: storedRecoveredInvoice.invoiceNumber,
+            eboekhoudenInvoicePdfUrl: existing.invoice.urlPdfFile ?? null,
+            entityId: candidate.paymentId,
+            mode: candidate.mode,
+            subscriptionId: candidate.subscriptionId,
+          }),
+        );
 
         return {
           invoiceId: storedRecoveredInvoice.invoiceId,
@@ -1100,18 +1104,19 @@ export async function recoverFailedFirstPaymentInvoicesBatch(input: {
     }
 
     recoveredCount += 1;
-    await deliverCustomerInvoiceEmail({
-      actor: input.actor,
-      customerEmail: candidate.customerEmail,
-      customerId: candidate.customerId,
-      eboekhoudenInvoiceId: recovered.invoiceId,
-      eboekhoudenInvoiceNumber: recovered.invoiceNumber,
-      eboekhoudenInvoicePdfUrl: existing.invoice.urlPdfFile ?? null,
-      entityId: candidate.paymentId,
-      invoiceType: "first_payment",
-      mode: candidate.mode,
-      subscriptionId: candidate.subscriptionId,
-    });
+    await deliverCustomerInvoiceEmail(
+      buildFirstPaymentInvoiceDelivery({
+        actor: input.actor,
+        customerEmail: candidate.customerEmail,
+        customerId: candidate.customerId,
+        eboekhoudenInvoiceId: recovered.invoiceId,
+        eboekhoudenInvoiceNumber: recovered.invoiceNumber,
+        eboekhoudenInvoicePdfUrl: existing.invoice.urlPdfFile ?? null,
+        entityId: candidate.paymentId,
+        mode: candidate.mode,
+        subscriptionId: candidate.subscriptionId,
+      }),
+    );
   }
 
   return {
