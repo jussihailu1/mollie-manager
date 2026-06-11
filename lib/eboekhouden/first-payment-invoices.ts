@@ -10,10 +10,7 @@ import {
 } from "@/lib/billing-settings";
 import { getDb, transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
-import {
-  createEboekhoudenInvoice,
-  type EboekhoudenInvoice,
-} from "@/lib/eboekhouden/client";
+import { createEboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import {
   isSafeInvoiceRetryFailure,
   SAFE_INVOICE_RETRY_FAILURE_CODES,
@@ -39,6 +36,10 @@ import {
   listDueFirstPaymentInvoiceCandidates as listDueFirstPaymentInvoiceCandidatesImpl,
   normalizeFirstPaymentInvoiceStates as normalizeFirstPaymentInvoiceStatesImpl,
 } from "@/lib/eboekhouden/first-payment-invoice-queue";
+import {
+  listFailedFirstPaymentRecoveryCandidates,
+  storeRecoveredFailedFirstPaymentSuccess,
+} from "@/lib/eboekhouden/first-payment-invoice-recovery";
 import { resolveFirstPaymentInvoiceDate } from "@/lib/eboekhouden/first-payment-invoice-date";
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
 import { buildInvoiceRetryQueuedMetadata } from "@/lib/eboekhouden/invoice-retry-metadata";
@@ -46,9 +47,6 @@ import { filterSafeFailedInvoiceRetryIds } from "@/lib/eboekhouden/invoice-retry
 import { countSafeInvoiceRetryFailures } from "@/lib/eboekhouden/invoice-retry-summary";
 import { createInvoiceBatchWithDependencies } from "@/lib/invoice-creation-batch";
 import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
-import { notificationsAreConfigured } from "@/lib/notifications/email";
-import { openAlert } from "@/lib/reliability/alerts";
-import { deliverAlertEmail } from "@/lib/reliability/alerts";
 import { subscriptionConsentPlanSnapshotSchema } from "@/lib/subscription-consent";
 
 export {
@@ -115,17 +113,6 @@ type CreateFirstPaymentInvoiceResult =
       reason: string;
       status: "failed" | "skipped";
     };
-
-type FailedFirstPaymentRecoveryCandidate = {
-  customerEmail: string | null;
-  customerId: string | null;
-  eboekhoudenRelationId: number;
-  mode: MollieMode;
-  paidAt: string | null;
-  paymentCreatedAt: string;
-  paymentId: string;
-  subscriptionId: string | null;
-};
 
 function buildReference(candidate: FirstPaymentInvoiceCandidate) {
   return buildFirstPaymentInvoiceReference({
@@ -356,95 +343,6 @@ export async function queueRetryForFailedFirstPaymentInvoicesBatch(input: {
   return {
     queuedCount,
     skippedCount,
-  };
-}
-
-async function listFailedFirstPaymentRecoveryCandidates(
-  mode: MollieMode,
-  limit: number,
-) {
-  const result = await getDb().execute<FailedFirstPaymentRecoveryCandidate>(sql`
-    ${buildDeterministicMatchCte({ mode })}
-    select
-      p.id as "paymentId",
-      p.mode,
-      p.customer_id as "customerId",
-      p.subscription_id as "subscriptionId",
-      p.paid_at as "paidAt",
-      p.created_at as "paymentCreatedAt",
-      c.email as "customerEmail",
-      c.eboekhouden_relation_id as "eboekhoudenRelationId"
-    from payments p
-    inner join deterministic_matches dm on dm.payment_id = p.id
-    inner join customers c on c.id = p.customer_id and c.mode = p.mode
-    where p.mode = ${mode}
-      and p.payment_type = 'first'
-      and p.invoice_state = 'invoice_failed'
-      and p.eboekhouden_invoice_id is null
-      and p.eboekhouden_invoice_number is null
-      and c.eboekhouden_relation_id is not null
-    order by p.updated_at asc, p.created_at asc
-    limit ${Math.max(1, limit)}
-  `);
-
-  return result.rows;
-}
-
-async function storeRecoveredFailedFirstPaymentSuccess(input: {
-  actor: InvoiceActor;
-  candidate: FailedFirstPaymentRecoveryCandidate;
-  invoice: EboekhoudenInvoice;
-}) {
-  const invoiceId = input.invoice.id ? String(input.invoice.id) : null;
-  const invoiceNumber = input.invoice.invoiceNumber ?? input.invoice.number ?? null;
-  const result = await getDb().execute<{ id: string }>(sql`
-    update payments
-    set
-      invoice_state = 'invoice_created',
-      eboekhouden_invoice_id = ${invoiceId},
-      eboekhouden_invoice_number = ${invoiceNumber},
-      invoice_created_at = coalesce(invoice_created_at, now()),
-      invoice_failed_at = null,
-      metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
-        eboekhoudenInvoice: input.invoice,
-        invoiceRecoveredAt: new Date().toISOString(),
-        invoiceRecoverySource: "reconciled_existing",
-      })}::jsonb,
-      updated_at = now()
-    where id = ${input.candidate.paymentId}
-      and invoice_state = 'invoice_failed'
-      and eboekhouden_invoice_id is null
-      and eboekhouden_invoice_number is null
-    returning id
-  `);
-
-  if (!result.rows[0]?.id) {
-    return null;
-  }
-
-  await writeAuditLog(
-    {
-      action: "first_payment_invoice.recover_failed",
-      details: {
-        eboekhoudenInvoiceId: invoiceId,
-        eboekhoudenInvoiceNumber: invoiceNumber,
-        paymentId: input.candidate.paymentId,
-        source: "reconciled_existing",
-      },
-      entityId: input.candidate.paymentId,
-      entityType: "payment",
-      mode: input.candidate.mode,
-      outcome: "success",
-      summary:
-        "Recovered failed first-payment invoice row by reconciling existing e-Boekhouden invoice.",
-    },
-    undefined,
-    input.actor,
-  );
-
-  return {
-    invoiceId,
-    invoiceNumber,
   };
 }
 
