@@ -24,6 +24,10 @@ import { buildRecurringInvoiceReference } from "@/lib/eboekhouden/invoice-refere
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
 import { buildInvoiceRetryQueuedMetadata } from "@/lib/eboekhouden/invoice-retry-metadata";
 import {
+  buildRecurringDueInvoiceFilter,
+  buildRecurringFailedInvoiceFilter,
+} from "@/lib/eboekhouden/recurring-invoice-query";
+import {
   buildInvoiceCreationClaimMetadata,
   buildInvoiceCreationFailureMetadata,
   buildInvoiceCreationSuccessMetadata,
@@ -371,11 +375,7 @@ async function listDueRecurringInvoiceCandidates(
     from recurring_billing_schedules rbs
     inner join subscriptions s on s.id = rbs.subscription_id
     inner join customers c on c.id = s.customer_id
-    where rbs.mode = ${mode}
-      and rbs.invoice_state = 'pending_invoice'
-      and rbs.invoice_send_due_date <= current_date
-      and rbs.eboekhouden_invoice_id is null
-      and rbs.eboekhouden_invoice_number is null
+    where ${buildRecurringDueInvoiceFilter(mode)}
       and c.eboekhouden_relation_id is not null
     order by rbs.invoice_send_due_date asc, rbs.planned_collection_date asc, rbs.created_at asc
     limit ${Math.max(1, limit)}
@@ -393,17 +393,13 @@ export async function getDueRecurringInvoiceQueueSummary(
     dueCount: number | string;
   }>(sql`
     select
-      count(*) filter (where c.eboekhouden_relation_id is not null) as "actionableCount",
+    count(*) filter (where c.eboekhouden_relation_id is not null) as "actionableCount",
       count(*) filter (where c.eboekhouden_relation_id is null) as "blockedCount",
       count(*) as "dueCount"
     from recurring_billing_schedules rbs
     inner join subscriptions s on s.id = rbs.subscription_id
     inner join customers c on c.id = s.customer_id
-    where rbs.mode = ${mode}
-      and rbs.invoice_state = 'pending_invoice'
-      and rbs.invoice_send_due_date <= current_date
-      and rbs.eboekhouden_invoice_id is null
-      and rbs.eboekhouden_invoice_number is null
+    where ${buildRecurringDueInvoiceFilter(mode)}
   `);
   const row = result.rows[0];
 
@@ -425,10 +421,7 @@ export async function getFailedRecurringInvoiceRetrySummary(
       rbs.id as "scheduleId",
       (rbs.metadata ->> 'invoiceCreationError') as "errorMessage"
     from recurring_billing_schedules rbs
-    where rbs.mode = ${mode}
-      and rbs.invoice_state = 'invoice_failed'
-      and rbs.eboekhouden_invoice_id is null
-      and rbs.eboekhouden_invoice_number is null
+    where ${buildRecurringFailedInvoiceFilter(mode)}
   `);
 
   return countSafeInvoiceRetryFailures(result.rows);
@@ -448,10 +441,7 @@ export async function queueRetryForFailedRecurringInvoice(input: {
       (rbs.metadata ->> 'invoiceCreationError') as "errorMessage"
     from recurring_billing_schedules rbs
     where rbs.id = ${input.scheduleId}
-      and rbs.mode = ${input.mode}
-      and rbs.invoice_state = 'invoice_failed'
-      and rbs.eboekhouden_invoice_id is null
-      and rbs.eboekhouden_invoice_number is null
+      and ${buildRecurringFailedInvoiceFilter(input.mode)}
     limit 1
   `);
   const row = candidate.rows[0];
@@ -461,7 +451,7 @@ export async function queueRetryForFailedRecurringInvoice(input: {
   }
 
   const result = await getDb().execute<{ id: string }>(sql`
-    update recurring_billing_schedules
+    update recurring_billing_schedules rbs
     set
       invoice_state = 'pending_invoice',
       invoice_failed_at = null,
@@ -471,11 +461,8 @@ export async function queueRetryForFailedRecurringInvoice(input: {
         }),
       )}::jsonb,
       updated_at = now()
-    where id = ${input.scheduleId}
-      and mode = ${input.mode}
-      and invoice_state = 'invoice_failed'
-      and eboekhouden_invoice_id is null
-      and eboekhouden_invoice_number is null
+    where rbs.id = ${input.scheduleId}
+      and ${buildRecurringFailedInvoiceFilter(input.mode)}
     returning id
   `);
 
@@ -546,10 +533,7 @@ export async function queueRetryForSafeFailedRecurringInvoicesBatch(input: {
       rbs.id as id,
       (rbs.metadata ->> 'invoiceCreationError') as "errorMessage"
     from recurring_billing_schedules rbs
-    where rbs.mode = ${input.mode}
-      and rbs.invoice_state = 'invoice_failed'
-      and rbs.eboekhouden_invoice_id is null
-      and rbs.eboekhouden_invoice_number is null
+    where ${buildRecurringFailedInvoiceFilter(input.mode)}
     order by rbs.updated_at asc, rbs.created_at asc
     limit ${Math.max(1, input.limit ?? DEFAULT_BATCH_SIZE)}
   `);
@@ -586,10 +570,7 @@ async function listFailedRecurringRecoveryCandidates(
     from recurring_billing_schedules rbs
     inner join subscriptions s on s.id = rbs.subscription_id
     inner join customers c on c.id = s.customer_id and c.mode = rbs.mode
-    where rbs.mode = ${mode}
-      and rbs.invoice_state = 'invoice_failed'
-      and rbs.eboekhouden_invoice_id is null
-      and rbs.eboekhouden_invoice_number is null
+    where ${buildRecurringFailedInvoiceFilter(mode)}
       and c.eboekhouden_relation_id is not null
     order by rbs.updated_at asc, rbs.created_at asc
     limit ${Math.max(1, limit)}
