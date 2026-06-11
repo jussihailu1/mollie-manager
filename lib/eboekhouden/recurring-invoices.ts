@@ -9,7 +9,7 @@ import {
   type TenantBillingSettings,
 } from "@/lib/billing-settings";
 import { getDb } from "@/lib/db";
-import { createEboekhoudenInvoice, type EboekhoudenInvoice } from "@/lib/eboekhouden/client";
+import { createEboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import {
   isSafeInvoiceRetryFailure,
   SAFE_INVOICE_RETRY_FAILURE_CODES,
@@ -33,6 +33,10 @@ import {
   storeRecurringInvoiceCreationFailure,
   storeRecurringInvoiceCreationSuccess,
 } from "@/lib/eboekhouden/recurring-invoice-persistence";
+import {
+  listFailedRecurringRecoveryCandidates,
+  storeRecoveredFailedInvoiceSuccess,
+} from "@/lib/eboekhouden/recurring-invoice-recovery";
 import { createInvoiceBatchWithDependencies } from "@/lib/invoice-creation-batch";
 import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
 
@@ -83,17 +87,6 @@ type FailedRecurringRecoveryBatchResult = {
   ambiguousCount: number;
   recoveredCount: number;
   scannedCount: number;
-};
-
-type FailedRecurringRecoveryCandidate = {
-  customerEmail: string;
-  customerId: string;
-  eboekhoudenRelationId: number;
-  invoiceSendDueDate: string;
-  mode: "live" | "test";
-  plannedCollectionDate: string;
-  scheduleId: string;
-  subscriptionId: string;
 };
 
 type CreateScheduleInvoiceResult =
@@ -340,91 +333,6 @@ export async function queueRetryForSafeFailedRecurringInvoicesBatch(input: {
     mode: input.mode,
     scheduleIds: safeScheduleIds,
   });
-}
-
-async function listFailedRecurringRecoveryCandidates(
-  mode: "live" | "test",
-  limit: number,
-) {
-  const result = await getDb().execute<FailedRecurringRecoveryCandidate>(sql`
-    select
-      rbs.id as "scheduleId",
-      rbs.mode,
-      rbs.invoice_send_due_date::text as "invoiceSendDueDate",
-      rbs.planned_collection_date::text as "plannedCollectionDate",
-      rbs.subscription_id as "subscriptionId",
-      s.customer_id as "customerId",
-      c.email as "customerEmail",
-      c.eboekhouden_relation_id as "eboekhoudenRelationId"
-    from recurring_billing_schedules rbs
-    inner join subscriptions s on s.id = rbs.subscription_id
-    inner join customers c on c.id = s.customer_id and c.mode = rbs.mode
-    where ${buildRecurringFailedInvoiceFilter(mode)}
-      and c.eboekhouden_relation_id is not null
-    order by rbs.updated_at asc, rbs.created_at asc
-    limit ${Math.max(1, limit)}
-  `);
-
-  return result.rows;
-}
-
-async function storeRecoveredFailedInvoiceSuccess(input: {
-  actor: InvoiceActor;
-  candidate: FailedRecurringRecoveryCandidate;
-  invoice: EboekhoudenInvoice;
-}) {
-  const invoiceId = input.invoice.id ? String(input.invoice.id) : null;
-  const invoiceNumber = input.invoice.invoiceNumber ?? input.invoice.number ?? null;
-  const result = await getDb().execute<{ id: string }>(sql`
-    update recurring_billing_schedules
-    set
-      invoice_state = 'invoice_created',
-      eboekhouden_invoice_id = ${invoiceId},
-      eboekhouden_invoice_number = ${invoiceNumber},
-      invoice_created_at = coalesce(invoice_created_at, now()),
-      invoice_failed_at = null,
-      metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
-        eboekhoudenInvoice: input.invoice,
-        invoiceRecoveredAt: new Date().toISOString(),
-        invoiceRecoverySource: "reconciled_existing",
-      })}::jsonb,
-      updated_at = now()
-    where id = ${input.candidate.scheduleId}
-      and invoice_state = 'invoice_failed'
-      and eboekhouden_invoice_id is null
-      and eboekhouden_invoice_number is null
-    returning id
-  `);
-
-  if (!result.rows[0]?.id) {
-    return null;
-  }
-
-  await writeAuditLog(
-    {
-      action: "recurring_invoice.recover_failed",
-      details: {
-        eboekhoudenInvoiceId: invoiceId,
-        eboekhoudenInvoiceNumber: invoiceNumber,
-        plannedCollectionDate: input.candidate.plannedCollectionDate,
-        scheduleId: input.candidate.scheduleId,
-        source: "reconciled_existing",
-      },
-      entityId: input.candidate.scheduleId,
-      entityType: "recurring_billing_schedule",
-      mode: input.candidate.mode,
-      outcome: "success",
-      summary:
-        "Recovered failed recurring invoice row by reconciling existing e-Boekhouden invoice.",
-    },
-    undefined,
-    input.actor,
-  );
-
-  return {
-    invoiceId,
-    invoiceNumber,
-  };
 }
 
 export async function recoverFailedRecurringInvoicesBatch(input: {
