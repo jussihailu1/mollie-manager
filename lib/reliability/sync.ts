@@ -132,21 +132,17 @@ async function getRecurringInvoiceStateCounts(
   return mapInvoiceStateCounts(RECURRING_INVOICE_STATES, result.rows);
 }
 
-function buildModesToTry(preferredMode?: MollieMode, strictMode = false) {
-  return buildConfiguredMollieModeOrder({
-    isConfigured: isMollieConfigured,
-    preferredMode,
-    strictMode,
-  });
-}
-
 async function findPaymentAcrossModes(
   molliePaymentId: string,
   preferredMode?: MollieMode,
   strictMode = false,
 ) {
   const result = await findMollieResourceAcrossModes(
-    buildModesToTry(preferredMode, strictMode),
+    buildConfiguredMollieModeOrder({
+      isConfigured: isMollieConfigured,
+      preferredMode,
+      strictMode,
+    }),
     (mode) => getMollieClient(mode).payments.get(molliePaymentId),
     "Payment was not found in Mollie.",
   );
@@ -163,7 +159,11 @@ async function findPaymentLinkAcrossModes(
   strictMode = false,
 ) {
   const result = await findMollieResourceAcrossModes(
-    buildModesToTry(preferredMode, strictMode),
+    buildConfiguredMollieModeOrder({
+      isConfigured: isMollieConfigured,
+      preferredMode,
+      strictMode,
+    }),
     (mode) =>
       getMollieClient(mode).paymentLinks.get(
         molliePaymentLinkId,
@@ -184,7 +184,11 @@ async function findSubscriptionAcrossModes(
   strictMode = false,
 ) {
   const result = await findMollieResourceAcrossModes(
-    buildModesToTry(preferredMode, strictMode),
+    buildConfiguredMollieModeOrder({
+      isConfigured: isMollieConfigured,
+      preferredMode,
+      strictMode,
+    }),
     async (mode) => {
       const client = getMollieClient(mode);
       const subscription = await client.customerSubscriptions.get(
