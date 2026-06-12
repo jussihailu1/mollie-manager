@@ -109,7 +109,7 @@ export async function archiveCustomerAction(formData: FormData) {
     });
   }
 
-  await requireViewerSession();
+  const session = await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
   const detail = await getCustomerDetail(parsed.data.customerId, selectedMode);
   const returnTo = updateActionPath(parsed.data.returnTo, {
@@ -185,7 +185,7 @@ export async function restoreCustomerAction(formData: FormData) {
     });
   }
 
-  await requireViewerSession();
+  const session = await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
   const detail = await getCustomerDetail(parsed.data.customerId, selectedMode);
   const returnTo = updateActionPath(parsed.data.returnTo, {
