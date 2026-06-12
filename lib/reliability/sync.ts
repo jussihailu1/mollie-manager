@@ -1,10 +1,8 @@
 import "server-only";
 
 import type { Payment } from "@mollie/api-client";
-import { sql } from "drizzle-orm";
 
-import { writeAuditLog } from "@/lib/audit";
-import { getDb, transaction } from "@/lib/db";
+import { transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { getMollieClient, isMollieConfigured } from "@/lib/mollie/client";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
@@ -12,12 +10,6 @@ import { runFirstPaymentInvoiceSyncFollowUp } from "@/lib/reliability/first-paym
 import {
   type ReconciliationSummary,
 } from "@/lib/reliability/reconciliation-summary";
-import {
-  buildPaymentLinkSyncMetadata,
-  derivePaymentLinkSyncAmount,
-  derivePaymentLinkSyncStatus,
-  type PaymentLinkSyncSource,
-} from "@/lib/reliability/payment-link-sync-record";
 import {
   handlePaymentAlerts,
   handleSubscriptionAlerts,
@@ -31,6 +23,12 @@ import { persistSyncedPayment, type SyncActor } from "@/lib/reliability/sync-per
 import { persistSyncedSubscriptionPayments } from "@/lib/reliability/subscription-sync-persistence";
 import { buildConfiguredMollieModeOrder } from "@/lib/reliability/mollie-mode-selection";
 import { findMollieResourceAcrossModes } from "@/lib/reliability/mollie-resource-lookup";
+import {
+  collectPaymentLinkPayments,
+  syncMatchingPaymentLinkForPayment,
+  upsertPaymentLinkFromMollie,
+} from "@/lib/reliability/payment-link-sync";
+import { type PaymentLinkSyncSource } from "@/lib/reliability/payment-link-sync-record";
 import {
   findLocalMandateId,
   getLocalCustomerByMollieId,
@@ -58,13 +56,6 @@ type MolliePaymentLink = {
   id: string;
   webhookUrl?: string;
 } & PaymentLinkSyncSource;
-
-type LocalStoredPaymentLink = {
-  customerId: string | null;
-  id: string;
-  metadata: Record<string, unknown>;
-  molliePaymentLinkId: string | null;
-};
 
 type WebhookProcessingResult = {
   customerId: string | null;
@@ -155,172 +146,6 @@ async function findSubscriptionAcrossModes(
     mode: result.mode,
     ...result.resource,
   };
-}
-
-async function collectPaymentLinkPayments(paymentLink: MolliePaymentLink) {
-  const payments: Payment[] = [];
-
-  for await (const payment of paymentLink.getPayments()) {
-    payments.push(payment);
-
-    if (payments.length >= 50) {
-      break;
-    }
-  }
-
-  return payments;
-}
-
-async function upsertPaymentLinkFromMollie(
-  mode: MollieMode,
-  paymentLink: MolliePaymentLink,
-  payments: Payment[],
-  options: {
-    actor: SyncActor;
-    customerId?: string | null;
-  },
-) {
-  const linkedCustomer =
-    options.customerId ??
-    (await getLocalCustomerByMollieId(mode, paymentLink.customerId))?.id ??
-    null;
-  const paymentLinkAmount = derivePaymentLinkSyncAmount(paymentLink, payments);
-  const paymentLinkStatus = derivePaymentLinkSyncStatus(paymentLink, payments);
-  let localPaymentLinkId = crypto.randomUUID();
-
-  await transaction(async (client) => {
-    const existingPaymentLink = await getLocalPaymentLinkByMollieId(
-      mode,
-      paymentLink.id,
-      client,
-    );
-    localPaymentLinkId = existingPaymentLink?.id ?? localPaymentLinkId;
-
-    await client.execute(sql`
-        insert into payment_links (
-          id,
-          customer_id,
-          mode,
-          mollie_payment_link_id,
-          mollie_status,
-          description,
-          amount_value,
-          amount_currency,
-          checkout_url,
-          expires_at,
-          metadata,
-          created_at,
-          updated_at,
-          last_synced_at
-        ) values (
-          ${localPaymentLinkId},
-          ${linkedCustomer ?? existingPaymentLink?.customerId ?? null},
-          ${mode},
-          ${paymentLink.id},
-          ${paymentLinkStatus},
-          ${paymentLink.description},
-          ${paymentLinkAmount.value},
-          ${paymentLinkAmount.currency},
-          ${paymentLink.getPaymentUrl()},
-          ${paymentLink.expiresAt ?? null}::timestamptz,
-          ${JSON.stringify(
-            buildPaymentLinkSyncMetadata({
-              existingMetadata: existingPaymentLink?.metadata,
-              paymentLink,
-              payments,
-            }),
-          )}::jsonb,
-          coalesce(${paymentLink.createdAt ?? null}::timestamptz, now()),
-          now(),
-          now()
-        )
-        on conflict (mode, mollie_payment_link_id)
-        do update set
-          customer_id = coalesce(excluded.customer_id, payment_links.customer_id),
-          mollie_status = excluded.mollie_status,
-          description = excluded.description,
-          amount_value = excluded.amount_value,
-          amount_currency = excluded.amount_currency,
-          checkout_url = excluded.checkout_url,
-          expires_at = excluded.expires_at,
-          metadata = excluded.metadata,
-          updated_at = now(),
-          last_synced_at = now()
-      `);
-
-    await writeAuditLog(
-      {
-        action: "payment_link.sync",
-        details: {
-          localPaymentLinkId,
-          molliePaymentLinkId: paymentLink.id,
-          paymentCount: payments.length,
-          paymentLinkStatus,
-        },
-        entityId: localPaymentLinkId,
-        entityType: "payment_link",
-        mode,
-        outcome: "success",
-        summary: "Refreshed a payment link from Mollie.",
-      },
-      client,
-      options.actor,
-    );
-  });
-
-  return localPaymentLinkId;
-}
-
-async function syncMatchingPaymentLinkForPayment(
-  mode: MollieMode,
-  payment: Payment,
-  customerId: string | null,
-  actor: SyncActor,
-) {
-  if (!customerId && !payment.customerId) {
-    return null;
-  }
-
-  const candidates = await getDb().execute<LocalStoredPaymentLink>(sql`
-      select
-        id,
-        customer_id as "customerId",
-        mollie_payment_link_id as "molliePaymentLinkId"
-      from payment_links
-      where
-        mode = ${mode}
-        and mollie_payment_link_id is not null
-        and metadata ->> 'source' = 'subscription_onboarding'
-        and metadata ->> 'paymentType' = 'first'
-        and (
-          customer_id = ${customerId}
-          or metadata ->> 'mollieCustomerId' = ${payment.customerId ?? null}
-        )
-      order by created_at desc
-      limit 10
-    `);
-
-  for (const candidate of candidates.rows) {
-    if (!candidate.molliePaymentLinkId) {
-      continue;
-    }
-
-    const paymentLink = (await getMollieClient(mode).paymentLinks.get(
-      candidate.molliePaymentLinkId,
-    )) as unknown as MolliePaymentLink;
-    const payments = await collectPaymentLinkPayments(paymentLink);
-
-    if (!payments.some((linkedPayment) => linkedPayment.id === payment.id)) {
-      continue;
-    }
-
-    return upsertPaymentLinkFromMollie(mode, paymentLink, payments, {
-      actor,
-      customerId: candidate.customerId ?? customerId,
-    });
-  }
-
-  return null;
 }
 
 export async function syncPaymentByMollieId(
