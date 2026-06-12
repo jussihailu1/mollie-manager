@@ -4,7 +4,6 @@ import type { Payment } from "@mollie/api-client";
 
 import { transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
-import { getMollieClient, isMollieConfigured } from "@/lib/mollie/client";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
 import { runFirstPaymentInvoiceSyncFollowUp } from "@/lib/reliability/first-payment-sync-followup";
 import {
@@ -21,14 +20,12 @@ import {
 } from "@/lib/reliability/payment-sync-record";
 import { persistSyncedPayment, type SyncActor } from "@/lib/reliability/sync-persistence";
 import { persistSyncedSubscriptionPayments } from "@/lib/reliability/subscription-sync-persistence";
-import { buildConfiguredMollieModeOrder } from "@/lib/reliability/mollie-mode-selection";
-import { findMollieResourceAcrossModes } from "@/lib/reliability/mollie-resource-lookup";
+import { collectPaymentLinkPayments, syncMatchingPaymentLinkForPayment, upsertPaymentLinkFromMollie } from "@/lib/reliability/payment-link-sync";
 import {
-  collectPaymentLinkPayments,
-  syncMatchingPaymentLinkForPayment,
-  upsertPaymentLinkFromMollie,
-} from "@/lib/reliability/payment-link-sync";
-import { type PaymentLinkSyncSource } from "@/lib/reliability/payment-link-sync-record";
+  findPaymentAcrossModes,
+  findPaymentLinkAcrossModes,
+  findSubscriptionAcrossModes,
+} from "@/lib/reliability/sync-mollie-lookups";
 import {
   findLocalMandateId,
   getLocalCustomerByMollieId,
@@ -47,106 +44,12 @@ import {
   reconcileOperationalData as reconcileOperationalDataImpl,
 } from "@/lib/reliability/reconciliation-operations";
 
-type MolliePaymentLink = {
-  createdAt?: string;
-  description: string;
-  expiresAt?: string;
-  getPaymentUrl: () => string;
-  getPayments: () => AsyncIterable<Payment>;
-  id: string;
-  webhookUrl?: string;
-} & PaymentLinkSyncSource;
-
 type WebhookProcessingResult = {
   customerId: string | null;
   paymentId: string | null;
   paymentLinkId: string | null;
   subscriptionId: string | null;
 };
-
-async function findPaymentAcrossModes(
-  molliePaymentId: string,
-  preferredMode?: MollieMode,
-  strictMode = false,
-) {
-  const result = await findMollieResourceAcrossModes(
-    buildConfiguredMollieModeOrder({
-      isConfigured: isMollieConfigured,
-      preferredMode,
-      strictMode,
-    }),
-    (mode) => getMollieClient(mode).payments.get(molliePaymentId),
-    "Payment was not found in Mollie.",
-  );
-
-  return {
-    mode: result.mode,
-    payment: result.resource,
-  };
-}
-
-async function findPaymentLinkAcrossModes(
-  molliePaymentLinkId: string,
-  preferredMode?: MollieMode,
-  strictMode = false,
-) {
-  const result = await findMollieResourceAcrossModes(
-    buildConfiguredMollieModeOrder({
-      isConfigured: isMollieConfigured,
-      preferredMode,
-      strictMode,
-    }),
-    (mode) =>
-      getMollieClient(mode).paymentLinks.get(
-        molliePaymentLinkId,
-      ) as unknown as Promise<MolliePaymentLink>,
-    "Payment link was not found in Mollie.",
-  );
-
-  return {
-    mode: result.mode,
-    paymentLink: result.resource,
-  };
-}
-
-async function findSubscriptionAcrossModes(
-  mollieSubscriptionId: string,
-  customerMollieId: string,
-  preferredMode?: MollieMode,
-  strictMode = false,
-) {
-  const result = await findMollieResourceAcrossModes(
-    buildConfiguredMollieModeOrder({
-      isConfigured: isMollieConfigured,
-      preferredMode,
-      strictMode,
-    }),
-    async (mode) => {
-      const client = getMollieClient(mode);
-      const subscription = await client.customerSubscriptions.get(
-        mollieSubscriptionId,
-        {
-          customerId: customerMollieId,
-        },
-      );
-      const payments = await client.subscriptionPayments.page({
-        customerId: customerMollieId,
-        subscriptionId: mollieSubscriptionId,
-      });
-
-      return {
-        payments,
-        subscription,
-      };
-    },
-    "Subscription was not found in Mollie.",
-  );
-
-  return {
-    mode: result.mode,
-    ...result.resource,
-  };
-}
 
 export async function syncPaymentByMollieId(
   molliePaymentId: string,
