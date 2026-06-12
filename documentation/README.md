@@ -17,6 +17,7 @@ These are the active sources of truth:
 - `operations/invoice-automation-runbook.md`: invoice automation operations runbook
 - `integrations/mollie.md`: Mollie integration boundaries and mode rules
 - `integrations/eboekhouden.md`: e-Boekhouden integration boundaries and invoice rules
+- `integrations/peppol.md`: Peppol strategy, monetization paths, and future integration direction
 
 ## Archive
 
