@@ -3,11 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
 import { sql } from "drizzle-orm";
-import {
-  Locale,
-  PaymentMethod,
-  SequenceType,
-} from "@mollie/api-client";
+import { Locale } from "@mollie/api-client";
 import { z } from "zod";
 
 import { writeAuditLog } from "@/lib/audit";
@@ -15,7 +11,7 @@ import { requireViewerSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { transaction } from "@/lib/db";
 import { toCustomerRelationFields } from "@/lib/onboarding/customer-relation-fields";
-import { getMollieClient, getMollieWebhookUrl } from "@/lib/mollie/client";
+import { getMollieClient } from "@/lib/mollie/client";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
 import { buildConsentLinkCreatedNotice } from "@/lib/onboarding/consent-link";
 import {
@@ -23,19 +19,11 @@ import {
   resolveCustomerRestoreBlocker,
 } from "@/lib/onboarding/customer-archive-policy";
 import { repairCustomerBillingState as repairCustomerBillingStateImpl } from "@/lib/onboarding/customer-billing-repair";
-import {
-  buildConsentTokenStorage,
-  createConsentToken,
-} from "@/lib/onboarding/consent-token-storage";
 import { updateActionPath } from "@/lib/onboarding/action-path";
 import { getCustomerDetail } from "@/lib/onboarding/data";
 import { resolveFirstPaymentCreationBlocker } from "@/lib/onboarding/first-payment-blocker";
-import { buildFirstPaymentPlan } from "@/lib/onboarding/first-payment-plan";
-import { buildFirstPaymentOnboardingRecords } from "@/lib/onboarding/first-payment-onboarding-records";
-import { persistFirstPaymentOnboardingRecords } from "@/lib/onboarding/first-payment-onboarding-persistence";
 import { describeSubscriptionActivationResult } from "@/lib/onboarding/subscription-activation-result";
-import { buildSubscriptionConsentReturnUrl } from "@/lib/subscription-consent";
-import { ensureTenantSubscriptionPolicyDefaults } from "@/lib/subscription-policy-defaults";
+import { createFirstPaymentOnboardingFlow } from "@/lib/onboarding/first-payment-onboarding-flow";
 import {
   assertRelationIsAvailable,
   getLocalCustomer,
@@ -121,7 +109,7 @@ export async function archiveCustomerAction(formData: FormData) {
     });
   }
 
-  const session = await requireViewerSession();
+  await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
   const detail = await getCustomerDetail(parsed.data.customerId, selectedMode);
   const returnTo = updateActionPath(parsed.data.returnTo, {
@@ -197,7 +185,7 @@ export async function restoreCustomerAction(formData: FormData) {
     });
   }
 
-  const session = await requireViewerSession();
+  await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
   const detail = await getCustomerDetail(parsed.data.customerId, selectedMode);
   const returnTo = updateActionPath(parsed.data.returnTo, {
@@ -277,7 +265,7 @@ export async function createCustomerAction(formData: FormData) {
     });
   }
 
-  const session = await requireViewerSession();
+  await requireViewerSession();
 
   try {
     const localCustomerId = crypto.randomUUID();
@@ -562,66 +550,25 @@ export async function createFirstPaymentAction(formData: FormData) {
   }
 
   try {
-    const tenantPolicy = await ensureTenantSubscriptionPolicyDefaults();
-    const firstPaymentPlan = buildFirstPaymentPlan({
-      firstPaymentMode: parsed.data.firstPaymentMode,
-      serviceEndAt: parsed.data.serviceEndAt,
-      subscriptionAmountValue: parsed.data.subscriptionAmountValue,
-      subscriptionDescription: parsed.data.subscriptionDescription,
-      subscriptionInterval: parsed.data.subscriptionInterval,
-      subscriptionStartDate: parsed.data.subscriptionStartDate,
-      subscriptionTermMode: parsed.data.subscriptionTermMode,
-      tenantPolicy: {
-        cancellationEmail: tenantPolicy.cancellationEmail,
-        defaultCancellationEffect: tenantPolicy.defaultCancellationEffect,
-        privacyUrl: tenantPolicy.privacyUrl,
-        termsUrl: tenantPolicy.termsUrl,
-        termsVersion: tenantPolicy.termsVersion,
-      },
-      totalPayments: parsed.data.totalPayments,
-    });
-    const mollie = getMollieClient(selectedMode);
-    const localPaymentLinkId = crypto.randomUUID();
-    const localConsentId = crypto.randomUUID();
-    const consentToken = createConsentToken();
-    const consentTokenStorage = buildConsentTokenStorage(consentToken);
-    const webhookUrl = getMollieWebhookUrl();
-    const redirectUrl = buildSubscriptionConsentReturnUrl(consentToken);
-    const paymentLink = await mollie.paymentLinks.create({
-      allowedMethods: [PaymentMethod.ideal],
-      amount: {
-        currency: "EUR",
-        value: firstPaymentPlan.amountValue,
-      },
-      customerId: mollieCustomerId,
-      description: firstPaymentPlan.paymentDescription,
-      idempotencyKey: crypto.randomUUID(),
-      redirectUrl,
-      reusable: false,
-      sequenceType: SequenceType.first,
-      webhookUrl,
-    });
-    const onboardingRecords = buildFirstPaymentOnboardingRecords({
-      consentTokenStorage,
-      customerId: customer.id,
-      fallbackAmountValue: firstPaymentPlan.amountValue,
-      firstPaymentMode: parsed.data.firstPaymentMode,
-      localConsentId,
-      localPaymentLinkId,
-      mollieCustomerId,
-      paymentLink,
-      planSnapshot: firstPaymentPlan.planSnapshot,
-      redirectUrl,
-      selectedMode,
-      termsVersion: tenantPolicy.termsVersion,
-    });
-
-    await persistFirstPaymentOnboardingRecords({
+    await createFirstPaymentOnboardingFlow({
       actor: {
         email: session.user.email ?? null,
         kind: "user",
       },
-      onboardingRecords,
+      customer: {
+        id: customer.id,
+        mollieCustomerId: mollieCustomerId,
+      },
+      planInput: {
+        firstPaymentMode: parsed.data.firstPaymentMode,
+        serviceEndAt: parsed.data.serviceEndAt,
+        subscriptionAmountValue: parsed.data.subscriptionAmountValue,
+        subscriptionDescription: parsed.data.subscriptionDescription,
+        subscriptionInterval: parsed.data.subscriptionInterval,
+        subscriptionStartDate: parsed.data.subscriptionStartDate,
+        subscriptionTermMode: parsed.data.subscriptionTermMode,
+        totalPayments: parsed.data.totalPayments,
+      },
       selectedMode,
     });
 
