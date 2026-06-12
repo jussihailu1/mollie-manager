@@ -1,7 +1,5 @@
 import "server-only";
 
-import type { Payment } from "@mollie/api-client";
-
 import { transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
@@ -9,40 +7,35 @@ import { runFirstPaymentInvoiceSyncFollowUp } from "@/lib/reliability/first-paym
 import {
   type ReconciliationSummary,
 } from "@/lib/reliability/reconciliation-summary";
-import {
-  handlePaymentAlerts,
-  handleSubscriptionAlerts,
-} from "@/lib/reliability/sync-alerts";
+import { handlePaymentAlerts } from "@/lib/reliability/sync-alerts";
 import {
   deriveCollectionReviewRequiredAt,
   derivePaymentRecurringCollectionState,
   resolvePaymentSyncType,
 } from "@/lib/reliability/payment-sync-record";
 import { persistSyncedPayment, type SyncActor } from "@/lib/reliability/sync-persistence";
-import { persistSyncedSubscriptionPayments } from "@/lib/reliability/subscription-sync-persistence";
 import { collectPaymentLinkPayments, syncMatchingPaymentLinkForPayment, upsertPaymentLinkFromMollie } from "@/lib/reliability/payment-link-sync";
 import {
   findPaymentAcrossModes,
   findPaymentLinkAcrossModes,
-  findSubscriptionAcrossModes,
 } from "@/lib/reliability/sync-mollie-lookups";
 import {
   findLocalMandateId,
   getLocalCustomerByMollieId,
   getLocalPaymentLinkByMollieId,
-  getManagedSubscription,
   getManagedSubscriptionByMollieId,
-  type SyncResourceCustomerLink,
   upsertMandatesForCustomer,
 } from "@/lib/reliability/sync-resource-state";
+import { syncSubscriptionByLocalId, syncSubscriptionByMollieId } from "@/lib/reliability/subscription-sync-operations";
 import {
   shouldRunBillingFollowups,
   type ReconciliationMode,
 } from "@/lib/reliability/reconciliation-mode";
-import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 import {
   reconcileOperationalData as reconcileOperationalDataImpl,
 } from "@/lib/reliability/reconciliation-operations";
+
+export { syncSubscriptionByLocalId, syncSubscriptionByMollieId };
 
 type WebhookProcessingResult = {
   customerId: string | null;
@@ -215,129 +208,6 @@ export async function syncPaymentLinkByMollieId(
     ...latestResult,
     paymentLinkId: localPaymentLinkId,
   } satisfies WebhookProcessingResult;
-}
-
-export async function syncSubscriptionByLocalId(
-  localSubscriptionId: string,
-  options?: {
-    actor?: SyncActor;
-    reconciliationMode?: ReconciliationMode;
-    strictMode?: boolean;
-  },
-) {
-  const actor = options?.actor ?? {
-    kind: "system" as const,
-  };
-  const reconciliationMode = options?.reconciliationMode ?? "full";
-  const localSubscription = await getManagedSubscription(localSubscriptionId);
-
-  if (!localSubscription?.mollieSubscriptionId || !localSubscription.customerMollieId) {
-    throw new Error("Subscription is not linked to Mollie.");
-  }
-
-  const { subscription, payments } = await findSubscriptionAcrossModes(
-    localSubscription.mollieSubscriptionId,
-    localSubscription.customerMollieId,
-    localSubscription.mode,
-    options?.strictMode,
-  );
-  const resolvedSubscriptionId = localSubscription.id;
-  let normalizedFirstPayments: { id: string; isPaid: boolean }[] = [];
-  let persistedPayments: { localPaymentId: string; payment: Payment }[] = [];
-
-  await transaction(async (client) => {
-    const localCustomer = {
-      id: localSubscription.customerId,
-      mollieCustomerId: localSubscription.customerMollieId,
-      mode: localSubscription.mode,
-    } satisfies SyncResourceCustomerLink;
-    const mandateIdMap = await upsertMandatesForCustomer(client, localCustomer);
-    const localMandateId =
-      (subscription.mandateId
-        ? mandateIdMap.get(subscription.mandateId) ?? null
-        : null) ??
-      (await findLocalMandateId(localSubscription.mode, subscription.mandateId, client));
-    const persistedSubscription = await persistSyncedSubscriptionPayments(client, {
-      actor,
-      localMandateId,
-      localSubscription,
-      payments,
-      resolvePaymentMandateId: async (paymentMandateId) =>
-        (paymentMandateId ? mandateIdMap.get(paymentMandateId) ?? null : null) ??
-        (await findLocalMandateId(
-          localSubscription.mode,
-          paymentMandateId ?? undefined,
-          client,
-        )),
-      subscription,
-    });
-    normalizedFirstPayments = persistedSubscription.normalizedFirstPayments;
-    persistedPayments = persistedSubscription.persistedPayments;
-  });
-
-  for (const persistedPayment of persistedPayments) {
-    await handlePaymentAlerts({
-      customerId: localSubscription.customerId,
-      localPaymentId: persistedPayment.localPaymentId,
-      payment: persistedPayment.payment,
-      subscriptionId: localSubscription.id,
-    });
-  }
-
-  for (const firstPayment of normalizedFirstPayments) {
-    await runFirstPaymentInvoiceSyncFollowUp({
-      actor,
-      failureSummary:
-        "Automatic first-payment invoice create skipped or failed after subscription sync.",
-      isPaid: firstPayment.isPaid,
-      mode: localSubscription.mode,
-      paymentId: firstPayment.id,
-      reconciliationMode,
-    });
-  }
-
-  await handleSubscriptionAlerts({
-    customerId: localSubscription.customerId,
-    localStatus: mapSubscriptionLifecycle(subscription.status),
-    localSubscriptionId: resolvedSubscriptionId,
-  });
-
-  return {
-    customerId: localSubscription.customerId,
-    paymentId: null,
-    paymentLinkId: null,
-    subscriptionId: resolvedSubscriptionId,
-  } satisfies WebhookProcessingResult;
-}
-
-export async function syncSubscriptionByMollieId(
-  mollieSubscriptionId: string,
-  options?: {
-    actor?: SyncActor;
-    preferredMode?: MollieMode;
-    strictMode?: boolean;
-  },
-) {
-  const localSubscription =
-    (options?.preferredMode
-      ? await getManagedSubscriptionByMollieId(
-          options.preferredMode,
-          mollieSubscriptionId,
-        )
-      : null) ??
-    (options?.strictMode
-      ? null
-      : ((await getManagedSubscriptionByMollieId("live", mollieSubscriptionId)) ??
-        (await getManagedSubscriptionByMollieId("test", mollieSubscriptionId))));
-
-  if (!localSubscription) {
-    throw new Error("Subscription was not found locally.");
-  }
-
-  return syncSubscriptionByLocalId(localSubscription.id, {
-    actor: options?.actor,
-    strictMode: options?.strictMode,
-  });
 }
 
 export async function reconcileOperationalData(input?: {

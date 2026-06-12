@@ -5,15 +5,21 @@ import { describe, it } from "node:test";
 
 describe("subscription sync persistence module boundary", () => {
   it("moves subscription row persistence out of the sync orchestrator", () => {
-    const syncSource = readFileSync(resolve("lib/reliability/sync.ts"), "utf8");
+    const operationsSource = readFileSync(
+      resolve("lib/reliability/subscription-sync-operations.ts"),
+      "utf8",
+    );
     const persistenceSource = readFileSync(
       resolve("lib/reliability/subscription-sync-persistence.ts"),
       "utf8",
     );
 
-    assert.match(syncSource, /@\/lib\/reliability\/subscription-sync-persistence/);
-    assert.doesNotMatch(syncSource, /update subscriptions/);
-    assert.doesNotMatch(syncSource, /upsertRecurringBillingScheduleForSubscription/);
+    assert.match(
+      operationsSource,
+      /@\/lib\/reliability\/subscription-sync-persistence/,
+    );
+    assert.doesNotMatch(operationsSource, /update subscriptions/);
+    assert.doesNotMatch(operationsSource, /upsertRecurringBillingScheduleForSubscription/);
     assert.match(persistenceSource, /update subscriptions/);
     assert.match(persistenceSource, /upsertRecurringBillingScheduleForSubscription/);
     assert.match(persistenceSource, /subscription\.sync/);
