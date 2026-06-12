@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect, unstable_rethrow } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 
@@ -12,41 +12,15 @@ import { transaction } from "@/lib/db";
 import { getMollieClient } from "@/lib/mollie/client";
 import { syncSubscriptionByLocalId } from "@/lib/reliability/sync";
 import { getManagedSubscription } from "@/lib/reliability/sync-resource-state";
+import {
+  redirectWithMessage,
+  serializeError,
+} from "@/lib/operations/action-helpers";
 
 const manageSubscriptionSchema = z.object({
   returnTo: z.string().trim().startsWith("/").default("/customers"),
   subscriptionId: z.string().uuid(),
 });
-
-function buildPath(pathname: string, params?: URLSearchParams) {
-  const search = params?.toString();
-  return search ? `${pathname}?${search}` : pathname;
-}
-
-function redirectWithMessage(
-  pathname: string,
-  options: { error?: string; notice?: string },
-): never {
-  const params = new URLSearchParams();
-
-  if (options.notice) {
-    params.set("notice", options.notice);
-  }
-
-  if (options.error) {
-    params.set("error", options.error);
-  }
-
-  redirect(buildPath(pathname, params));
-}
-
-function serializeError(error: unknown) {
-  if (error instanceof Error) {
-    return error.message.slice(0, 180);
-  }
-
-  return "Something went wrong while talking to Mollie.";
-}
 
 export async function syncSubscriptionAction(formData: FormData) {
   const parsed = manageSubscriptionSchema.safeParse({
