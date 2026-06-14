@@ -14,11 +14,11 @@ import { toCustomerRelationFields } from "@/lib/onboarding/customer-relation-fie
 import { getMollieClient } from "@/lib/mollie/client";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
 import { buildConsentLinkCreatedNotice } from "@/lib/onboarding/consent-link";
-import {
-  resolveCustomerArchiveBlocker,
-  resolveCustomerRestoreBlocker,
-} from "@/lib/onboarding/customer-archive-policy";
 import { repairCustomerBillingState as repairCustomerBillingStateImpl } from "@/lib/onboarding/customer-billing-repair";
+import {
+  archiveCustomerRecord,
+  restoreCustomerRecord,
+} from "@/lib/onboarding/customer-archive-flow";
 import { updateActionPath } from "@/lib/onboarding/action-path";
 import { getCustomerDetail } from "@/lib/onboarding/data";
 import { resolveFirstPaymentCreationBlocker } from "@/lib/onboarding/first-payment-blocker";
@@ -111,58 +111,30 @@ export async function archiveCustomerAction(formData: FormData) {
 
   const session = await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
-  const detail = await getCustomerDetail(parsed.data.customerId, selectedMode);
   const returnTo = updateActionPath(parsed.data.returnTo, {
     focus: null,
   });
+  const result = await archiveCustomerRecord({
+    actor: {
+      email: session.user.email ?? null,
+      kind: "user",
+    },
+    customerId: parsed.data.customerId,
+    mode: selectedMode,
+  });
 
-  if (!detail) {
+  if (result.status === "not_found") {
     redirectWithMessage(returnTo, {
       error: "Customer not found in the selected Mollie mode.",
     });
   }
 
-  const archiveBlocker = resolveCustomerArchiveBlocker({
-    archivedAt: detail.customer.archivedAt,
-    subscriptions: detail.subscriptions,
-  });
-
-  if (archiveBlocker) {
+  if (result.status === "blocked") {
     redirectWithMessage(returnTo, {
-      error: archiveBlocker.kind === "error" ? archiveBlocker.message : undefined,
-      notice: archiveBlocker.kind === "notice" ? archiveBlocker.message : undefined,
+      error: result.kind === "error" ? result.message : undefined,
+      notice: result.kind === "notice" ? result.message : undefined,
     });
   }
-
-  await transaction(async (client) => {
-    await client.execute(sql`
-        update customers
-        set archived_at = now(), updated_at = now()
-        where id = ${detail.customer.id}
-          and mode = ${selectedMode}
-          and archived_at is null
-      `);
-
-    await writeAuditLog(
-      {
-        action: "customer.archive",
-        details: {
-          localCustomerId: detail.customer.id,
-          mollieCustomerId: detail.customer.mollieCustomerId,
-        },
-        entityId: detail.customer.id,
-        entityType: "customer",
-        mode: selectedMode,
-        outcome: "success",
-        summary: "Archived local customer record.",
-      },
-      client,
-      {
-        email: session.user.email ?? null,
-        kind: "user",
-      },
-    );
-  });
 
   revalidatePath("/");
   revalidatePath("/customers");
@@ -187,55 +159,30 @@ export async function restoreCustomerAction(formData: FormData) {
 
   const session = await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
-  const detail = await getCustomerDetail(parsed.data.customerId, selectedMode);
   const returnTo = updateActionPath(parsed.data.returnTo, {
     focus: parsed.data.customerId,
     view: null,
   });
+  const result = await restoreCustomerRecord({
+    actor: {
+      email: session.user.email ?? null,
+      kind: "user",
+    },
+    customerId: parsed.data.customerId,
+    mode: selectedMode,
+  });
 
-  if (!detail) {
+  if (result.status === "not_found") {
     redirectWithMessage(returnTo, {
       error: "Customer not found in the selected Mollie mode.",
     });
   }
 
-  const restoreBlocker = resolveCustomerRestoreBlocker(detail.customer.archivedAt);
-
-  if (restoreBlocker) {
+  if (result.status === "blocked") {
     redirectWithMessage(returnTo, {
-      notice: restoreBlocker.message,
+      notice: result.message,
     });
   }
-
-  await transaction(async (client) => {
-    await client.execute(sql`
-        update customers
-        set archived_at = null, updated_at = now()
-        where id = ${detail.customer.id}
-          and mode = ${selectedMode}
-          and archived_at is not null
-      `);
-
-    await writeAuditLog(
-      {
-        action: "customer.restore",
-        details: {
-          localCustomerId: detail.customer.id,
-          mollieCustomerId: detail.customer.mollieCustomerId,
-        },
-        entityId: detail.customer.id,
-        entityType: "customer",
-        mode: selectedMode,
-        outcome: "success",
-        summary: "Restored archived local customer record.",
-      },
-      client,
-      {
-        email: session.user.email ?? null,
-        kind: "user",
-      },
-    );
-  });
 
   revalidatePath("/");
   revalidatePath("/customers");
