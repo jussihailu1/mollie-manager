@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
 import { sql } from "drizzle-orm";
-import { Locale } from "@mollie/api-client";
 import { z } from "zod";
 
 import { writeAuditLog } from "@/lib/audit";
@@ -11,7 +10,6 @@ import { requireViewerSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { transaction } from "@/lib/db";
 import { toCustomerRelationFields } from "@/lib/onboarding/customer-relation-fields";
-import { getMollieClient } from "@/lib/mollie/client";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
 import { buildConsentLinkCreatedNotice } from "@/lib/onboarding/consent-link";
 import { repairCustomerBillingState as repairCustomerBillingStateImpl } from "@/lib/onboarding/customer-billing-repair";
@@ -19,6 +17,7 @@ import {
   archiveCustomerRecord,
   restoreCustomerRecord,
 } from "@/lib/onboarding/customer-archive-flow";
+import { createCustomerFlow } from "@/lib/onboarding/customer-creation-flow";
 import { updateActionPath } from "@/lib/onboarding/action-path";
 import { getCustomerDetail } from "@/lib/onboarding/data";
 import { resolveFirstPaymentCreationBlocker } from "@/lib/onboarding/first-payment-blocker";
@@ -215,112 +214,21 @@ export async function createCustomerAction(formData: FormData) {
   await requireViewerSession();
 
   try {
-    const localCustomerId = crypto.randomUUID();
     const selectedMode = await getSelectedMollieMode();
-    const relationFields = toCustomerRelationFields(parsed.data);
-    const relationIdToLink =
-      parsed.data.source === "eboekhouden"
-        ? parsed.data.eboekhoudenRelationId
-        : undefined;
-
-    if (relationIdToLink) {
-      await assertRelationIsAvailable(relationIdToLink, selectedMode);
-    }
-
-    const linkedRelation =
-      relationIdToLink
-        ? await updateRelationFromLocalFields(relationIdToLink, relationFields)
-        : null;
-
-    const mollie = getMollieClient(selectedMode);
-    const createdCustomer = await mollie.customers.create({
-      email: parsed.data.email,
-      idempotencyKey: crypto.randomUUID(),
-      locale: Locale.nl_NL,
-      metadata: {
-        address: parsed.data.address ?? null,
-        businessName: parsed.data.businessName,
-        contactName: parsed.data.contactName,
-        localCustomerId,
-        phone: parsed.data.phone ?? null,
-      },
-      name: parsed.data.businessName,
-    });
-
-    await transaction(async (client) => {
-      await client.execute(sql`
-          insert into customers (
-            id,
-            mode,
-            mollie_customer_id,
-            eboekhouden_relation_id,
-            eboekhouden_relation_code,
-            eboekhouden_link_status,
-            eboekhouden_synced_at,
-            eboekhouden_relation_snapshot,
-            full_name,
-            email,
-            locale,
-            notes,
-            metadata,
-            created_at,
-            updated_at,
-            last_synced_at
-          ) values (
-            ${localCustomerId},
-            ${selectedMode},
-            ${createdCustomer.id},
-            ${linkedRelation?.id ?? null},
-            ${linkedRelation?.code ?? null},
-            ${linkedRelation ? "linked" : "unlinked"}::eboekhouden_link_status,
-            ${linkedRelation ? sql`now()` : null},
-            ${JSON.stringify(linkedRelation ?? {})}::jsonb,
-            ${parsed.data.businessName},
-            ${parsed.data.email},
-            ${createdCustomer.locale ?? "nl_NL"},
-            ${parsed.data.notes ?? null},
-            ${JSON.stringify({
-              address: parsed.data.address ?? null,
-              businessName: parsed.data.businessName,
-              contactName: parsed.data.contactName,
-              mollieCreatedAt: createdCustomer.createdAt,
-              phone: parsed.data.phone ?? null,
-            })}::jsonb,
-            now(),
-            now(),
-            now()
-          )
-        `);
-
-      await writeAuditLog(
-        {
-          action: linkedRelation ? "customer.create_from_eboekhouden" : "customer.create",
-          details: {
-            eboekhoudenRelationId: linkedRelation?.id ?? null,
-            localCustomerId,
-            mollieCustomerId: createdCustomer.id,
-          },
-          entityId: localCustomerId,
-          entityType: "customer",
-          mode: selectedMode,
-          outcome: "success",
-          summary: linkedRelation
-            ? "Imported an e-Boekhouden relation, created a Mollie customer, and stored the local bridge."
-            : "Created customer in Mollie and stored it locally.",
-        },
-        client,
-      );
+    const result = await createCustomerFlow({
+      input: parsed.data,
+      mode: selectedMode,
     });
 
     const returnTo = updateActionPath(parsed.data.returnTo, {
-      focus: localCustomerId,
+      focus: result.localCustomerId,
     });
 
     revalidatePath("/");
     revalidatePath("/customers");
     revalidatePath("/payments");
     redirectWithMessage(returnTo, {
-      notice: linkedRelation
+      notice: result.linkedRelation
         ? "Customer imported from e-Boekhouden. You can now generate the first payment link."
         : "Customer created as unlinked from e-Boekhouden. You can now generate the first payment link.",
     });
