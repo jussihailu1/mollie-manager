@@ -251,6 +251,7 @@ Progress:
 - customer archive/restore decision policy now lives in [lib/onboarding/customer-archive-policy.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/customer-archive-policy.ts>) with focused node coverage
 - customer archive/restore state-change orchestration now lives in [lib/onboarding/customer-archive-flow.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/customer-archive-flow.ts>) with focused node coverage
 - customer create/import orchestration now lives in [lib/onboarding/customer-creation-flow.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/customer-creation-flow.ts>) with focused node coverage
+- customer relation-link orchestration now lives in [lib/onboarding/customer-relation-link-flow.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/customer-relation-link-flow.ts>) with focused node coverage
 - payment-link sync status, amount fallback, and metadata mapping now live in [lib/reliability/payment-link-sync-record.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/payment-link-sync-record.ts>) with focused node coverage
 - payment sync classification, chargeback detection, review timestamping, and metadata mapping now live in [lib/reliability/payment-sync-record.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/payment-sync-record.ts>) with focused node coverage
 - payment and subscription alert side effects now live in [lib/reliability/sync-alerts.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/sync-alerts.ts>) so sync orchestration no longer owns alert delivery details
@@ -264,6 +265,7 @@ Progress:
 - first-payment invoice retry queue and retry summary logic now live in [lib/eboekhouden/first-payment-invoice-retry.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/eboekhouden/first-payment-invoice-retry.ts>) with focused node coverage
 - first-payment onboarding record mapping now lives in [lib/onboarding/first-payment-onboarding-records.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/first-payment-onboarding-records.ts>) with focused node coverage
 - first-payment onboarding workflow orchestration now lives in [lib/onboarding/first-payment-onboarding-flow.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/first-payment-onboarding-flow.ts>) with focused node coverage
+- first-payment action guard and kickoff orchestration now live in [lib/onboarding/first-payment-action-flow.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/first-payment-action-flow.ts>) with focused node coverage
 - recurring invoice query filtering now lives in [lib/eboekhouden/recurring-invoice-query.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/eboekhouden/recurring-invoice-query.ts>) with focused node coverage
 - recurring invoice candidate lookup now lives in [lib/eboekhouden/recurring-invoice-candidate.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/eboekhouden/recurring-invoice-candidate.ts>) with focused node coverage
 - subscription activation result messaging now lives in [lib/onboarding/subscription-activation-result.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/onboarding/subscription-activation-result.ts>) with focused node coverage
@@ -499,6 +501,18 @@ Suggested work:
 - extract pure decision helpers from large orchestration files
 - add integration tests for onboarding, webhook sync, invoice creation, and delivery retry
 - reduce JSONB metadata dependence where fields deserve first-class schema columns
+
+Residual scope:
+
+- `lib/reliability/sync.ts` remains the main cross-resource sync orchestrator and should be reduced further only if the next extraction leaves it meaningfully smaller or clearer
+- `lib/eboekhouden/recurring-invoices.ts` still mixes batch queue, retry, recovery, and summary orchestration and is the main remaining invoice-side wrapper candidate
+- `lib/onboarding/actions.ts` is now substantially reduced and should only receive more extraction work if a remaining action stops being a thin wrapper again
+
+Exit criteria for closing this track:
+
+- remaining large files are either reduced further or explicitly accepted as orchestration-only wrappers
+- no active billing/onboarding path still mixes policy, persistence, and third-party side effects in one large action/module by default
+- retention/compliance prep becomes the next active engineering track
 
 ### Active: Retention And Compliance Prep
 

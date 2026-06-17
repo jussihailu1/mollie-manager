@@ -3,14 +3,19 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 const actionsSource = readFileSync("lib/onboarding/actions.ts", "utf8");
+const actionFlowSource = readFileSync(
+  "lib/onboarding/first-payment-action-flow.ts",
+  "utf8",
+);
 const flowSource = readFileSync(
   "lib/onboarding/first-payment-onboarding-flow.ts",
   "utf8",
 );
 
 describe("first-payment onboarding flow module boundary", () => {
-  it("moves first-payment onboarding orchestration out of the main actions file", () => {
-    assert.match(actionsSource, /@\/lib\/onboarding\/first-payment-onboarding-flow/);
+  it("moves first-payment onboarding orchestration behind dedicated flow modules", () => {
+    assert.match(actionsSource, /@\/lib\/onboarding\/first-payment-action-flow/);
+    assert.match(actionFlowSource, /@\/lib\/onboarding\/first-payment-onboarding-flow/);
     assert.match(flowSource, /buildFirstPaymentPlan/);
     assert.match(flowSource, /buildFirstPaymentOnboardingRecords/);
     assert.match(flowSource, /persistFirstPaymentOnboardingRecords/);
@@ -19,5 +24,6 @@ describe("first-payment onboarding flow module boundary", () => {
     assert.doesNotMatch(actionsSource, /buildFirstPaymentOnboardingRecords/);
     assert.doesNotMatch(actionsSource, /persistFirstPaymentOnboardingRecords/);
     assert.doesNotMatch(actionsSource, /paymentLinks\.create/);
+    assert.doesNotMatch(actionsSource, /createFirstPaymentOnboardingFlow/);
   });
 });

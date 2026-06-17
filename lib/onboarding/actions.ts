@@ -2,14 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
-import { sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { writeAuditLog } from "@/lib/audit";
 import { requireViewerSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
-import { transaction } from "@/lib/db";
-import { toCustomerRelationFields } from "@/lib/onboarding/customer-relation-fields";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
 import { buildConsentLinkCreatedNotice } from "@/lib/onboarding/consent-link";
 import { repairCustomerBillingState as repairCustomerBillingStateImpl } from "@/lib/onboarding/customer-billing-repair";
@@ -18,18 +14,15 @@ import {
   restoreCustomerRecord,
 } from "@/lib/onboarding/customer-archive-flow";
 import { createCustomerFlow } from "@/lib/onboarding/customer-creation-flow";
+import { linkCustomerToEboekhoudenRelation } from "@/lib/onboarding/customer-relation-link-flow";
+import { createFirstPaymentActionFlow } from "@/lib/onboarding/first-payment-action-flow";
 import { updateActionPath } from "@/lib/onboarding/action-path";
-import { getCustomerDetail } from "@/lib/onboarding/data";
-import { resolveFirstPaymentCreationBlocker } from "@/lib/onboarding/first-payment-blocker";
 import { describeSubscriptionActivationResult } from "@/lib/onboarding/subscription-activation-result";
-import { createFirstPaymentOnboardingFlow } from "@/lib/onboarding/first-payment-onboarding-flow";
 import {
-  assertRelationIsAvailable,
-  getLocalCustomer,
   redirectWithMessage,
   serializeError,
   serializeIntegrationError,
-  updateRelationFromLocalFields,
+  getLocalCustomer,
 } from "@/lib/onboarding/action-helpers";
 export const repairCustomerBillingState = repairCustomerBillingStateImpl;
 
@@ -279,61 +272,22 @@ export async function linkEboekhoudenRelationAction(formData: FormData) {
   }
 
   try {
-    await assertRelationIsAvailable(
-      parsed.data.eboekhoudenRelationId,
-      selectedMode,
-      customer.id,
-    );
-
-    const relationFields = toCustomerRelationFields(parsed.data);
-    const linkedRelation = await updateRelationFromLocalFields(
-      parsed.data.eboekhoudenRelationId,
-      relationFields,
-    );
-
-    await transaction(async (client) => {
-      await client.execute(sql`
-          update customers
-          set
-            eboekhouden_relation_id = ${linkedRelation.id},
-            eboekhouden_relation_code = ${linkedRelation.code ?? null},
-            eboekhouden_link_status = 'linked',
-            eboekhouden_synced_at = now(),
-            eboekhouden_relation_snapshot = ${JSON.stringify(linkedRelation)}::jsonb,
-            full_name = ${parsed.data.businessName},
-            email = ${parsed.data.email},
-            notes = ${parsed.data.notes ?? null},
-            metadata = metadata || ${JSON.stringify({
-              address: parsed.data.address ?? null,
-              businessName: parsed.data.businessName,
-              contactName: parsed.data.contactName,
-              phone: parsed.data.phone ?? null,
-            })}::jsonb,
-            updated_at = now(),
-            last_synced_at = now()
-          where id = ${customer.id}
-            and mode = ${selectedMode}
-        `);
-
-      await writeAuditLog(
-        {
-          action: "customer.eboekhouden.link",
-          details: {
-            eboekhoudenRelationId: linkedRelation.id,
-            localCustomerId: customer.id,
-          },
-          entityId: customer.id,
-          entityType: "customer",
-          mode: selectedMode,
-          outcome: "success",
-          summary: "Linked local customer to an e-Boekhouden relation.",
-        },
-        client,
-        {
-          email: session.user.email ?? null,
-          kind: "user",
-        },
-      );
+    await linkCustomerToEboekhoudenRelation({
+      actor: {
+        email: session.user.email ?? null,
+        kind: "user",
+      },
+      customerId: customer.id,
+      fields: {
+        address: parsed.data.address,
+        businessName: parsed.data.businessName,
+        contactName: parsed.data.contactName,
+        email: parsed.data.email,
+        eboekhoudenRelationId: parsed.data.eboekhoudenRelationId,
+        notes: parsed.data.notes,
+        phone: parsed.data.phone,
+      },
+      mode: selectedMode,
     });
 
     revalidatePath("/");
@@ -373,47 +327,18 @@ export async function createFirstPaymentAction(formData: FormData) {
   const session = await requireViewerSession();
 
   const selectedMode = await getSelectedMollieMode();
-  const customer = await getLocalCustomer(parsed.data.customerId, selectedMode);
   const returnTo = updateActionPath(parsed.data.returnTo, {
     focus: parsed.data.customerId,
   });
 
-  if (!customer || !customer.mollieCustomerId) {
-    redirectWithMessage("/customers", {
-      error: "Customer not found in the selected Mollie mode or not linked to Mollie.",
-    });
-  }
-
-  if (customer.archivedAt) {
-    redirectWithMessage(returnTo, {
-      error: "Restore this customer before creating a payment link.",
-    });
-  }
-
-  const mollieCustomerId = customer.mollieCustomerId;
-
-  const detail = await getCustomerDetail(customer.id, selectedMode);
-  const firstPaymentBlocker = resolveFirstPaymentCreationBlocker({
-    paymentLinks: detail?.paymentLinks ?? [],
-    payments: detail?.payments ?? [],
-  });
-
-  if (firstPaymentBlocker) {
-    redirectWithMessage(returnTo, {
-      error: firstPaymentBlocker,
-    });
-  }
-
   try {
-    await createFirstPaymentOnboardingFlow({
+    const result = await createFirstPaymentActionFlow({
       actor: {
         email: session.user.email ?? null,
         kind: "user",
       },
-      customer: {
-        id: customer.id,
-        mollieCustomerId: mollieCustomerId,
-      },
+      customerId: parsed.data.customerId,
+      mode: selectedMode,
       planInput: {
         firstPaymentMode: parsed.data.firstPaymentMode,
         serviceEndAt: parsed.data.serviceEndAt,
@@ -424,8 +349,25 @@ export async function createFirstPaymentAction(formData: FormData) {
         subscriptionTermMode: parsed.data.subscriptionTermMode,
         totalPayments: parsed.data.totalPayments,
       },
-      selectedMode,
     });
+
+    if (result.status === "not_found_or_unlinked") {
+      redirectWithMessage("/customers", {
+        error: "Customer not found in the selected Mollie mode or not linked to Mollie.",
+      });
+    }
+
+    if (result.status === "archived") {
+      redirectWithMessage(returnTo, {
+        error: "Restore this customer before creating a payment link.",
+      });
+    }
+
+    if (result.status === "blocked") {
+      redirectWithMessage(returnTo, {
+        error: result.reason,
+      });
+    }
 
     revalidatePath("/");
     revalidatePath("/customers");
