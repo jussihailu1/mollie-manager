@@ -6,7 +6,10 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { writeAuditLog } from "@/lib/audit";
-import { requireViewerSession } from "@/lib/auth/session";
+import {
+  requireAdvancedOperationsSession,
+  requireViewerSession,
+} from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { getDb, transaction } from "@/lib/db";
 import { env } from "@/lib/env";
@@ -186,7 +189,7 @@ export async function runReconciliationAction(formData: FormData) {
     });
   }
 
-  const session = await requireViewerSession();
+  const session = await requireAdvancedOperationsSession();
   const selectedMode = await getSelectedMollieMode();
 
   try {
@@ -234,7 +237,7 @@ export async function replayWebhookEventAction(formData: FormData) {
     });
   }
 
-  const session = await requireViewerSession();
+  const session = await requireAdvancedOperationsSession();
   const selectedMode = await getSelectedMollieMode();
 
   const result = await getDb().execute<StoredWebhookEvent>(sql`
@@ -354,7 +357,7 @@ export async function repairReliabilityTargetAction(formData: FormData) {
     });
   }
 
-  const session = await requireViewerSession();
+  const session = await requireAdvancedOperationsSession();
   const selectedMode = await getSelectedMollieMode();
 
   try {
@@ -400,7 +403,7 @@ export async function sendTestAlertAction(formData: FormData) {
     });
   }
 
-  const session = await requireViewerSession();
+  const session = await requireAdvancedOperationsSession();
   const selectedMode = await getSelectedMollieMode();
 
   if (!notificationsAreConfigured()) {

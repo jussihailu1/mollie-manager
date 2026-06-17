@@ -2,7 +2,7 @@ import { revalidatePath } from "next/cache";
 import { type NextRequest } from "next/server";
 import { z } from "zod";
 
-import { requireViewerSession } from "@/lib/auth/session";
+import { getViewerSession, hasAdvancedOperationsAccess } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import {
   repairReliabilityTarget,
@@ -30,7 +30,16 @@ async function revalidateDashboardPaths() {
 }
 
 export async function POST(request: NextRequest) {
-  await requireViewerSession();
+  const session = await getViewerSession();
+
+  if (!session?.user?.email || !hasAdvancedOperationsAccess(session)) {
+    return Response.json(
+      {
+        error: "Advanced operations access is required.",
+      },
+      { status: 403 },
+    );
+  }
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const parsed = repairSchema.safeParse(body);
@@ -48,6 +57,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const actor = {
+      email: session.user.email ?? null,
       kind: "user" as const,
     };
 

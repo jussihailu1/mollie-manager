@@ -21,12 +21,34 @@ describe("ops surface hardening", () => {
     assert.match(source, /Operations overview/);
     assert.match(
       source,
-      /Shared reliability snapshot for \/settings and authenticated \/api\/health/,
+      /Shared reliability snapshot for \/settings and advanced \/api\/health/,
     );
     assert.match(source, /Open authenticated diagnostics/);
     assert.match(source, /Failed webhook replay queue/);
     assert.match(source, /replayWebhookEventAction/);
     assert.match(source, /confirmMessage=\{`Replay failed/);
+  });
+
+  it("gates deep settings operations behind advanced access", () => {
+    const settingsSource = readFileSync(
+      resolve("app/(dashboard)/settings/page.tsx"),
+      "utf8",
+    );
+    const reliabilityActionsSource = readFileSync(
+      resolve("lib/reliability/actions.ts"),
+      "utf8",
+    );
+    const billingActionsSource = readFileSync(
+      resolve("lib/billing-actions.ts"),
+      "utf8",
+    );
+    const authSource = readFileSync(resolve("lib/auth/session.ts"), "utf8");
+
+    assert.match(settingsSource, /hasAdvancedOperationsAccess/);
+    assert.match(settingsSource, /Advanced operations access required/);
+    assert.match(reliabilityActionsSource, /requireAdvancedOperationsSession/);
+    assert.match(billingActionsSource, /requireAdvancedOperationsSession/);
+    assert.match(authSource, /hasAdvancedOperationsAccess/);
   });
 
   it("defaults operator reconciliation to sync-only mode", () => {

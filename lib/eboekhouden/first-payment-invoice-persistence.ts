@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 
 import { writeAuditLog } from "@/lib/audit";
-import { getDb, transaction, type DbClient } from "@/lib/db";
+import { getDb, transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { openAlert } from "@/lib/reliability/alerts";
 import {

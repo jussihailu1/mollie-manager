@@ -42,6 +42,10 @@ import {
 } from "@/lib/reliability/reconciliation-summary";
 import { FormActionButton } from "@/components/form-action-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  hasAdvancedOperationsAccess,
+  requireViewerSession,
+} from "@/lib/auth/session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -124,6 +128,49 @@ export default async function SettingsPage({
   const reconciliationSummary = parseReconciliationSummary(
     getSingleSearchParam(resolvedSearchParams.reconciliationSummary),
   );
+  const session = await requireViewerSession();
+  const canManageAdvancedOperations = hasAdvancedOperationsAccess(session);
+
+  if (!canManageAdvancedOperations) {
+    return (
+      <div className="mx-auto max-w-6xl space-y-6 p-8">
+        {error ? (
+          <Alert variant="destructive">
+            <AlertTitle>Action failed</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {notice ? (
+          <Alert>
+            <AlertTitle>Updated</AlertTitle>
+            <AlertDescription>{notice}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Settings & Operations</h2>
+          <p className="mt-2 text-muted-foreground">
+            Advanced operations access is required for diagnostics, repair, replay,
+            reconciliation, SMTP tests, and invoice controls.
+          </p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Advanced operations access required</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Ask a developer or admin to add this account to AUTH_ADVANCED_EMAILS before
+              using technical operations controls.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const invoiceEmailOverrideTo = env.INVOICE_EMAIL_OVERRIDE_TO ?? null;
   const [billingSettings, selectedMode] = await Promise.all([
     ensureTenantBillingSettings(),
@@ -247,7 +294,7 @@ export default async function SettingsPage({
             <div className="space-y-1">
               <CardTitle className="text-lg">Operations overview</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Shared reliability snapshot for /settings and authenticated /api/health, plus webhook replay and recent repair activity.
+                Shared reliability snapshot for /settings and advanced /api/health diagnostics, plus webhook replay and recent repair activity.
               </p>
             </div>
             <Button asChild variant="outline">
@@ -321,7 +368,7 @@ export default async function SettingsPage({
           </div>
 
           <div className="rounded-xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-            This snapshot is the same one returned by authenticated <code>/api/health</code> diagnostics, so operators can read one set of reliability numbers in both places.
+            This snapshot is the same one returned by advanced <code>/api/health</code> diagnostics, so operators can read one set of reliability numbers in both places.
           </div>
 
           <div className="grid gap-6 xl:grid-cols-[1.4fr,1fr]">

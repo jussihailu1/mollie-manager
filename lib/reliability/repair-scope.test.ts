@@ -27,4 +27,15 @@ describe("repair surface scope", () => {
     assert.match(routeSource, /repairReliabilityTarget/);
     assert.match(helperSource, /export async function repairReliabilityTarget/);
   });
+
+  it("requires advanced access for repair API calls", () => {
+    const routeSource = readFileSync(
+      resolve("app/api/reliability/repair/route.ts"),
+      "utf8",
+    );
+
+    assert.match(routeSource, /hasAdvancedOperationsAccess/);
+    assert.match(routeSource, /Advanced operations access is required\./);
+    assert.match(routeSource, /status: 403/);
+  });
 });

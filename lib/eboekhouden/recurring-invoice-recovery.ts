@@ -23,11 +23,6 @@ export type RecurringInvoiceRecoveryCandidate = {
   subscriptionId: string;
 };
 
-type AlertResult = {
-  id: string;
-  isNew: boolean;
-};
-
 export async function listFailedRecurringRecoveryCandidates(
   mode: "live" | "test",
   limit: number,

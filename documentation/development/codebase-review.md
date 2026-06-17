@@ -2,7 +2,7 @@
 
 Status: active planning doc
 Audience: engineering and product
-Reviewed: 2026-06-04
+Reviewed: 2026-06-17
 
 ## Purpose
 
@@ -50,7 +50,7 @@ Implemented so far:
 - invoice PDF URLs are now trust-gated before operator display or email use, and attachment fetches now enforce redirect, timeout, and size controls
 - invoice attachment outcome is now surfaced in the payment drawer instead of being buried in raw metadata
 - helper and test coverage were added for the new consent-link utilities, the narrowed consent scope, the health-route visibility split, and the invoice PDF guardrails
-- authenticated operators can now open full `/api/health` diagnostics without cron bearer secrets, while public requests still get minimal liveness only
+- advanced operators can now open full `/api/health` diagnostics without cron bearer secrets, while public requests still get minimal liveness only
 - settings now includes a first-class ops overview with failed webhook replay controls and recent reliability activity
 - settings and authenticated `/api/health` now share the same reliability ops snapshot for webhook health, invoice automation, delivery retries, and cron heartbeat
 - settings now also surfaces a targeted repair form for single customer, payment, or subscription resyncs
@@ -72,7 +72,7 @@ Implemented so far:
 - settings reconciliation now exposes explicit `sync_only` versus `full` modes so operators can refresh Mollie state without automatically triggering invoice or activation follow-ups
 - the standalone Track A onboarding hardening plan has been retired; the remaining hardening work now lives in the active docs below
 - product scope has been narrowed so subscriptions stay inside customer workflows and payment links stay inside onboarding instead of becoming standalone workspaces
-- deep technical settings controls remain acceptable for developer-operated use, but should be moved behind advanced/developer/admin-only access before the product is offered as a service to other users
+- deep technical settings controls are now gated behind advanced/developer/admin-only access with `AUTH_ADVANCED_EMAILS`
 - e-Boekhouden relation search no longer hydrates every list result with a detail request; full relation detail is fetched only after the operator selects one relation
 - the customer drawer now exposes protected customer-centered billing history for subscriptions, mandates, and payments
 
@@ -200,7 +200,7 @@ Why this was unhealthy:
 Recommended direction:
 
 - keep the public response minimal
-- keep the detailed reliability snapshot behind cron auth or operator auth
+- keep the detailed reliability snapshot behind cron auth or advanced operator auth
 - keep the settings ops surface aligned with the same diagnostics so operators do not need to rely on raw JSON or CLI first
 
 ### P2: Auth now fails closed on missing-secret misconfiguration
@@ -484,7 +484,7 @@ Status:
 - `/api/health` now separates public liveness from authenticated diagnostics
 - webhook URLs are secret-free and no longer persisted into generic metadata
 - settings exposes failed-only webhook replay, targeted repair, and explicit reconciliation modes
-- future service deployment should gate the deep technical settings surface behind advanced/developer/admin-only access instead of showing it to ordinary operators
+- the deep technical settings surface is gated behind `AUTH_ADVANCED_EMAILS`
 
 ### Completed: Module And Test Refactor
 

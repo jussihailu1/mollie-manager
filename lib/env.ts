@@ -46,6 +46,7 @@ const rawServerEnvSchema = z.object({
   AUTH_ALLOWED_EMAIL: optionalEmail,
   AUTH_GOOGLE_ID: optionalString,
   AUTH_GOOGLE_SECRET: optionalString,
+  AUTH_ADVANCED_EMAILS: optionalString,
   AUTH_TEST_BYPASS_ENABLED: optionalBoolean.default(false),
   AUTH_TEST_USER_EMAIL: optionalEmail.default("codex-test@example.local"),
   AUTH_TEST_USER_NAME: z

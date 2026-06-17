@@ -45,7 +45,7 @@ Canonical policy docs:
 - [x] Reliability and invoice automation health is unified across `/settings` and authenticated `/api/health`
   Status: both surfaces now share the same reliability ops snapshot for webhook health, invoice automation, delivery retries, and cron heartbeat; CLI scripts still remain as deeper fallbacks.
 - [x] Deep technical operations controls can remain in settings during developer-operated use
-  Status: this is acceptable while the developer is the operator. Before deploying the product as a service for other users, these controls should move behind an advanced/developer/admin-only surface or equivalent protected access.
+  Status: settings operations controls are now gated behind `AUTH_ADVANCED_EMAILS`; ordinary authenticated operators cannot open diagnostics, repair, replay, reconciliation, SMTP tests, or invoice controls.
 - [x] Detailed subscription, mandate, and payment history is surfaced in dense customer-centered operator views
   Status: the customer drawer now lazy-loads protected billing history and shows compact subscription, mandate, and payment rows without adding standalone subscription or payment-link workspaces.
 
@@ -68,8 +68,8 @@ Reference: `../development/codebase-review.md`
 
 - [x] Remove consent-token leakage from redirect notices, audit logs, and non-essential metadata while improving the operator share-link workflow
   Status: the hashed lookup-token follow-up is implemented. Canonical lookup uses a hash, operator link regeneration uses encrypted recovery, and a one-time backfill script removes legacy plaintext rows after the schema migration.
-- [x] Split public health/liveness from authenticated operator diagnostics and reduce operational detail exposed anonymously
-  Status: `/api/health` now returns minimal public liveness by default, while full diagnostics are available to cron bearer auth and authenticated operators; `/settings` now surfaces a clearer operator view over the same reliability signals.
+- [x] Split public health/liveness from advanced operator diagnostics and reduce operational detail exposed anonymously
+  Status: `/api/health` now returns minimal public liveness by default, while full diagnostics are available to cron bearer auth and advanced operators; `/settings` now surfaces a clearer operator view over the same reliability signals for advanced operators.
 - [x] Stop persisting secret-bearing webhook URLs into generic metadata and reduce secret sprawl
   Status: the metadata persistence path is gone, the payment drawer no longer exposes raw callback URLs, and newly generated Mollie webhook URLs are secret-free; webhook processing now requires managed local resource resolution.
 - [x] Harden invoice PDF fetch and attachment handling with trusted-host, timeout, and size controls
@@ -93,6 +93,6 @@ Reference: `../development/codebase-review.md`
 - e-Boekhouden stays the invoice and accounting source of truth.
 - `mandate_only` EUR 0.01 flows must not create normal subscription invoices.
 - Billing settings are accounting configuration, not subscription policy.
-- The current deep technical settings controls are acceptable for developer-operated use, but future SaaS/operator rollout should gate or hide them behind advanced, developer, or admin-only access.
+- Deep technical settings controls are gated behind `AUTH_ADVANCED_EMAILS`.
 - Consider existing packages for generic concerns when they clearly reduce risk or maintenance cost, but keep billing, consent, reconciliation, retry, and accounting policy explicit in local code.
 - Continue future policy work from `subscription-policy.md` and `recurring-billing-policy.md`, not from archived handoff notes.

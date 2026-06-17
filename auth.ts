@@ -3,6 +3,7 @@ import type { NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 
 import { env, getSetupStatus } from "@/lib/env";
+import { roleForEmail } from "@/lib/auth/permissions";
 
 const setupStatus = getSetupStatus();
 const authIsReady = setupStatus.auth.ready;
@@ -50,7 +51,7 @@ const authConfig = {
       }
 
       if (token.sub) {
-        token.role = "owner";
+        token.role = roleForEmail(typeof token.email === "string" ? token.email : null);
       }
 
       return token;
@@ -58,8 +59,8 @@ const authConfig = {
     async session({ session, token }) {
       if (session.user) {
         session.user.email = token.email ?? session.user.email;
-        session.user.id = token.sub ?? "owner";
-        session.user.role = "owner";
+        session.user.id = token.sub ?? "operator";
+        session.user.role = roleForEmail(session.user.email);
       }
 
       return session;

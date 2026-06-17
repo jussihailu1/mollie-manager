@@ -15,7 +15,7 @@ function getTestViewerSession() {
       id: "codex-test-owner",
       image: null,
       name: env.AUTH_TEST_USER_NAME,
-      role: "owner",
+      role: "developer",
     },
   } satisfies Session;
 }
@@ -33,6 +33,22 @@ export const requireViewerSession = cache(async () => {
 
   if (!session?.user?.email) {
     redirect("/login");
+  }
+
+  return session;
+});
+
+export function hasAdvancedOperationsAccess(
+  session: Pick<Session, "user"> | null | undefined,
+) {
+  return session?.user?.role === "developer";
+}
+
+export const requireAdvancedOperationsSession = cache(async () => {
+  const session = await requireViewerSession();
+
+  if (!hasAdvancedOperationsAccess(session)) {
+    redirect("/settings?error=Advanced%20operations%20access%20is%20required.");
   }
 
   return session;

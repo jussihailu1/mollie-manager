@@ -5,7 +5,7 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 import { writeAuditLog } from "@/lib/audit";
-import { requireViewerSession } from "@/lib/auth/session";
+import { requireAdvancedOperationsSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import {
   createDueFirstPaymentInvoicesBatch,
@@ -107,7 +107,7 @@ export async function updateBillingSettingsAction(formData: FormData) {
     });
   }
 
-  const session = await requireViewerSession();
+  const session = await requireAdvancedOperationsSession();
 
   try {
     const settings = await updateTenantBillingSettings({
@@ -160,7 +160,7 @@ export async function createDueRecurringInvoicesAction(formData: FormData) {
     });
   }
 
-  const session = await requireViewerSession();
+  const session = await requireAdvancedOperationsSession();
   const selectedMode = await getSelectedMollieMode();
 
   try {
@@ -243,7 +243,7 @@ export async function createDueFirstPaymentInvoicesAction(formData: FormData) {
     });
   }
 
-  const session = await requireViewerSession();
+  const session = await requireAdvancedOperationsSession();
   const selectedMode = await getSelectedMollieMode();
 
   try {
@@ -324,7 +324,7 @@ export async function queueFailedRecurringInvoiceRetriesAction(formData: FormDat
     });
   }
 
-  const session = await requireViewerSession();
+  const session = await requireAdvancedOperationsSession();
   const selectedMode = await getSelectedMollieMode();
 
   try {
@@ -398,7 +398,7 @@ export async function queueFailedFirstPaymentInvoiceRetriesAction(formData: Form
     });
   }
 
-  const session = await requireViewerSession();
+  const session = await requireAdvancedOperationsSession();
   const selectedMode = await getSelectedMollieMode();
 
   try {

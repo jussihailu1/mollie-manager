@@ -3,7 +3,7 @@ import { env, getSetupStatus, type MollieMode } from "@/lib/env";
 import { getAcceptedCronSecrets, isBearerAuthorized } from "@/lib/cron-auth";
 import { isMollieConfigured } from "@/lib/mollie/client";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
-import { getViewerSession } from "@/lib/auth/session";
+import { getViewerSession, hasAdvancedOperationsAccess } from "@/lib/auth/session";
 import { getReliabilityOpsSnapshot } from "@/lib/reliability/ops-snapshot";
 
 function resolveMode(request: Request): MollieMode {
@@ -26,7 +26,7 @@ async function isDiagnosticsAuthorized(request: Request) {
   }
 
   const session = await getViewerSession();
-  return Boolean(session?.user?.email);
+  return hasAdvancedOperationsAccess(session);
 }
 
 export async function GET(request: Request) {

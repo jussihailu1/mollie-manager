@@ -17,11 +17,6 @@ export type FirstPaymentInvoiceRecoveryCandidate = {
   subscriptionId: string | null;
 };
 
-type AlertResult = {
-  id: string;
-  isNew: boolean;
-};
-
 export async function listFailedFirstPaymentRecoveryCandidates(
   mode: "live" | "test",
   limit: number,
