@@ -281,6 +281,7 @@ Progress:
 - recurring invoice creation workflow now lives in [lib/eboekhouden/recurring-invoice-workflow.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/eboekhouden/recurring-invoice-workflow.ts>) with focused node coverage
 - recurring invoice creation persistence now lives in [lib/eboekhouden/recurring-invoice-persistence.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/eboekhouden/recurring-invoice-persistence.ts>) with focused node coverage
 - recurring failed-row recovery now lives in [lib/eboekhouden/recurring-invoice-recovery.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/eboekhouden/recurring-invoice-recovery.ts>) with focused node coverage
+- recurring invoice retry queue and retry summary logic now live in [lib/eboekhouden/recurring-invoice-retry.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/eboekhouden/recurring-invoice-retry.ts>) with focused node coverage
 - recurring failed-row recovery now has a dedicated module-boundary test so the main recurring invoice file stays orchestration-only
 - sync resource lookup and mandate upsert helpers now live in [lib/reliability/sync-resource-state.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/sync-resource-state.ts>) with focused node coverage
 - payment-link sync orchestration now lives in [lib/reliability/payment-link-sync.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/lib/reliability/payment-link-sync.ts>) with focused node coverage
@@ -485,7 +486,7 @@ Status:
 - settings exposes failed-only webhook replay, targeted repair, and explicit reconciliation modes
 - future service deployment should gate the deep technical settings surface behind advanced/developer/admin-only access instead of showing it to ordinary operators
 
-### Active: Module And Test Refactor
+### Completed: Module And Test Refactor
 
 Goals:
 
@@ -496,23 +497,12 @@ Feature overlap:
 
 - basically every planned billing/reliability feature
 
-Suggested work:
+Status:
 
-- extract pure decision helpers from large orchestration files
-- add integration tests for onboarding, webhook sync, invoice creation, and delivery retry
-- reduce JSONB metadata dependence where fields deserve first-class schema columns
-
-Residual scope:
-
-- `lib/reliability/sync.ts` remains the main cross-resource sync orchestrator and should be reduced further only if the next extraction leaves it meaningfully smaller or clearer
-- `lib/eboekhouden/recurring-invoices.ts` still mixes batch queue, retry, recovery, and summary orchestration and is the main remaining invoice-side wrapper candidate
-- `lib/onboarding/actions.ts` is now substantially reduced and should only receive more extraction work if a remaining action stops being a thin wrapper again
-
-Exit criteria for closing this track:
-
-- remaining large files are either reduced further or explicitly accepted as orchestration-only wrappers
-- no active billing/onboarding path still mixes policy, persistence, and third-party side effects in one large action/module by default
-- retention/compliance prep becomes the next active engineering track
+- core onboarding and invoice flows now route through dedicated policy, workflow, retry, persistence, and recovery modules with focused seam coverage
+- `lib/onboarding/actions.ts` has been reduced to mostly thin server-action wrappers
+- `lib/reliability/sync.ts` and `lib/eboekhouden/recurring-invoices.ts` remain as accepted orchestration wrappers rather than priority refactor targets
+- future changes should only reopen this track if those wrapper modules start re-accumulating mixed policy/persistence/third-party logic
 
 ### Active: Retention And Compliance Prep
 
@@ -543,14 +533,13 @@ Status:
 
 If the goal is best risk reduction with the least wasted effort, start in this order:
 
-1. Module and test refactor on consent, webhook sync, repair, and invoice flows
-2. Retention and compliance implementation plan
+1. Retention and compliance implementation plan
 
 Reasoning:
 
 - the broad product-surface questions are now intentionally resolved around the customer workspace
-- the remaining code risk is concentrated in large modules and incomplete executable coverage
-- retention work is meaningful, but less tied to immediate feature correctness than the billing and sync flow tests
+- the highest-value module-and-test refactor work has already been completed enough to stop being the lead track
+- retention work is now the clearer remaining gap
 
 ## Planning Rule
 

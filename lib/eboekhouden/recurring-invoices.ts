@@ -2,32 +2,28 @@ import "server-only";
 
 import { sql } from "drizzle-orm";
 
-import { writeAuditLog } from "@/lib/audit";
 import {
   billingSettingsAreComplete,
   getTenantBillingSettings,
 } from "@/lib/billing-settings";
 import { getDb } from "@/lib/db";
 import {
-  isSafeInvoiceRetryFailure,
-  SAFE_INVOICE_RETRY_FAILURE_CODES,
-} from "@/lib/eboekhouden/invoice-failure-retry";
-import {
   toInvoiceCount,
 } from "@/lib/eboekhouden/invoice-flow-helpers";
 import { buildRecurringInvoiceReference } from "@/lib/eboekhouden/invoice-reference";
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
-import { buildInvoiceRetryQueuedMetadata } from "@/lib/eboekhouden/invoice-retry-metadata";
 import {
   buildRecurringDueInvoiceFilter,
-  buildRecurringFailedInvoiceFilter,
 } from "@/lib/eboekhouden/recurring-invoice-query";
 import {
   type ScheduledInvoiceCandidate,
 } from "@/lib/eboekhouden/recurring-invoice-candidate";
-import { filterSafeFailedInvoiceRetryIds } from "@/lib/eboekhouden/invoice-retry-candidates";
-import { countSafeInvoiceRetryFailures } from "@/lib/eboekhouden/invoice-retry-summary";
 import { createEboekhoudenInvoiceForSchedule } from "@/lib/eboekhouden/recurring-invoice-workflow";
+import {
+  getFailedRecurringInvoiceRetrySummary,
+  queueRetryForFailedRecurringInvoicesBatch,
+  queueRetryForSafeFailedRecurringInvoicesBatch,
+} from "@/lib/eboekhouden/recurring-invoice-retry";
 import {
   listFailedRecurringRecoveryCandidates,
   storeRecoveredFailedInvoiceSuccess,
@@ -36,6 +32,11 @@ import { createInvoiceBatchWithDependencies } from "@/lib/invoice-creation-batch
 import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
 
 export { createEboekhoudenInvoiceForSchedule };
+export {
+  getFailedRecurringInvoiceRetrySummary,
+  queueRetryForFailedRecurringInvoicesBatch,
+  queueRetryForSafeFailedRecurringInvoicesBatch,
+};
 
 const DEFAULT_BATCH_SIZE = 25;
 type InvoiceActor = {
@@ -49,21 +50,11 @@ type DueRecurringInvoiceQueueSummary = {
   dueCount: number;
 };
 
-type FailedRecurringInvoiceRetrySummary = {
-  retryableCount: number;
-  totalFailedCount: number;
-};
-
 type RecurringInvoiceBatchResult = {
   actionableCount: number;
   createdCount: number;
   failedCount: number;
   remainingActionableCount: number;
-  skippedCount: number;
-};
-
-type FailedRecurringRetryBatchResult = {
-  queuedCount: number;
   skippedCount: number;
 };
 
@@ -125,149 +116,6 @@ export async function getDueRecurringInvoiceQueueSummary(
     blockedCount: toInvoiceCount(row?.blockedCount),
     dueCount: toInvoiceCount(row?.dueCount),
   };
-}
-
-export async function getFailedRecurringInvoiceRetrySummary(
-  mode: "live" | "test",
-): Promise<FailedRecurringInvoiceRetrySummary> {
-  const result = await getDb().execute<{
-    errorMessage: string | null;
-    scheduleId: string;
-  }>(sql`
-    select
-      rbs.id as "scheduleId",
-      (rbs.metadata ->> 'invoiceCreationError') as "errorMessage"
-    from recurring_billing_schedules rbs
-    where ${buildRecurringFailedInvoiceFilter(mode)}
-  `);
-
-  return countSafeInvoiceRetryFailures(result.rows);
-}
-
-export async function queueRetryForFailedRecurringInvoice(input: {
-  actor: InvoiceActor;
-  mode: "live" | "test";
-  scheduleId: string;
-}): Promise<"queued" | "skipped"> {
-  const candidate = await getDb().execute<{
-    errorMessage: string | null;
-    scheduleId: string;
-  }>(sql`
-    select
-      rbs.id as "scheduleId",
-      (rbs.metadata ->> 'invoiceCreationError') as "errorMessage"
-    from recurring_billing_schedules rbs
-    where rbs.id = ${input.scheduleId}
-      and ${buildRecurringFailedInvoiceFilter(input.mode)}
-    limit 1
-  `);
-  const row = candidate.rows[0];
-
-  if (!row || !isSafeInvoiceRetryFailure(row.errorMessage)) {
-    return "skipped";
-  }
-
-  const result = await getDb().execute<{ id: string }>(sql`
-    update recurring_billing_schedules rbs
-    set
-      invoice_state = 'pending_invoice',
-      invoice_failed_at = null,
-      metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(
-        buildInvoiceRetryQueuedMetadata({
-          actorEmail: input.actor.email,
-        }),
-      )}::jsonb,
-      updated_at = now()
-    where rbs.id = ${input.scheduleId}
-      and ${buildRecurringFailedInvoiceFilter(input.mode)}
-    returning id
-  `);
-
-  if (!result.rows[0]?.id) {
-    return "skipped";
-  }
-
-  await writeAuditLog(
-    {
-      action: "recurring_invoice.retry_queue",
-      details: {
-        allowedFailureCodes: SAFE_INVOICE_RETRY_FAILURE_CODES,
-        scheduleId: input.scheduleId,
-      },
-      entityId: input.scheduleId,
-      entityType: "recurring_billing_schedule",
-      mode: input.mode,
-      outcome: "success",
-      summary:
-        "Queued a controlled retry for a failed recurring invoice after safe failure-code check.",
-    },
-    undefined,
-    input.actor,
-  );
-
-  return "queued";
-}
-
-export async function queueRetryForFailedRecurringInvoicesBatch(input: {
-  actor: InvoiceActor;
-  mode: "live" | "test";
-  scheduleIds: string[];
-}): Promise<FailedRecurringRetryBatchResult> {
-  let queuedCount = 0;
-  let skippedCount = 0;
-
-  for (const scheduleId of input.scheduleIds) {
-    const status = await queueRetryForFailedRecurringInvoice({
-      actor: input.actor,
-      mode: input.mode,
-      scheduleId,
-    });
-
-    if (status === "queued") {
-      queuedCount += 1;
-      continue;
-    }
-
-    skippedCount += 1;
-  }
-
-  return {
-    queuedCount,
-    skippedCount,
-  };
-}
-
-export async function queueRetryForSafeFailedRecurringInvoicesBatch(input: {
-  actor: InvoiceActor;
-  limit?: number;
-  mode: "live" | "test";
-}) {
-  const failedRows = await getDb().execute<{
-    errorMessage: string | null;
-    id: string;
-  }>(sql`
-    select
-      rbs.id as id,
-      (rbs.metadata ->> 'invoiceCreationError') as "errorMessage"
-    from recurring_billing_schedules rbs
-    where ${buildRecurringFailedInvoiceFilter(input.mode)}
-    order by rbs.updated_at asc, rbs.created_at asc
-    limit ${Math.max(1, input.limit ?? DEFAULT_BATCH_SIZE)}
-  `);
-  const safeScheduleIds = filterSafeFailedInvoiceRetryIds(failedRows.rows);
-
-  if (safeScheduleIds.length === 0) {
-    return {
-      queuedCount: 0,
-      skippedCount: 0,
-    };
-  }
-
-  return queueRetryForFailedRecurringInvoicesBatch({
-    actor: input.actor,
-    mode: input.mode,
-    scheduleIds: safeScheduleIds,
-  });
 }
 
 export async function recoverFailedRecurringInvoicesBatch(input: {

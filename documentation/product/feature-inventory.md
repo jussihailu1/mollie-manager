@@ -76,8 +76,8 @@ Reference: `../development/codebase-review.md`
   Status: trusted e-Boekhouden-only URL handling, redirect/timeout/size controls, and payment-drawer attachment status are now in place; the remaining work is broader ops-surface visibility only if it proves necessary.
 - [x] Add integration coverage for consent, webhook sync, first-payment invoice creation, recurring invoice delivery retry, and repair flows
   Status: focused executable coverage now exists at the key flow seams: consent acceptance parsing and injected acceptance orchestration, webhook ingestion/status handling, invoice creation batch mapping, invoice delivery retry batch mapping, and targeted repair routing. A heavier DB-backed end-to-end harness remains optional future hardening rather than a current blocker.
-- [ ] Refactor oversized billing/orchestration modules into smaller policy, state-transition, and integration units
-  Status: narrowed. `lib/onboarding/actions.ts` has been reduced to mostly thin server-action wrappers after extracting customer archive/restore flow, customer create/import flow, customer relation-link flow, and first-payment kickoff flow. Residual Track D scope is now intentionally limited to `lib/reliability/sync.ts`, `lib/eboekhouden/recurring-invoices.ts`, and only any future non-wrapper regressions that re-bloat `lib/onboarding/actions.ts`. When those residual files are either reduced further or explicitly accepted as orchestration-only wrappers, close this item and move to retention/compliance work.
+- [x] Refactor oversized billing/orchestration modules into smaller policy, state-transition, and integration units
+  Status: closed for current scope. `lib/onboarding/actions.ts` is now mostly thin server-action wrappers, invoice creation/retry/recovery logic is split into dedicated modules, and the remaining `lib/reliability/sync.ts` / `lib/eboekhouden/recurring-invoices.ts` files are deliberately accepted as orchestration wrappers unless future changes bloat them again. Retention/compliance is now next.
 
 ## Deferred Or Later
 
