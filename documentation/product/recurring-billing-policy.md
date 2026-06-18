@@ -73,6 +73,11 @@ Customer notification copy is composed in an isolated helper and must only be
 sent after classification allows customer notification. The default copy avoids
 threat, penalty, cancellation, and automatic escalation language.
 
+Normal operator attention items should show classified failed payments with a
+manual safe next action. They may recommend review, mandate renewal, or checking
+Mollie/e-Boekhouden, but must not recommend automatic cancellation, fees, or
+dunning as the default action.
+
 The current persisted recurring collection enum remains the narrower storage
 shape for compatibility. Plain outcomes are mapped into existing review states
 until a later migration promotes the plain state model into durable columns and

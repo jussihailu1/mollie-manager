@@ -755,17 +755,31 @@ const listOperationalAlertsByMode = cache(async (mode: DashboardModeFilter) => {
       p.id,
       'payment' as "type",
       case
-        when p.disputed_at is not null then 'critical'
+        when p.disputed_at is not null
+          or p.recurring_collection_state in ('mandate_problem_review', 'reversal_critical_review')
+          then 'critical'
         else 'warning'
       end as "severity",
       case
-        when p.disputed_at is not null then 'Disputed payment'
+        when p.disputed_at is not null
+          or p.recurring_collection_state = 'reversal_critical_review'
+          then 'Payment reversed or disputed'
+        when p.recurring_collection_state = 'mandate_problem_review'
+          then 'Mandate problem'
+        when p.recurring_collection_state = 'failed_needs_review'
+          then 'Recurring payment needs review'
         when p.mollie_status = 'failed' then 'Failed payment'
         when p.mollie_status = 'expired' then 'Expired payment'
         else 'Payment needs attention'
       end as "title",
       case
-        when p.disputed_at is not null then 'A payment was charged back or disputed and needs review.'
+        when p.disputed_at is not null
+          or p.recurring_collection_state = 'reversal_critical_review'
+          then 'A payment was reversed or disputed. The invoice obligation may still be open. Review Mollie and e-Boekhouden before changing service or billing state.'
+        when p.recurring_collection_state = 'mandate_problem_review'
+          then 'A recurring payment failed with a possible mandate or bank-account problem. Review the payment path before relying on future automatic collection.'
+        when p.recurring_collection_state = 'failed_needs_review'
+          then 'A recurring payment failed or stayed pending beyond the safe processing window. Keep the existing invoice open and review manually before retrying.'
         when p.mollie_status = 'failed' then 'A payment failed and should be reviewed before service continues.'
         when p.mollie_status = 'expired' then 'A checkout expired before the customer completed payment.'
         else 'The payment status is outside the happy path.'
@@ -779,7 +793,15 @@ const listOperationalAlertsByMode = cache(async (mode: DashboardModeFilter) => {
     left join customers c on c.id = p.customer_id
     where
       (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
-      and (p.disputed_at is not null or p.mollie_status in ('failed', 'expired'))
+      and (
+        p.disputed_at is not null
+        or p.mollie_status in ('failed', 'expired')
+        or p.recurring_collection_state in (
+          'failed_needs_review',
+          'mandate_problem_review',
+          'reversal_critical_review'
+        )
+      )
 
     union all
 
