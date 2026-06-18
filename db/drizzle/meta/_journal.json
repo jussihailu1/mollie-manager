@@ -71,6 +71,13 @@
       "when": 1780671225107,
       "tag": "0009_hashed_consent_token_storage",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781822400000,
+      "tag": "0010_failed_payment_customer_notifications",
+      "breakpoints": true
     }
   ]
 }

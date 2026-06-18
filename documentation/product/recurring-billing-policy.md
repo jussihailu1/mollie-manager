@@ -73,6 +73,12 @@ Customer notification copy is composed in an isolated helper and must only be
 sent after classification allows customer notification. The default copy avoids
 threat, penalty, cancellation, and automatic escalation language.
 
+Failed-payment customer notification delivery uses typed claim-before-send
+persistence keyed by payment and notification type. A sync pass must not send
+the same failed-payment customer notification more than once for the same local
+payment. Notification records store delivery status and minimal outcome evidence,
+not raw Mollie payloads or secrets.
+
 Normal operator attention items should show classified failed payments with a
 manual safe next action. They may recommend review, mandate renewal, or checking
 Mollie/e-Boekhouden, but must not recommend automatic cancellation, fees, or

@@ -71,6 +71,16 @@ export const webhookProcessingStatusEnum = pgEnum(
   ["pending", "processed", "failed", "ignored"],
 );
 
+export const customerPaymentNotificationStatusEnum = pgEnum(
+  "customer_payment_notification_status",
+  ["claimed", "sent", "failed", "skipped"],
+);
+
+export const customerPaymentNotificationTypeEnum = pgEnum(
+  "customer_payment_notification_type",
+  ["failed_payment"],
+);
+
 export const subscriptionTermModeEnum = pgEnum("subscription_term_mode", [
   "open_ended",
   "fixed_term",
@@ -806,6 +816,82 @@ export const alerts = pgTable(
     index("alerts_status_idx").on(
       table.status,
       table.severity,
+      table.createdAt.desc(),
+    ),
+  ],
+);
+
+export const customerPaymentNotifications = pgTable(
+  "customer_payment_notifications",
+  {
+    id: text("id").primaryKey(),
+    mode: mollieModeEnum("mode").notNull(),
+    notificationType: customerPaymentNotificationTypeEnum("notification_type")
+      .notNull()
+      .default("failed_payment"),
+    status: customerPaymentNotificationStatusEnum("status")
+      .notNull()
+      .default("claimed"),
+    customerId: text("customer_id"),
+    paymentId: text("payment_id").notNull(),
+    subscriptionId: text("subscription_id"),
+    recipientEmail: text("recipient_email"),
+    subject: text("subject"),
+    outcomeState: text("outcome_state").notNull(),
+    outcomeReason: text("outcome_reason").notNull(),
+    templateVersion: integer("template_version").notNull().default(1),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    claimedAt: timestamp("claimed_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    sentAt: timestamp("sent_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    failedAt: timestamp("failed_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    lastErrorMessage: text("last_error_message"),
+    createdAt: timestamp("created_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.customerId],
+      foreignColumns: [customers.id],
+      name: "customer_payment_notifications_customer_id_fkey",
+    }).onDelete("set null"),
+    foreignKey({
+      columns: [table.paymentId],
+      foreignColumns: [payments.id],
+      name: "customer_payment_notifications_payment_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.subscriptionId],
+      foreignColumns: [subscriptions.id],
+      name: "customer_payment_notifications_subscription_id_fkey",
+    }).onDelete("set null"),
+    unique("customer_payment_notifications_mode_payment_type_key").on(
+      table.mode,
+      table.paymentId,
+      table.notificationType,
+    ),
+    index("customer_payment_notifications_status_idx").on(
+      table.status,
       table.createdAt.desc(),
     ),
   ],

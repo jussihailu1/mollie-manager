@@ -3,6 +3,7 @@ import "server-only";
 import { transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
+import { runFailedPaymentCustomerNotificationForSyncedPayment } from "@/lib/failed-payment-customer-notifications";
 import { runFirstPaymentInvoiceSyncFollowUp } from "@/lib/reliability/first-payment-sync-followup";
 import {
   type ReconciliationSummary,
@@ -109,6 +110,12 @@ export async function syncPaymentByMollieId(
     localPaymentId,
     payment,
     subscriptionId: localSubscription?.id ?? null,
+  });
+  await runFailedPaymentCustomerNotificationForSyncedPayment({
+    localPaymentId,
+    mode,
+    payment,
+    recurringCollectionState,
   });
   const localPaymentLinkId =
     options?.syncPaymentLinks === false

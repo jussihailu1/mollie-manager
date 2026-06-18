@@ -76,6 +76,7 @@ Implemented so far:
 - e-Boekhouden relation search no longer hydrates every list result with a detail request; full relation detail is fetched only after the operator selects one relation
 - the customer drawer now exposes protected customer-centered billing history for subscriptions, mandates, and payments
 - failed-payment outcome classification now starts in a pure helper before side effects, covering recurring failures, first-payment failures, mandate-only setup failures, mandate problems, refunds/reversals, chargebacks, and unsafe long-pending payments
+- failed-payment customer notification now uses a typed claim-before-send table and is triggered from reconciled Mollie payment sync rather than raw webhook payloads
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as materially mitigated rather than still open.
 
