@@ -18,6 +18,10 @@ export type PaymentSyncSource = {
   amountChargedBack?: {
     value: string;
   } | null;
+  amountRefunded?: {
+    value: string;
+  } | null;
+  createdAt?: string | null;
   description?: string;
   redirectUrl?: string | null;
   sequenceType?: string | null;
@@ -46,6 +50,12 @@ export function hasPaymentChargeback(payment: PaymentSyncSource) {
   );
 }
 
+export function hasPaymentRefundOrReversal(payment: PaymentSyncSource) {
+  return Boolean(
+    payment.amountRefunded && payment.amountRefunded.value !== "0.00",
+  );
+}
+
 export function serializePaymentStatusReason(
   statusReason: PaymentStatusReason,
 ) {
@@ -64,7 +74,9 @@ export function derivePaymentRecurringCollectionState(
   payment: PaymentSyncSource,
 ) {
   return classifyRecurringCollection({
+    createdAt: payment.createdAt,
     hasChargeback: hasPaymentChargeback(payment),
+    hasRefundOrReversal: hasPaymentRefundOrReversal(payment),
     paymentType: resolvePaymentSyncType(payment),
     status: payment.status,
     statusReason: serializePaymentStatusReason(payment.statusReason),

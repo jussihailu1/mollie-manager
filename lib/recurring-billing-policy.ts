@@ -1,3 +1,7 @@
+import {
+  classifyPaymentOutcome,
+} from "@/lib/payment-outcome-classification";
+
 export const DEFAULT_RECURRING_BILLING_POLICY = {
   invoiceNoticeDaysBeforeDueDate: 5,
   invoicePreNotificationMethod: "invoice_email",
@@ -31,18 +35,6 @@ export type RecurringBillingInvoiceState =
   | "invoice_failed"
   | "skipped"
   | "canceled";
-
-const mandateProblemReasonFragments = [
-  "account closed",
-  "blocked",
-  "direct debit blocked",
-  "invalid account",
-  "invalid bank",
-  "invalid iban",
-  "mandate",
-  "no valid mandate",
-  "refused by bank",
-];
 
 export function buildRecurringBillingConsentSnapshot(input: {
   firstPaymentMode: "real_installment" | "mandate_only";
@@ -123,7 +115,11 @@ export function isCollectionReviewState(state: RecurringCollectionState) {
 }
 
 export function classifyRecurringCollection(input: {
+  createdAt?: string | null;
   hasChargeback: boolean;
+  hasRefundOrReversal?: boolean;
+  hasUsableMandate?: boolean | null;
+  now?: string | Date;
   paymentType: "first" | "manual" | "recurring" | "refund";
   status: string | null | undefined;
   statusReason?: string | null;
@@ -132,29 +128,37 @@ export function classifyRecurringCollection(input: {
     return "not_applicable";
   }
 
-  if (input.hasChargeback) {
-    return "reversal_critical_review";
-  }
+  const outcome = classifyPaymentOutcome({
+    createdAt: input.createdAt,
+    flowKind: "recurring",
+    hasChargeback: input.hasChargeback,
+    hasRefundOrReversal: input.hasRefundOrReversal,
+    hasUsableMandate: input.hasUsableMandate,
+    now: input.now,
+    safePendingWindowDays:
+      DEFAULT_RECURRING_BILLING_POLICY.sepaPendingReturnWindowDays,
+    status: input.status,
+    statusReason: input.statusReason,
+  });
 
-  if (input.status === "paid") {
+  if (outcome.state === "paid") {
     return "settled";
   }
 
-  if (input.status === "pending" || input.status === "open") {
+  if (outcome.state === "pending") {
     return "pending_return_window";
   }
 
-  if (
-    input.status === "failed" ||
-    input.status === "canceled" ||
-    input.status === "expired"
-  ) {
-    const normalizedReason = (input.statusReason ?? "").toLowerCase();
-    const isMandateProblem = mandateProblemReasonFragments.some((fragment) =>
-      normalizedReason.includes(fragment),
-    );
+  if (outcome.state === "mandate_problem") {
+    return "mandate_problem_review";
+  }
 
-    return isMandateProblem ? "mandate_problem_review" : "failed_needs_review";
+  if (outcome.state === "charged_back" || outcome.state === "reversed") {
+    return "reversal_critical_review";
+  }
+
+  if (outcome.state === "failed" || outcome.state === "needs_review") {
+    return "failed_needs_review";
   }
 
   return "not_applicable";

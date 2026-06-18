@@ -63,6 +63,17 @@ Do not treat accounting configuration as policy. The following belong in tenant 
 
 ## V1 Failed Collection Policy
 
+Implementation note: payment outcome classification starts in pure helpers before
+side effects. The classifier uses Mollie-synced payment state, refund/chargeback
+amount signals, mandate usability signals, status reasons, and the safe pending
+window to produce plain operational states: `pending`, `paid`, `failed`,
+`reversed`, `charged_back`, `mandate_problem`, or `needs_review`.
+
+The current persisted recurring collection enum remains the narrower storage
+shape for compatibility. Plain outcomes are mapped into existing review states
+until a later migration promotes the plain state model into durable columns and
+operator surfaces.
+
 ### 1. Pending Window
 
 - A recurring SEPA direct debit in `pending` state is not, by itself, a failed collection.
@@ -73,6 +84,8 @@ Do not treat accounting configuration as policy. The following belong in tenant 
   - the already-sent invoice remains valid
   - no duplicate invoice is created
   - no customer dunning or collection-fee flow is started automatically
+- A pending recurring payment becomes `needs_review` only after the safe pending
+  window has elapsed without a definitive Mollie settlement state.
 
 ### 2. First Ordinary Failed Collection
 
@@ -84,6 +97,9 @@ Do not treat accounting configuration as policy. The following belong in tenant 
 - V1 should create a normal operator task that explains the failed payment, relevant invoice, likely reason, and safe next action.
 - V1 must not automatically add reminder fees, collection fees, or penalty fees.
 - V1 may later implement a recovery flow, but V1 should treat the first failure as an operator-handled exception.
+- Failure detection is separate from invoice creation and invoice delivery state.
+  A failed collection keeps the existing period invoice open and must not create
+  another invoice for that same billing period.
 
 ### 3. Repeated Failure Or Mandate Problem
 
@@ -122,6 +138,8 @@ Do not treat accounting configuration as policy. The following belong in tenant 
 - Customer-facing copy must describe the EUR 0.01 payment as mandate setup or verification, not as the first recurring invoice.
 - Customer-facing copy must make clear that the actual recurring subscription starts later and separately.
 - V1 keeps recurring subscription activation after `mandate_only` as an explicit operator step, not an automatic post-payment action.
+- A failed or expired `mandate_only` setup payment is classified as a
+  `mandate_problem`, not as an ordinary missed subscription installment.
 
 ## Consent And Terms Requirements
 
