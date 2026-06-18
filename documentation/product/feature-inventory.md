@@ -55,7 +55,7 @@ Roadmap rule: feature sequencing comes from `implementation-roadmap.md`. This fi
 ## Active Next
 
 - [ ] Failed payment correctness
-  Status: top priority. Classification foundation is implemented in pure helpers for failed, reversed, charged-back, mandate-problem, first-payment, mandate-only, and unsafe long-pending payment flows. Next slices should add policy-safe customer notification composition and durable normal-operator task surfacing. Actual pause, cancellation, dunning, fees, or collection consequences stay manual or future policy-controlled.
+  Status: top priority. Classification foundation is implemented in pure helpers for failed, reversed, charged-back, mandate-problem, first-payment, mandate-only, and unsafe long-pending payment flows. Policy-safe customer notification composition is isolated in a pure helper but not wired to sending yet. Next slices should add durable normal-operator task surfacing and dependency-injected notification orchestration. Actual pause, cancellation, dunning, fees, or collection consequences stay manual or future policy-controlled.
 - [ ] Needs attention dashboard
   Status: next after failed-payment correctness. Normal operators need one plain-language surface for failed payments, failed invoices, failed webhooks, missing relation links, stale sync, mandate problems, and setup blockers.
 - [ ] Customer notes, activity timeline, and derived lifecycle state

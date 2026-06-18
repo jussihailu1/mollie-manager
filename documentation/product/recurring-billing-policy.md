@@ -69,6 +69,10 @@ amount signals, mandate usability signals, status reasons, and the safe pending
 window to produce plain operational states: `pending`, `paid`, `failed`,
 `reversed`, `charged_back`, `mandate_problem`, or `needs_review`.
 
+Customer notification copy is composed in an isolated helper and must only be
+sent after classification allows customer notification. The default copy avoids
+threat, penalty, cancellation, and automatic escalation language.
+
 The current persisted recurring collection enum remains the narrower storage
 shape for compatibility. Plain outcomes are mapped into existing review states
 until a later migration promotes the plain state model into durable columns and
