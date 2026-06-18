@@ -7,6 +7,8 @@ Audience: product and engineering
 
 Future-state notes for subscription-platform evolution. This file is not the current implementation spec.
 
+For active autonomous development order, use `implementation-roadmap.md`.
+
 ## Future Direction
 
 - Add tenant default policy management as a first-class settings surface.

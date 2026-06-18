@@ -71,7 +71,7 @@ Main env groups:
 
 - Normal app access uses Google sign-in and a single allowed email address.
 - `AUTH_ALLOWED_EMAIL` is enforced in the NextAuth sign-in callback.
-- `AUTH_ADVANCED_EMAILS` is a comma-separated allowlist for technical settings controls such as diagnostics, repair, replay, reconciliation, SMTP tests, and invoice controls.
+- `AUTH_ADVANCED_EMAILS` is a comma-separated allowlist for technical settings controls such as diagnostics, repair, replay, reconciliation, SMTP tests, and invoice batch/retry controls. Normal authenticated users can still manage billing/accounting settings. Advanced users see the same default settings surface first, with extra controls hidden behind the developer mode toggle.
 - `AUTH_SECRET` is required at runtime; the app now fails closed if it is missing.
 - `APP_ENV=test` can use the test bypass flags for local verification without normal Google login.
 - In `APP_ENV=test`, live Mollie mode is disabled by design.

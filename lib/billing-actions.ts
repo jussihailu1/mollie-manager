@@ -5,7 +5,10 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 import { writeAuditLog } from "@/lib/audit";
-import { requireAdvancedOperationsSession } from "@/lib/auth/session";
+import {
+  requireAdvancedOperationsSession,
+  requireViewerSession,
+} from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import {
   createDueFirstPaymentInvoicesBatch,
@@ -107,7 +110,7 @@ export async function updateBillingSettingsAction(formData: FormData) {
     });
   }
 
-  const session = await requireAdvancedOperationsSession();
+  const session = await requireViewerSession();
 
   try {
     const settings = await updateTenantBillingSettings({

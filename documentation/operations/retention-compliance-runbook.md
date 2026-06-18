@@ -12,6 +12,8 @@ This runbook tracks the current retention/compliance hardening work for complian
 - consent evidence
 - metadata that may carry old or unnecessary personal data
 
+Roadmap context: retention policy UI and dry-run cleanup are tracked in `../product/implementation-roadmap.md` as Phase 4. Failed-payment correctness remains the earlier product priority.
+
 ## Current Tooling
 
 - `npm run ops:retention-report -- [mode] [auditDays] [webhookDays] [consentDays]`
@@ -24,48 +26,60 @@ This command is read-only. It reports:
 - consent-token storage state
 - webhook retry pressure
 
-## Open Policy Decisions
+## Accepted Baseline Policy
 
-These decisions are still required before any destructive cleanup can be implemented safely:
+The retention policy decision is no longer open and is no longer a blocker for implementation planning.
 
-1. Audit log retention window
-2. Webhook event retention window
-3. Consent evidence retention window
-4. Whether accepted IP and user-agent fields should be kept, redacted, or dropped after a threshold
-5. Whether live and test data should use the same retention windows or separate ones
-6. Whether failed webhook payloads need a longer retention period than processed events
+This is the accepted implementation baseline:
 
-## Draft Baseline Policy
-
-This is the starting proposal, not approved purge behavior:
-
-| Data area | Draft window | Draft action | Reason |
+| Data area | Window | Action | Reason |
 | --- | ---: | --- | --- |
-| Audit logs | 7 years | keep, then review export/delete | financial and operational evidence can matter for tax, billing, and incident investigation |
-| Accepted consent evidence | subscription lifetime plus 7 years | keep consent terms snapshot; review IP/user-agent minimization after 12 months | mandate/terms evidence must outlive active billing disputes |
-| Processed webhook events | 180 days | delete payload and row after window | operational replay value drops after reconciliation history settles |
-| Failed webhook events | 1 year after resolution | keep longer than processed rows; delete after resolution window | failure payloads help incident review and repair |
-| Test-mode operational rows | 90 days | delete/anonymize if not linked to live evidence | test data has lower evidentiary value |
-| Generic metadata | 180 days for non-evidence payload fragments | redact stale personal/token-like fragments when safe | JSONB metadata should not become unmanaged personal-data storage |
+| Audit logs | 7 years | keep operational/financial evidence; redact sensitive non-evidence `details` after 180 days where safe | Dutch business administration and invoice evidence commonly need a 7-year retention baseline; payload-like personal data should still be minimized |
+| Accepted consent core evidence | subscription lifetime plus 7 years | keep consent terms snapshot, accepted checkbox set, acceptance timestamp, and plan snapshot | mandate, terms, and payment-authorisation evidence may be needed after the active subscription ends |
+| Accepted consent IP/user-agent | 12 months | redact unless tied to dispute, fraud, security, or legal evidence | useful for short-term evidence and abuse investigation, but higher personal-data value than long-term proof of agreed terms |
+| Processed webhook raw payloads | 180 days | delete or redact raw payload; keep minimal normalized event facts if useful | replay/debug value drops after reconciliation settles |
+| Failed webhook raw payloads | 1 year after resolution | keep while unresolved; after resolution window delete or redact raw payload | failure payloads may be needed for incident review and repair |
+| Test-mode operational data | 90 days | delete or anonymize if not linked to live evidence | test data has lower evidentiary value and should not accumulate personal data |
+| Generic metadata | 180 days for non-evidence fragments | redact stale personal, token-like, payload-like fragments when safe | JSONB metadata must not become unmanaged personal-data storage |
 
-## Decision Pass Started
+## Legal Rationale
 
-Next step is to confirm or change the draft baseline above with the business/legal owner. Until then:
+- GDPR/Dutch AVG does not set one universal retention period for all personal data. The app must keep personal data no longer than necessary, document the reason, and communicate retention clearly.
+- Dutch business administration and invoice evidence generally uses a 7-year retention baseline; some immovable-property records can require longer, but this app's current core scope is subscription payment and invoice operations.
+- Therefore, long retention is acceptable for financial, invoice, audit, mandate, and consent evidence, but not for raw payloads or high-detail personal-data fragments that are no longer needed.
+
+Official references:
+
+- [Business.gov.nl: GDPR compliance](https://business.gov.nl/running-your-business/legal-matters/how-to-make-your-business-gdpr-compliant/)
+- [Belastingdienst: administration retention](https://www.belastingdienst.nl/wps/wcm/connect/bldcontentnl/belastingdienst/zakelijk/btw/administratie_bijhouden/administratie_bewaren/administratie_bewaren)
+- [Belastingdienst: invoice retention](https://www.belastingdienst.nl/wps/wcm/connect/bldcontentnl/belastingdienst/zakelijk/btw/administratie_bijhouden/facturen_maken/uw_facturen_bewaren)
+- [Business.gov.nl: preventing and reporting a data breach](https://business.gov.nl/running-your-business/security-and-fraud/data-breach/)
+
+## Storage Cost Check
+
+Current read-only check on 2026-06-18:
+
+| Table | Rows | Size |
+| --- | ---: | ---: |
+| `audit_logs` | 136 | 168 kB |
+| `subscription_onboarding_consents` | 6 | 128 kB |
+| `webhook_events` | 12 | 48 kB |
+
+Current storage for these specific tables is negligible. Cost risk is not the retention window itself; cost risk would come from storing large raw payloads, repeated full API snapshots, or binary/blob-like content in JSONB. Cleanup implementation should cap, redact, or remove raw payloads according to the accepted baseline above.
+
+## Implementation Requirements
+
+The policy decision is made, so policy UI and dry-run cleanup work can proceed.
+
+Implementation must still follow these safeguards:
 
 - keep `npm run ops:retention-report` read-only
-- do not add default purge behavior
-- design future cleanup as dry-run first, scoped by mode and table
-- preserve invoice, payment, mandate, consent, and audit evidence unless policy explicitly allows removal
-
-## Current Blockers
-
-The following work stays blocked on policy confirmation:
-
-- purge script design
-- dry-run cleanup thresholds
-- deletion safeguards
-- anonymization rules for consent evidence
+- add cleanup as dry-run first
+- require explicit mode, table/data-area, and window selection for any future destructive apply
+- preserve invoice, payment, mandate, consent core evidence, and audit evidence unless the accepted policy explicitly permits removal/redaction
+- separate raw payload redaction from row deletion where normalized evidence should remain
+- log cleanup actions without storing the cleaned payload content again
 
 ## Safe Default
 
-Do not add destructive cleanup defaults until the policy questions above are answered and documented.
+No automatic destructive cleanup. Use explicit dry-run, review, then scoped apply.

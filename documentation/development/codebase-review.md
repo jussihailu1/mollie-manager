@@ -24,9 +24,9 @@ The codebase is structurally serious: typed, parameterized, and backed by passin
 
 The current issues are concentrated in three areas:
 
-1. security hygiene around secrets, bearer-style tokens, and server-side fetches
-2. oversized business-logic modules with limited test coverage on the highest-risk flows
-3. compliance gaps around retention, privacy boundaries, and public operational exposure
+1. failed-payment handling must become more explicit, customer-notified, and operator-task driven before bigger product work
+2. compliance implementation work remains around retention UI, dry-run cleanup, and scoped redaction safeguards
+3. future feature work must keep the completed security, module, and test hardening patterns instead of reintroducing secret, metadata, or orchestration risk
 
 Development should continue, but the next feature pass should be combined with targeted hardening so the app does not accumulate risk faster than functionality.
 
@@ -72,7 +72,7 @@ Implemented so far:
 - settings reconciliation now exposes explicit `sync_only` versus `full` modes so operators can refresh Mollie state without automatically triggering invoice or activation follow-ups
 - the standalone Track A onboarding hardening plan has been retired; the remaining hardening work now lives in the active docs below
 - product scope has been narrowed so subscriptions stay inside customer workflows and payment links stay inside onboarding instead of becoming standalone workspaces
-- deep technical settings controls are now gated behind advanced/developer/admin-only access with `AUTH_ADVANCED_EMAILS`
+- deep technical settings controls are now gated behind advanced/developer/admin-only access with `AUTH_ADVANCED_EMAILS` and hidden behind a developer mode toggle, while normal billing/accounting settings remain available to authenticated operators
 - e-Boekhouden relation search no longer hydrates every list result with a detail request; full relation detail is fetched only after the operator selects one relation
 - the customer drawer now exposes protected customer-centered billing history for subscriptions, mandates, and payments
 
@@ -173,7 +173,7 @@ Recommended direction:
 - keep webhook processing tied to managed local resources
 - rely on scheduled reconciliation and repair for missed or rejected webhook signals
 
-### P2: `/api/health` now splits public liveness from authenticated diagnostics
+### P2: `/api/health` now splits public liveness from advanced diagnostics
 
 The health route now returns a minimal public liveness response by default, while the detailed reliability snapshot requires the cron bearer secret.
 
@@ -378,13 +378,15 @@ Observed persistence points:
 - audit logs in [db/schema.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/db/schema.ts:803>)
 - webhook event payload history in [db/schema.ts](<C:/Root/Work/J Hailu Solutions/Ayal Web/Mollie Manager/mollie-manager/db/schema.ts:835>)
 
-Current gap:
+Current state:
 
-- no clear retention/purge policy was found for audit logs, webhook events, consent evidence minimization, or metadata cleanup; read-only inventory tooling now exists, but purge thresholds and deletion rules are still undecided
+- retention windows and minimization rules are now decided in `documentation/operations/retention-compliance-runbook.md`
+- read-only inventory tooling exists
+- cleanup implementation should proceed as dry-run first, then explicit scoped apply
 
 Operational implication:
 
-- storage limitation and data minimization need explicit policy and implementation, not just documentation
+- storage limitation and data minimization now need implementation, not further policy selection
 
 Official references:
 
@@ -463,7 +465,7 @@ Status:
 Goals:
 
 - reduce secret exposure
-- separate public health from operator diagnostics
+- separate public health from advanced operator diagnostics
 - make repair and replay tools safer to expose in UI
 
 Feature overlap:
@@ -474,17 +476,17 @@ Feature overlap:
 
 Suggested work:
 
-- split `/api/health` into liveness and authenticated diagnostics
+- split `/api/health` into liveness and advanced/cron diagnostics
 - stop persisting secret-bearing webhook URLs into metadata
 - review cron and repair endpoints for least-privilege exposure
 - expose explicit reconciliation modes so operator-triggered refresh does not imply full downstream billing side effects
 
 Status:
 
-- `/api/health` now separates public liveness from authenticated diagnostics
+- `/api/health` now separates public liveness from advanced/cron diagnostics
 - webhook URLs are secret-free and no longer persisted into generic metadata
 - settings exposes failed-only webhook replay, targeted repair, and explicit reconciliation modes
-- the deep technical settings surface is gated behind `AUTH_ADVANCED_EMAILS`
+- the deep technical settings surface is gated behind `AUTH_ADVANCED_EMAILS` and collapsed behind developer mode; billing/accounting configuration remains outside that advanced gate
 
 ### Completed: Module And Test Refactor
 
@@ -504,12 +506,12 @@ Status:
 - `lib/reliability/sync.ts` and `lib/eboekhouden/recurring-invoices.ts` remain as accepted orchestration wrappers rather than priority refactor targets
 - future changes should only reopen this track if those wrapper modules start re-accumulating mixed policy/persistence/third-party logic
 
-### Active: Retention And Compliance Prep
+### Active: Retention And Compliance Implementation
 
 Goals:
 
-- define retention windows and minimization rules before any destructive cleanup
-- keep cleanup tooling report-only until policy is confirmed
+- implement accepted retention windows and minimization rules
+- keep cleanup tooling report-only and dry-run first
 - avoid broad purge defaults that could destroy audit or compliance evidence too early
 
 Feature overlap:
@@ -519,27 +521,33 @@ Feature overlap:
 
 Suggested work:
 
-- add a read-only retention inventory command first
-- define policy thresholds for audit logs, webhook events, and consent evidence
-- only then add dry-run cleanup and scoped purge tooling
+- keep the read-only retention inventory command
+- add a policy display surface from the accepted baseline
+- add dry-run cleanup and scoped redaction reports
+- only then add explicit, scoped apply behavior
 
 Status:
 
 - the read-only retention inventory command now exists as `npm run ops:retention-report`
+- retention policy decisions are documented and no longer block implementation
 - destructive cleanup is intentionally not implemented yet
-- policy decisions are still needed before any purge action can be made safe
+- dry-run cleanup and redaction tooling are the next safe implementation step
 
 ## Recommended Current Order
 
 If the goal is best risk reduction with the least wasted effort, start in this order:
 
-1. Retention and compliance implementation plan
+1. Failed payment correctness
+2. Needs attention dashboard
+3. Retention policy UI and dry-run cleanup
 
 Reasoning:
 
+- money flow correctness should lead larger feature work
+- failed payments must be detected, explained, customer-notified, and surfaced as operator tasks before pause/cancel/dunning consequences are automated
 - the broad product-surface questions are now intentionally resolved around the customer workspace
 - the highest-value module-and-test refactor work has already been completed enough to stop being the lead track
-- retention work is now the clearer remaining gap
+- retention policy is decided; destructive cleanup still waits for dry-run output and explicit scoped safeguards
 
 ## Planning Rule
 
@@ -548,3 +556,4 @@ Before shipping the next major feature pass, any work that touches onboarding, p
 - at least as secure as before
 - at least as testable as before
 - with fewer secret-bearing values in URLs, logs, and metadata than before
+- aligned with `documentation/product/implementation-roadmap.md`

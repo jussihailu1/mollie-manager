@@ -7,9 +7,12 @@ Use this file as the working inventory for ongoing development.
 
 Canonical policy docs:
 
+- `implementation-roadmap.md`
 - `subscription-policy.md`
 - `recurring-billing-policy.md`
 - `subscription-roadmap.md`
+
+Roadmap rule: feature sequencing comes from `implementation-roadmap.md`. This file records current inventory and backlog state.
 
 ## Implemented
 
@@ -42,21 +45,32 @@ Canonical policy docs:
   Status: this is intentional while notifications/settings and customer onboarding remain the real operator surfaces.
 - [x] Manual webhook replay and targeted repair are surfaced in the settings ops workflow
   Status: the settings ops surface now exposes a failed-webhook replay queue with failed-only replay controls and explicit replay confirmation, plus a targeted repair form for single customer/payment/subscription resyncs.
-- [x] Reliability and invoice automation health is unified across `/settings` and authenticated `/api/health`
-  Status: both surfaces now share the same reliability ops snapshot for webhook health, invoice automation, delivery retries, and cron heartbeat; CLI scripts still remain as deeper fallbacks.
+- [x] Reliability and invoice automation health is unified across advanced `/settings` controls and `/api/health`
+  Status: advanced settings controls and advanced/cron `/api/health` diagnostics now share the same reliability ops snapshot for webhook health, invoice automation, delivery retries, and cron heartbeat; CLI scripts still remain as deeper fallbacks.
 - [x] Deep technical operations controls can remain in settings during developer-operated use
-  Status: settings operations controls are now gated behind `AUTH_ADVANCED_EMAILS`; ordinary authenticated operators cannot open diagnostics, repair, replay, reconciliation, SMTP tests, or invoice controls.
+  Status: billing/accounting settings remain available to normal authenticated operators, while diagnostics, repair, replay, reconciliation, SMTP tests, and invoice batch/retry controls are gated behind `AUTH_ADVANCED_EMAILS` and collapsed behind a developer mode toggle.
 - [x] Detailed subscription, mandate, and payment history is surfaced in dense customer-centered operator views
   Status: the customer drawer now lazy-loads protected billing history and shows compact subscription, mandate, and payment rows without adding standalone subscription or payment-link workspaces.
 
-## Planned Next
+## Active Next
+
+- [ ] Failed payment correctness
+  Status: top priority. The app should automatically detect failed, reversed, charged-back, mandate-problem, and unsafe long-pending payment flows; notify the customer with policy-safe wording; and create an operator task. Actual pause, cancellation, dunning, fees, or collection consequences stay manual or future policy-controlled.
+- [ ] Needs attention dashboard
+  Status: next after failed-payment correctness. Normal operators need one plain-language surface for failed payments, failed invoices, failed webhooks, missing relation links, stale sync, mandate problems, and setup blockers.
+- [ ] Customer notes, activity timeline, and derived lifecycle state
+  Status: planned. Lifecycle state should be derived from facts first; manual override stays far-future.
+- [ ] Retention policy UI and dry-run cleanup
+  Status: policy baseline is decided and no longer blocked. Next step is showing the accepted policy, adding dry-run cleanup output, and keeping destructive cleanup explicit and scoped.
+
+## Recently Completed Planning Items
 
 - [x] Add explicit reconciliation modes so operators can choose `sync-only` versus flows that may trigger invoice-side actions
   Status: `/settings` now exposes explicit `sync_only` and `full` reconciliation modes. `sync_only` is the least-dangerous default and avoids automatic first-payment invoice creation and subscription activation follow-ups.
 - [x] Expand reconciliation output with first-payment and recurring invoice-state deltas for easier operator review
   Status: `/settings` now shows the latest reconciliation result with before/after invoice-state deltas for first-payment rows and recurring billing schedules, so operators can confirm normalization and invoice-side changes without digging through raw tables.
 - [x] Unify stale-sync, webhook-health, and invoice-automation observability into a clearer operator surface
-  Status: `/settings` now uses the shared reliability ops snapshot for webhook health, stale repair context, invoice automation, delivery retries, and cron heartbeat; authenticated `/api/health` uses the same source.
+  Status: advanced `/settings` controls use the shared reliability ops snapshot for webhook health, stale repair context, invoice automation, delivery retries, and cron heartbeat; advanced/cron `/api/health` diagnostics use the same source.
 - [x] Expose safer, clearer operator controls for webhook replay and repair flows
   Status: the settings page now includes explicit replay confirmation for failed webhook events and a targeted repair form for customer/payment/subscription resyncs.
 - [x] Decide whether subscriptions need a dedicated operations workspace again or should stay embedded in customer workflows
@@ -81,10 +95,18 @@ Reference: `../development/codebase-review.md`
 
 ## Deferred Or Later
 
-- [ ] per-subscription policy overrides
+- [ ] pause/resume and cancellation workflows with reason, effective date, and audit trail
+- [ ] payment failure follow-up queue
+- [ ] better customer-facing Mollie return page with clearer success, pending, and failed states
+- [ ] manual invoice resend and operator invoice download links
+- [ ] plan catalog, invoice line templates, and VAT/revenue ledger mapping by plan
+- [ ] discounts, trials, setup fees, and proration rules after plan/catalog foundations exist
+- [ ] per-customer or per-subscription policy overrides
 - [ ] customer self-serve cancellation
 - [ ] richer entitlement rules separate from billing state
 - [ ] automated dunning, collection fees, or legal collections flows
+- [ ] real roles such as admin, finance, support, developer, and auditor
+- [ ] full new-user onboarding for this app
 - [ ] broader multi-tenant SaaS policy management
 
 ## Constraints And Notes
@@ -93,6 +115,11 @@ Reference: `../development/codebase-review.md`
 - e-Boekhouden stays the invoice and accounting source of truth.
 - `mandate_only` EUR 0.01 flows must not create normal subscription invoices.
 - Billing settings are accounting configuration, not subscription policy.
-- Deep technical settings controls are gated behind `AUTH_ADVANCED_EMAILS`.
+- Deep technical settings controls are gated behind `AUTH_ADVANCED_EMAILS` and hidden behind a developer mode toggle; billing/accounting configuration remains available on `/settings` for normal authenticated operators.
+- Failed-payment detection and customer notification should come before broader feature expansion.
+- Consequences after failed payments stay manual until a documented policy permits automation.
+- Retention policy is decided; cleanup work can proceed as dry-run first with no automatic destructive defaults.
+- Manual customer lifecycle override is far-future; derive lifecycle state from facts first.
+- New-user onboarding for this app is a very late feature, after the core product is safe and understandable.
 - Consider existing packages for generic concerns when they clearly reduce risk or maintenance cost, but keep billing, consent, reconciliation, retry, and accounting policy explicit in local code.
 - Continue future policy work from `subscription-policy.md` and `recurring-billing-policy.md`, not from archived handoff notes.

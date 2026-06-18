@@ -58,7 +58,7 @@ Invoice creation truth remains upstream:
 `/api/health` is now split:
 
 - public requests get a minimal liveness payload only
-- detailed diagnostics require either an authenticated operator session or `Authorization: Bearer <INVOICE_CRON_SHARED_SECRET>` / `Authorization: Bearer <CRON_SECRET>`
+- detailed diagnostics require either an advanced operator session or `Authorization: Bearer <INVOICE_CRON_SHARED_SECRET>` / `Authorization: Bearer <CRON_SECRET>`
 
 Authenticated `/api/health?mode=<test|live>` includes:
 
@@ -67,9 +67,9 @@ Authenticated `/api/health?mode=<test|live>` includes:
 - `invoiceAutomationCron.lastCronSuccessAt`
 - `invoiceAutomationCron.lastCronFailureAt`
 
-Use these authenticated diagnostics to confirm scheduler liveness without checking platform logs first. The `/settings` ops overview now surfaces same signals for normal operator use, while raw JSON stays available for direct inspection.
+Use these advanced/cron diagnostics to confirm scheduler liveness without checking platform logs first. The `/settings` developer controls surface the same signals for advanced operators, while raw JSON stays available for direct inspection.
 
-The `/settings` and authenticated `/api/health` surfaces now share the same reliability ops snapshot, so webhook health, invoice automation, delivery retries, and cron heartbeat stay aligned across both views.
+The `/settings` developer controls and advanced/cron `/api/health` diagnostics now share the same reliability ops snapshot, so webhook health, invoice automation, delivery retries, and cron heartbeat stay aligned across both views.
 
 The settings page also exposes a targeted repair form for single customer, payment, or subscription resyncs. Use that when one record needs a focused repair without running broader cron recovery.
 

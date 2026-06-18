@@ -2,6 +2,7 @@ import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 
 import { BillingSettingsForm } from "@/app/(dashboard)/settings/billing-settings-form";
+import { DeveloperSettingsToggle } from "@/app/(dashboard)/settings/developer-settings-toggle";
 import { InlineNotice } from "@/components/inline-notice";
 import {
   createDueFirstPaymentInvoicesAction,
@@ -131,46 +132,6 @@ export default async function SettingsPage({
   const session = await requireViewerSession();
   const canManageAdvancedOperations = hasAdvancedOperationsAccess(session);
 
-  if (!canManageAdvancedOperations) {
-    return (
-      <div className="mx-auto max-w-6xl space-y-6 p-8">
-        {error ? (
-          <Alert variant="destructive">
-            <AlertTitle>Action failed</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : null}
-
-        {notice ? (
-          <Alert>
-            <AlertTitle>Updated</AlertTitle>
-            <AlertDescription>{notice}</AlertDescription>
-          </Alert>
-        ) : null}
-
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Settings & Operations</h2>
-          <p className="mt-2 text-muted-foreground">
-            Advanced operations access is required for diagnostics, repair, replay,
-            reconciliation, SMTP tests, and invoice controls.
-          </p>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Advanced operations access required</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Ask a developer or admin to add this account to AUTH_ADVANCED_EMAILS before
-              using technical operations controls.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   const invoiceEmailOverrideTo = env.INVOICE_EMAIL_OVERRIDE_TO ?? null;
   const [billingSettings, selectedMode] = await Promise.all([
     ensureTenantBillingSettings(),
@@ -203,6 +164,90 @@ export default async function SettingsPage({
       !ledgers.some((ledger) => ledger.id === billingSettings.revenueLedgerId),
   );
   const billingSettingsComplete = billingSettingsAreComplete(billingSettings);
+
+  if (!canManageAdvancedOperations) {
+    return (
+      <div className="mx-auto max-w-6xl space-y-6 p-8">
+        {error ? (
+          <Alert variant="destructive">
+            <AlertTitle>Action failed</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {notice ? (
+          <Alert>
+            <AlertTitle>Updated</AlertTitle>
+            <AlertDescription>{notice}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
+          <p className="mt-2 text-muted-foreground">
+            Billing and accounting configuration for invoice automation.
+          </p>
+        </div>
+
+        {invoiceEmailOverrideTo ? (
+          <InlineNotice
+            tone="warning"
+            title="Invoice email override active"
+            message={
+              <>
+                All invoice emails are currently being redirected to{" "}
+                <span className="font-medium">{invoiceEmailOverrideTo}</span> instead
+                of the actual client email address.
+              </>
+            }
+          />
+        ) : null}
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-start justify-between gap-4">
+              <CardTitle className="text-lg">Recurring invoice accounting</CardTitle>
+              <form>
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  size="icon-sm"
+                  title="Refresh invoice templates and ledger accounts from e-Boekhouden."
+                >
+                  <RefreshCw className="size-4" />
+                  <span className="sr-only">Refresh e-Boekhouden billing data</span>
+                </Button>
+              </form>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+              e-Boekhouden will be the invoice and bookkeeping source. This app will
+              not ask e-Boekhouden to email invoices; customer invoice delivery is
+              handled by the app SMTP flow.
+            </div>
+
+            {billingDiscovery && "error" in billingDiscovery ? (
+              <Alert variant="destructive">
+                <AlertTitle>Discovery failed</AlertTitle>
+                <AlertDescription>{billingDiscovery.error}</AlertDescription>
+              </Alert>
+            ) : null}
+
+            <BillingSettingsForm
+              defaultInvoiceTemplateId={billingSettings?.invoiceTemplateId}
+              defaultRevenueLedgerId={billingSettings?.revenueLedgerId}
+              hasSavedLedgerOutsideDiscovery={hasSavedLedgerOutsideDiscovery}
+              hasSavedTemplateOutsideDiscovery={hasSavedTemplateOutsideDiscovery}
+              invoiceTemplates={invoiceTemplates}
+              ledgers={ledgers}
+            />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const [reliabilityOpsSnapshot, failedWebhookEvents, recentAuditActivity] = await Promise.all([
     getReliabilityOpsSnapshot({
       billingSettingsComplete,
@@ -252,7 +297,7 @@ export default async function SettingsPage({
       ];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-8">
+    <div className="mx-auto flex max-w-6xl flex-col gap-6 p-8">
       {error ? (
         <Alert variant="destructive">
           <AlertTitle>Action failed</AlertTitle>
@@ -268,9 +313,9 @@ export default async function SettingsPage({
       ) : null}
 
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Settings & Operations</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
         <p className="mt-2 text-muted-foreground">
-          Operator diagnostics, repair controls, SMTP checks, and billing configuration.
+          Billing and accounting configuration for invoice automation.
         </p>
       </div>
 
@@ -288,6 +333,7 @@ export default async function SettingsPage({
         />
       ) : null}
 
+      <DeveloperSettingsToggle className="order-2">
       <Card>
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
@@ -299,7 +345,7 @@ export default async function SettingsPage({
             </div>
             <Button asChild variant="outline">
               <Link href={`/api/health?mode=${selectedMode}`} target="_blank">
-                Open authenticated diagnostics
+                Open advanced diagnostics
               </Link>
             </Button>
           </div>
@@ -679,44 +725,9 @@ export default async function SettingsPage({
 
       <Card>
         <CardHeader>
-          <div className="flex items-start justify-between gap-4">
-            <CardTitle className="text-lg">Recurring invoice accounting</CardTitle>
-            <form>
-              <Button
-                type="submit"
-                variant="ghost"
-                size="icon-sm"
-                title="Refresh invoice templates and ledger accounts from e-Boekhouden."
-              >
-                <RefreshCw className="size-4" />
-                <span className="sr-only">Refresh e-Boekhouden billing data</span>
-              </Button>
-            </form>
-          </div>
+          <CardTitle className="text-lg">Invoice automation controls</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-            e-Boekhouden will be the invoice and bookkeeping source. This app will
-            not ask e-Boekhouden to email invoices; customer invoice delivery is
-            handled by the app SMTP flow.
-          </div>
-
-          {billingDiscovery && "error" in billingDiscovery ? (
-            <Alert variant="destructive">
-              <AlertTitle>Discovery failed</AlertTitle>
-              <AlertDescription>{billingDiscovery.error}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          <BillingSettingsForm
-            defaultInvoiceTemplateId={billingSettings?.invoiceTemplateId}
-            defaultRevenueLedgerId={billingSettings?.revenueLedgerId}
-            hasSavedLedgerOutsideDiscovery={hasSavedLedgerOutsideDiscovery}
-            hasSavedTemplateOutsideDiscovery={hasSavedTemplateOutsideDiscovery}
-            invoiceTemplates={invoiceTemplates}
-            ledgers={ledgers}
-          />
-
           <div className="rounded-xl border border-border p-4">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="space-y-1">
@@ -825,7 +836,49 @@ export default async function SettingsPage({
               </form>
             </div>
           </div>
+        </CardContent>
+      </Card>
+      </DeveloperSettingsToggle>
 
+      <Card className="order-1">
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <CardTitle className="text-lg">Recurring invoice accounting</CardTitle>
+            <form>
+              <Button
+                type="submit"
+                variant="ghost"
+                size="icon-sm"
+                title="Refresh invoice templates and ledger accounts from e-Boekhouden."
+              >
+                <RefreshCw className="size-4" />
+                <span className="sr-only">Refresh e-Boekhouden billing data</span>
+              </Button>
+            </form>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+            e-Boekhouden will be the invoice and bookkeeping source. This app will
+            not ask e-Boekhouden to email invoices; customer invoice delivery is
+            handled by the app SMTP flow.
+          </div>
+
+          {billingDiscovery && "error" in billingDiscovery ? (
+            <Alert variant="destructive">
+              <AlertTitle>Discovery failed</AlertTitle>
+              <AlertDescription>{billingDiscovery.error}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          <BillingSettingsForm
+            defaultInvoiceTemplateId={billingSettings?.invoiceTemplateId}
+            defaultRevenueLedgerId={billingSettings?.revenueLedgerId}
+            hasSavedLedgerOutsideDiscovery={hasSavedLedgerOutsideDiscovery}
+            hasSavedTemplateOutsideDiscovery={hasSavedTemplateOutsideDiscovery}
+            invoiceTemplates={invoiceTemplates}
+            ledgers={ledgers}
+          />
         </CardContent>
       </Card>
     </div>

@@ -10,6 +10,7 @@ These are the active sources of truth:
 - `development/setup.md`: local setup and environment guidance
 - `development/commands-and-checks.md`: common developer and ops commands
 - `development/codebase-review.md`: active engineering assessment, risks, and remediation tracks
+- `product/implementation-roadmap.md`: active autonomous-development roadmap and feature order
 - `product/feature-inventory.md`: active implementation inventory and development backlog
 - `product/subscription-policy.md`: canonical subscription-policy rules
 - `product/recurring-billing-policy.md`: canonical recurring billing rules
@@ -26,6 +27,7 @@ These are the active sources of truth:
 ## Rules
 
 - Product rules live under `product/`.
+- Feature sequencing lives in `product/implementation-roadmap.md`.
 - Operational procedures live under `operations/`.
 - Technical structure lives under `architecture/`, `development/`, and `integrations/`.
 - Archived docs are not authoritative.

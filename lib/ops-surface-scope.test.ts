@@ -23,13 +23,13 @@ describe("ops surface hardening", () => {
       source,
       /Shared reliability snapshot for \/settings and advanced \/api\/health/,
     );
-    assert.match(source, /Open authenticated diagnostics/);
+    assert.match(source, /Open advanced diagnostics/);
     assert.match(source, /Failed webhook replay queue/);
     assert.match(source, /replayWebhookEventAction/);
     assert.match(source, /confirmMessage=\{`Replay failed/);
   });
 
-  it("gates deep settings operations behind advanced access", () => {
+  it("keeps billing settings available while advanced operations stay gated", () => {
     const settingsSource = readFileSync(
       resolve("app/(dashboard)/settings/page.tsx"),
       "utf8",
@@ -45,8 +45,11 @@ describe("ops surface hardening", () => {
     const authSource = readFileSync(resolve("lib/auth/session.ts"), "utf8");
 
     assert.match(settingsSource, /hasAdvancedOperationsAccess/);
-    assert.match(settingsSource, /Advanced operations access required/);
+    assert.match(settingsSource, /DeveloperSettingsToggle/);
+    assert.match(settingsSource, /Billing and accounting configuration/);
+    assert.match(settingsSource, /Recurring invoice accounting/);
     assert.match(reliabilityActionsSource, /requireAdvancedOperationsSession/);
+    assert.match(billingActionsSource, /requireViewerSession/);
     assert.match(billingActionsSource, /requireAdvancedOperationsSession/);
     assert.match(authSource, /hasAdvancedOperationsAccess/);
   });

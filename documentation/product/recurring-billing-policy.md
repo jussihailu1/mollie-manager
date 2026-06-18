@@ -80,6 +80,8 @@ Do not treat accounting configuration as policy. The following belong in tenant 
 - V1 must not create a second invoice automatically for the same billing period.
 - V1 must not automatically cancel the subscription after the first ordinary failed collection.
 - V1 must open an operator alert and require review.
+- V1 should notify the customer with plain, policy-safe wording that the payment did not succeed and that operator follow-up may be needed.
+- V1 should create a normal operator task that explains the failed payment, relevant invoice, likely reason, and safe next action.
 - V1 must not automatically add reminder fees, collection fees, or penalty fees.
 - V1 may later implement a recovery flow, but V1 should treat the first failure as an operator-handled exception.
 
@@ -140,6 +142,7 @@ Do not treat accounting configuration as policy. The following belong in tenant 
 ## Forward-Compatibility Notes
 
 - Future recovery flows may automate reminders, retries, or recovery links, but they must preserve the rule that a failed collection does not create duplicate invoices for the same billing period.
+- Future recovery flows must separate detection and notification from consequences such as pause, cancellation, fees, dunning, or legal escalation.
 - Future tenant settings may make the pre-notification lead time configurable, but V1 should treat 5 calendar days as the canonical default.
 - If customer self-serve billing recovery is added later, it must preserve the distinction between:
   - invoice state
