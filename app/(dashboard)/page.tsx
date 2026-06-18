@@ -1,27 +1,34 @@
-import { CheckCircle, CreditCard, DollarSign, Users } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, ArrowRight, CheckCircle, CreditCard, DollarSign, Users } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { listCustomers, listPayments } from "@/lib/onboarding/data";
 import { listRecentAuditActivity } from "@/lib/reliability/data";
+import { listNeedsAttentionItems } from "@/lib/reliability/needs-attention";
 import {
   toUiActivityRecord,
+  toUiAttentionRecord,
   toUiCustomerRecord,
   toUiPaymentRecord,
 } from "@/lib/ui-data";
 
 export default async function OverviewPage() {
   const selectedMode = await getSelectedMollieMode();
-  const [customersResult, paymentsResult, activityResult] = await Promise.all([
+  const [customersResult, paymentsResult, activityResult, attentionResult] = await Promise.all([
     listCustomers({ mode: selectedMode }),
     listPayments({ mode: selectedMode }),
     listRecentAuditActivity({ mode: selectedMode }),
+    listNeedsAttentionItems({ limit: 6, mode: selectedMode }),
   ]);
 
   const customers = customersResult.map(toUiCustomerRecord);
   const payments = paymentsResult.map(toUiPaymentRecord);
   const activity = activityResult.map(toUiActivityRecord);
+  const attentionItems = attentionResult.map(toUiAttentionRecord);
 
   const totalCustomers = customers.length;
   const pendingPayments = customers.filter((customer) => {
@@ -83,6 +90,58 @@ export default async function OverviewPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <div>
+            <CardTitle>Needs Attention</CardTitle>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Review these before taking payment or subscription action.
+            </p>
+          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/notifications">View all</Link>
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {attentionItems.length === 0 ? (
+            <div className="flex items-center gap-3 rounded-md border border-dashed bg-muted/50 p-4 text-sm text-muted-foreground">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              No items need attention.
+            </div>
+          ) : (
+            <div className="divide-y rounded-md border">
+              {attentionItems.map((item) => (
+                <div key={item.id} className="grid gap-3 p-4 md:grid-cols-[1fr_auto] md:items-center">
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <AlertTriangle
+                        className={
+                          item.severity === "critical"
+                            ? "h-4 w-4 text-destructive"
+                            : "h-4 w-4 text-orange-500"
+                        }
+                      />
+                      <p className="font-medium">{item.title}</p>
+                      <Badge variant={item.severity === "critical" ? "destructive" : "secondary"}>
+                        {item.severity}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{item.message}</p>
+                    <p className="text-sm">{item.recommendedAction}</p>
+                  </div>
+                  <Button asChild variant="secondary" size="sm">
+                    <Link href={item.href}>
+                      Open
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

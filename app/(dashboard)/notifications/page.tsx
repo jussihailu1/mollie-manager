@@ -1,8 +1,8 @@
 import { NotificationsWorkspace } from "@/components/notifications-workspace";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { getSingleSearchParam } from "@/lib/format";
-import { listOperationalAlerts } from "@/lib/onboarding/data";
 import { listAlertInbox } from "@/lib/reliability/data";
+import { listNeedsAttentionItems } from "@/lib/reliability/needs-attention";
 import { toUiAttentionRecord, toUiNotificationRecord } from "@/lib/ui-data";
 
 export default async function NotificationsPage({
@@ -14,7 +14,7 @@ export default async function NotificationsPage({
   const [resolvedSearchParams, alertsResult, attentionResult] = await Promise.all([
     searchParams,
     listAlertInbox({ mode: selectedMode }),
-    listOperationalAlerts({ mode: selectedMode }),
+    listNeedsAttentionItems({ mode: selectedMode }),
   ]);
 
   return (

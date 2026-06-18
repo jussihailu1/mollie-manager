@@ -189,19 +189,6 @@ export type PaymentOverview = {
   subscriptionId: string | null;
 };
 
-export type OperationalAlert = {
-  createdAt: string;
-  customerEmail: string | null;
-  customerId: string | null;
-  customerName: string | null;
-  href: string;
-  id: string;
-  severity: "critical" | "warning";
-  summary: string;
-  title: string;
-  type: "payment" | "subscription";
-};
-
 function toModeParam(mode?: DashboardModeFilter) {
   return !mode || mode === "all" ? null : mode;
 }
@@ -746,99 +733,4 @@ export async function listPayments(options?: {
   mode?: DashboardModeFilter;
 }) {
   return listPaymentsByMode(options?.mode ?? "all");
-}
-
-const listOperationalAlertsByMode = cache(async (mode: DashboardModeFilter) => {
-  const modeParam = toModeParam(mode);
-  const result = await getDb().execute<OperationalAlert>(sql`
-    select
-      p.id,
-      'payment' as "type",
-      case
-        when p.disputed_at is not null
-          or p.recurring_collection_state in ('mandate_problem_review', 'reversal_critical_review')
-          then 'critical'
-        else 'warning'
-      end as "severity",
-      case
-        when p.disputed_at is not null
-          or p.recurring_collection_state = 'reversal_critical_review'
-          then 'Payment reversed or disputed'
-        when p.recurring_collection_state = 'mandate_problem_review'
-          then 'Mandate problem'
-        when p.recurring_collection_state = 'failed_needs_review'
-          then 'Recurring payment needs review'
-        when p.mollie_status = 'failed' then 'Failed payment'
-        when p.mollie_status = 'expired' then 'Expired payment'
-        else 'Payment needs attention'
-      end as "title",
-      case
-        when p.disputed_at is not null
-          or p.recurring_collection_state = 'reversal_critical_review'
-          then 'A payment was reversed or disputed. The invoice obligation may still be open. Review Mollie and e-Boekhouden before changing service or billing state.'
-        when p.recurring_collection_state = 'mandate_problem_review'
-          then 'A recurring payment failed with a possible mandate or bank-account problem. Review the payment path before relying on future automatic collection.'
-        when p.recurring_collection_state = 'failed_needs_review'
-          then 'A recurring payment failed or stayed pending beyond the safe processing window. Keep the existing invoice open and review manually before retrying.'
-        when p.mollie_status = 'failed' then 'A payment failed and should be reviewed before service continues.'
-        when p.mollie_status = 'expired' then 'A checkout expired before the customer completed payment.'
-        else 'The payment status is outside the happy path.'
-      end as "summary",
-      coalesce(p.disputed_at, p.failed_at, p.created_at) as "createdAt",
-      c.id as "customerId",
-      coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
-      c.email as "customerEmail",
-      concat('/payments?focus=', p.id) as "href"
-    from payments p
-    left join customers c on c.id = p.customer_id
-    where
-      (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
-      and (
-        p.disputed_at is not null
-        or p.mollie_status in ('failed', 'expired')
-        or p.recurring_collection_state in (
-          'failed_needs_review',
-          'mandate_problem_review',
-          'reversal_critical_review'
-        )
-      )
-
-    union all
-
-    select
-      s.id,
-      'subscription' as "type",
-      case
-        when s.local_status = 'out_of_sync' then 'critical'
-        else 'warning'
-      end as "severity",
-      case
-        when s.local_status = 'out_of_sync' then 'Subscription out of sync'
-        else 'Subscription needs payment action'
-      end as "title",
-      case
-        when s.local_status = 'out_of_sync' then 'The local subscription state no longer matches the latest Mollie state.'
-        else 'The subscription is suspended or waiting on a payment-related intervention.'
-      end as "summary",
-      s.updated_at as "createdAt",
-      c.id as "customerId",
-      coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
-      c.email as "customerEmail",
-      concat('/customers?focus=', c.id) as "href"
-    from subscriptions s
-    inner join customers c on c.id = s.customer_id
-    where
-      (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
-      and s.local_status in ('payment_action_required', 'out_of_sync')
-
-    order by "createdAt" desc
-  `);
-
-  return result.rows;
-});
-
-export async function listOperationalAlerts(options?: {
-  mode?: DashboardModeFilter;
-}) {
-  return listOperationalAlertsByMode(options?.mode ?? "all");
 }

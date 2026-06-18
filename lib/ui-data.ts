@@ -3,10 +3,10 @@ import "server-only";
 import type { MollieMode } from "@/lib/env";
 import type {
   CustomerOverview,
-  OperationalAlert,
   PaymentOverview,
 } from "@/lib/onboarding/data";
 import type { AlertInboxItem, AuditActivityItem } from "@/lib/reliability/data";
+import type { NeedsAttentionItem } from "@/lib/reliability/needs-attention";
 
 export type UiCustomerRecord = {
   address: string | null;
@@ -93,10 +93,12 @@ export type UiAttentionRecord = {
   customerId: string | null;
   href: string;
   id: string;
+  itemType: string;
   message: string;
+  recommendedAction: string;
   severity: "critical" | "warning";
   title: string;
-  type: "payment" | "subscription";
+  type: "payment" | "subscription" | "system";
 };
 
 export type UiActivityRecord = {
@@ -233,14 +235,16 @@ export function toUiNotificationRecord(
 }
 
 export function toUiAttentionRecord(
-  alert: OperationalAlert,
+  alert: NeedsAttentionItem,
 ): UiAttentionRecord {
   return {
     createdAt: alert.createdAt,
     customerId: alert.customerId,
     href: alert.href,
     id: alert.id,
+    itemType: alert.itemType,
     message: alert.summary,
+    recommendedAction: alert.recommendedAction,
     severity: alert.severity,
     title: alert.title,
     type: alert.type,

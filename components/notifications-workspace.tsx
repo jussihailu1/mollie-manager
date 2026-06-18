@@ -50,10 +50,12 @@ type AttentionRecord = {
   customerId: string | null;
   href: string;
   id: string;
+  itemType: string;
   message: string;
+  recommendedAction: string;
   severity: "critical" | "warning";
   title: string;
-  type: "payment" | "subscription";
+  type: "payment" | "subscription" | "system";
 };
 
 type ReadFilter = "all" | "unread" | "read";
@@ -108,7 +110,12 @@ function getAttentionMeta(alert: AttentionRecord) {
 
   return {
     borderClass: "border-l-orange-500",
-    ctaText: alert.type === "payment" ? "Open payment" : "Open customer",
+    ctaText:
+      alert.type === "payment"
+        ? "Open payment"
+        : alert.type === "subscription"
+          ? "Open customer"
+          : "Open settings",
     icon: <AlertTriangle className="h-5 w-5 text-orange-500" />,
   };
 }
@@ -226,6 +233,9 @@ export function NotificationsWorkspace({
                       </div>
                       <p className="text-sm text-muted-foreground line-clamp-2">
                         {alert.message}
+                      </p>
+                      <p className="text-xs text-muted-foreground line-clamp-2">
+                        {alert.recommendedAction}
                       </p>
                     </div>
                     <Button asChild variant="secondary" size="sm" className="w-full justify-between group">
