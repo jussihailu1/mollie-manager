@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -1517,6 +1517,10 @@ export function CustomerDrawer({
   const [activityTimeline, setActivityTimeline] = useState<CustomerActivityTimeline | null>(null);
   const [activityTimelineError, setActivityTimelineError] = useState<string | null>(null);
   const [isActivityTimelineLoading, setIsActivityTimelineLoading] = useState(false);
+  const [activityTimelineRefreshKey, setActivityTimelineRefreshKey] = useState(0);
+  const [noteBody, setNoteBody] = useState("");
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const [isAddingNote, setIsAddingNote] = useState(false);
   const currentCustomerId = customer?.id ?? null;
 
   useEffect(() => {
@@ -1781,10 +1785,59 @@ export function CustomerDrawer({
     return () => {
       active = false;
     };
-  }, [currentCustomerId, open]);
+  }, [activityTimelineRefreshKey, currentCustomerId, open]);
 
   if (!customer) {
     return null;
+  }
+
+  async function handleAddCustomerNote(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!currentCustomerId || !noteBody.trim()) {
+      setNoteError("Enter a note before saving.");
+      return;
+    }
+
+    setIsAddingNote(true);
+    setNoteError(null);
+
+    try {
+      const response = await fetch(
+        `/api/customers/${encodeURIComponent(currentCustomerId)}/notes`,
+        {
+          body: JSON.stringify({ body: noteBody }),
+          cache: "no-store",
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          payload && typeof payload.error === "string"
+            ? payload.error
+            : "Failed to add customer note.",
+        );
+      }
+
+      setNoteBody("");
+      setActivityTimelineRefreshKey((value) => value + 1);
+      router.refresh();
+    } catch (createError) {
+      setNoteError(
+        createError instanceof Error
+          ? createError.message
+          : "Failed to add customer note.",
+      );
+    } finally {
+      setIsAddingNote(false);
+    }
   }
 
   const stage = getCustomerStage(customer);
@@ -2062,6 +2115,27 @@ export function CustomerDrawer({
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
               Activity timeline
             </h3>
+            <form className="space-y-2" onSubmit={handleAddCustomerNote}>
+              <Textarea
+                value={noteBody}
+                onChange={(event) => setNoteBody(event.target.value)}
+                maxLength={2000}
+                placeholder="Add an internal customer note"
+                rows={3}
+              />
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">{noteBody.length}/2000</p>
+                <Button type="submit" size="sm" disabled={isAddingNote || !noteBody.trim()}>
+                  {isAddingNote ? (
+                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <PenLine className="mr-2 h-4 w-4" />
+                  )}
+                  Add note
+                </Button>
+              </div>
+              {noteError ? <p className="text-sm text-destructive">{noteError}</p> : null}
+            </form>
             {isActivityTimelineLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <LoaderCircle className="h-4 w-4 animate-spin" />

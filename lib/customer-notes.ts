@@ -6,6 +6,7 @@ import { cache } from "react";
 import type { DashboardModeFilter } from "@/lib/dashboard-mode";
 import { normalizeCustomerNoteBody } from "@/lib/customer-note-policy";
 import { getDb } from "@/lib/db";
+import { writeAuditLog } from "@/lib/audit";
 
 export { normalizeCustomerNoteBody };
 
@@ -64,4 +65,57 @@ export async function listCustomerNotes(options: {
     options.mode ?? "all",
     options.limit ?? 20,
   );
+}
+
+export async function createCustomerNote(input: {
+  body: string;
+  customerId: string;
+  mode: "live" | "test";
+}) {
+  const body = normalizeCustomerNoteBody(input.body);
+
+  if (!body) {
+    return null;
+  }
+
+  const noteId = crypto.randomUUID();
+  const result = await getDb().execute<CustomerNote>(sql`
+    insert into customer_notes (
+      id,
+      mode,
+      customer_id,
+      body,
+      source
+    ) values (
+      ${noteId},
+      ${input.mode},
+      ${input.customerId},
+      ${body},
+      'operator'
+    )
+    returning
+      id,
+      mode,
+      customer_id as "customerId",
+      body,
+      source,
+      created_at as "createdAt",
+      updated_at as "updatedAt",
+      archived_at as "archivedAt"
+  `);
+
+  await writeAuditLog({
+    action: "customer_note.create",
+    details: {
+      noteId,
+      source: "operator",
+    },
+    entityId: input.customerId,
+    entityType: "customer",
+    mode: input.mode,
+    outcome: "success",
+    summary: "Customer note added.",
+  });
+
+  return result.rows[0] ?? null;
 }
