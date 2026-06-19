@@ -81,6 +81,7 @@ Implemented so far:
 - derived customer lifecycle state now starts in a pure helper with focused coverage, returning a stable state, reason, and operator-facing explanation before any UI or manual override work
 - the customer table and drawer now surface the derived lifecycle state and explanation without adding manual lifecycle override fields
 - customer activity timeline reads now start in a server-side query helper with stable item types and source-scope coverage that keeps raw audit details, alert payloads, webhook payloads, and generic metadata out of timeline output
+- the customer drawer now loads the sanitized activity timeline through an authenticated customer activity API, keeping raw details, payloads, and metadata out of the normal client surface
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as materially mitigated rather than still open.
 

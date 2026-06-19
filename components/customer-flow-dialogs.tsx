@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
+  Activity,
   AlertTriangle,
   Archive,
   Check,
@@ -185,6 +186,20 @@ type CustomerBillingHistory = {
   }[];
 };
 
+type CustomerActivityTimeline = {
+  items: {
+    entityId: string;
+    entityType: string;
+    href: string;
+    id: string;
+    itemType: string;
+    occurredAt: string;
+    severity: "critical" | "info" | "warning";
+    summary: string;
+    title: string;
+  }[];
+};
+
 export type CustomerStage =
   | "new"
   | "payment_pending"
@@ -330,6 +345,21 @@ function getHistoryPaymentStatusBadge(status: string | null) {
   }
 }
 
+function getTimelineSeverityBadge(severity: CustomerActivityTimeline["items"][number]["severity"]) {
+  switch (severity) {
+    case "critical":
+      return <Badge variant="destructive">Critical</Badge>;
+    case "warning":
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100/80">
+          Warning
+        </Badge>
+      );
+    default:
+      return <Badge variant="secondary">Info</Badge>;
+  }
+}
+
 function getSubscriptionStatusBadge(status: CustomerFlowRecord["latestSubscriptionStatus"]) {
   if (status === "active") {
     return <Badge variant="default">Active</Badge>;
@@ -413,6 +443,35 @@ function HistoryRow({
       <div className="text-right">
         <div>{status}</div>
         <div className="mt-1 text-xs text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function TimelineRow({
+  item,
+}: Readonly<{
+  item: CustomerActivityTimeline["items"][number];
+}>) {
+  return (
+    <div className="rounded-md border px-3 py-2 text-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Activity className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="truncate font-medium">{item.title}</span>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{item.summary}</p>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {formatDateTime(item.occurredAt)} · {formatLabel(item.itemType)}
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          {getTimelineSeverityBadge(item.severity)}
+          <Button asChild variant="ghost" size="sm">
+            <Link href={item.href}>Open</Link>
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -1455,6 +1514,9 @@ export function CustomerDrawer({
   const [billingHistory, setBillingHistory] = useState<CustomerBillingHistory | null>(null);
   const [billingHistoryError, setBillingHistoryError] = useState<string | null>(null);
   const [isBillingHistoryLoading, setIsBillingHistoryLoading] = useState(false);
+  const [activityTimeline, setActivityTimeline] = useState<CustomerActivityTimeline | null>(null);
+  const [activityTimelineError, setActivityTimelineError] = useState<string | null>(null);
+  const [isActivityTimelineLoading, setIsActivityTimelineLoading] = useState(false);
   const currentCustomerId = customer?.id ?? null;
 
   useEffect(() => {
@@ -1654,6 +1716,67 @@ export function CustomerDrawer({
     }
 
     loadBillingHistory();
+
+    return () => {
+      active = false;
+    };
+  }, [currentCustomerId, open]);
+
+  useEffect(() => {
+    const customerId = currentCustomerId;
+
+    if (!open || !customerId) {
+      setActivityTimeline(null);
+      setActivityTimelineError(null);
+      setIsActivityTimelineLoading(false);
+      return;
+    }
+
+    let active = true;
+    const resolvedCustomerId = customerId;
+    setActivityTimeline(null);
+    setActivityTimelineError(null);
+    setIsActivityTimelineLoading(true);
+
+    async function loadActivityTimeline() {
+      try {
+        const response = await fetch(
+          `/api/customers/${encodeURIComponent(resolvedCustomerId)}/activity`,
+          {
+            cache: "no-store",
+          },
+        );
+        const payload = (await response.json().catch(() => null)) as
+          | (CustomerActivityTimeline & { error?: string })
+          | null;
+
+        if (!response.ok) {
+          throw new Error(
+            payload && typeof payload.error === "string"
+              ? payload.error
+              : "Failed to load customer activity.",
+          );
+        }
+
+        if (active) {
+          setActivityTimeline(payload);
+        }
+      } catch (timelineError) {
+        if (active) {
+          setActivityTimelineError(
+            timelineError instanceof Error
+              ? timelineError.message
+              : "Failed to load customer activity.",
+          );
+        }
+      } finally {
+        if (active) {
+          setIsActivityTimelineLoading(false);
+        }
+      }
+    }
+
+    loadActivityTimeline();
 
     return () => {
       active = false;
@@ -1933,6 +2056,33 @@ export function CustomerDrawer({
               </div>
             </>
           ) : null}
+
+          <Separator />
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Activity timeline
+            </h3>
+            {isActivityTimelineLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+                Loading activity...
+              </div>
+            ) : null}
+            {activityTimelineError ? (
+              <p className="text-sm text-destructive">{activityTimelineError}</p>
+            ) : null}
+            {activityTimeline ? (
+              <div className="space-y-2">
+                {activityTimeline.items.length > 0 ? (
+                  activityTimeline.items.slice(0, 10).map((item) => (
+                    <TimelineRow key={item.id} item={item} />
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No activity yet.</p>
+                )}
+              </div>
+            ) : null}
+          </div>
 
           <Separator />
           <div className="space-y-4">
