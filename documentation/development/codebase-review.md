@@ -79,6 +79,7 @@ Implemented so far:
 - failed-payment customer notification now uses a typed claim-before-send table and is triggered from reconciled Mollie payment sync rather than raw webhook payloads
 - the normal dashboard and notifications surface now share a typed Needs Attention query for failed payment, failed invoice, failed invoice delivery, missing relation, stale sync, missing mandate/setup, subscription payment-action, out-of-sync, and failed-webhook items, with source-scope coverage and no raw webhook payload selection
 - derived customer lifecycle state now starts in a pure helper with focused coverage, returning a stable state, reason, and operator-facing explanation before any UI or manual override work
+- the customer table and drawer now surface the derived lifecycle state and explanation without adding manual lifecycle override fields
 - customer activity timeline reads now start in a server-side query helper with stable item types and source-scope coverage that keeps raw audit details, alert payloads, webhook payloads, and generic metadata out of timeline output
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as materially mitigated rather than still open.

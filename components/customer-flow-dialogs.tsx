@@ -67,6 +67,10 @@ import {
   REPAIR_STALE_AFTER_MS,
   isOlderThan,
 } from "@/lib/freshness";
+import {
+  deriveCustomerLifecycleState,
+  type CustomerLifecycleStateResult,
+} from "@/lib/customer-lifecycle-state";
 import { formatCurrency, formatDate, formatDateTime, formatLabel } from "@/lib/format";
 import {
   hasMeaningfulDifference,
@@ -340,6 +344,53 @@ function getSubscriptionStatusBadge(status: CustomerFlowRecord["latestSubscripti
   }
 
   return <Badge variant="outline">{formatLabel(status)}</Badge>;
+}
+
+export function getCustomerLifecycleState(
+  customer: CustomerFlowRecord,
+): CustomerLifecycleStateResult {
+  return deriveCustomerLifecycleState({
+    archivedAt: customer.archivedAt,
+    eboekhoudenLinkStatus: customer.eboekhoudenLinkStatus,
+    hasValidMandate: customer.hasValidMandate,
+    latestConsentAcceptedAt: customer.latestConsentAcceptedAt,
+    latestFirstPaymentStatus: customer.latestFirstPaymentStatus,
+    latestPaymentStatus: customer.latestPaymentStatus,
+    latestPaymentType: customer.latestPaymentType,
+    latestSubscriptionMollieStatus: customer.latestSubscriptionMollieStatus,
+    latestSubscriptionServiceEndAt: customer.latestSubscriptionServiceEndAt,
+    latestSubscriptionStatus: customer.latestSubscriptionStatus,
+    latestSubscriptionStopAfterCurrentPeriod:
+      customer.latestSubscriptionStopAfterCurrentPeriod,
+    subscriptionCount: customer.subscriptionCount,
+  });
+}
+
+export function getCustomerLifecycleBadge(customer: CustomerFlowRecord) {
+  const lifecycle = getCustomerLifecycleState(customer);
+
+  switch (lifecycle.state) {
+    case "active":
+      return <Badge variant="default">Active</Badge>;
+    case "payment_issue":
+      return <Badge variant="destructive">Payment issue</Badge>;
+    case "needs_setup":
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100/80">
+          Needs setup
+        </Badge>
+      );
+    case "onboarding":
+      return <Badge variant="secondary">Onboarding</Badge>;
+    case "paused":
+      return <Badge variant="secondary">Paused</Badge>;
+    case "ended":
+      return <Badge variant="outline">Ended</Badge>;
+    case "cancelled":
+      return <Badge variant="outline">Cancelled</Badge>;
+    default:
+      return <Badge variant="outline">{formatLabel(lifecycle.state)}</Badge>;
+  }
 }
 
 function HistoryRow({
@@ -1643,6 +1694,7 @@ export function CustomerDrawer({
       customer.latestConsentAcceptedAt ||
       customer.latestFirstPaymentPaidAt,
   );
+  const lifecycle = getCustomerLifecycleState(customer);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -1672,6 +1724,22 @@ export function CustomerDrawer({
           ) : null}
 
           <div className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3 rounded-md border bg-muted/30 p-4">
+              <div className="min-w-0 space-y-1">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Lifecycle
+                </h3>
+                <p className="text-sm font-medium">{formatLabel(lifecycle.state)}</p>
+                <p className="text-sm text-muted-foreground">{lifecycle.summary}</p>
+                <p className="text-xs text-muted-foreground">
+                  Source: {formatLabel(lifecycle.reason)}
+                </p>
+              </div>
+              {getCustomerLifecycleBadge(customer)}
+            </div>
+
+            <Separator />
+
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
               Personal details
             </h3>

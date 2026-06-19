@@ -23,6 +23,7 @@ import {
   LinkEboekhoudenRelationDialog,
   type CustomerFlowRecord,
   getCustomerDisplayName,
+  getCustomerLifecycleBadge,
   getCustomerStage,
 } from "@/components/customer-flow-dialogs";
 import {
@@ -706,7 +707,12 @@ export function CustomersWorkspace({
                         <TableCell className="whitespace-nowrap text-muted-foreground">
                           {formatTableDate(customer.latestSubscriptionNextPaymentDate)}
                         </TableCell>
-                        <TableCell>{getStatusBadge(stage)}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-2">
+                            {getCustomerLifecycleBadge(customer)}
+                            {getStatusBadge(stage)}
+                          </div>
+                        </TableCell>
                         <TableCell className="whitespace-nowrap text-muted-foreground">
                           {formatDate(customer.createdAt)}
                         </TableCell>
