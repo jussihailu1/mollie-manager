@@ -13,13 +13,21 @@ test("needs attention query exposes stable typed sources without raw webhook pay
   const source = await readRepoFile("lib/reliability/needs-attention.ts");
 
   for (const itemType of [
+    "customer_sync_stale",
+    "eboekhouden_relation_problem",
     "expired_payment",
     "failed_payment",
+    "failed_first_payment_invoice",
+    "failed_invoice_delivery",
+    "failed_recurring_invoice",
     "failed_webhook",
+    "missing_mandate",
     "mandate_problem",
     "payment_action_required_subscription",
+    "payment_sync_stale",
     "reversed_payment",
     "subscription_out_of_sync",
+    "subscription_sync_stale",
   ]) {
     assert.match(source, new RegExp(`['"]${itemType}['"]`));
   }
@@ -27,7 +35,13 @@ test("needs attention query exposes stable typed sources without raw webhook pay
   assert.match(source, /recommendedAction/);
   assert.match(source, /from payments p/);
   assert.match(source, /from subscriptions s/);
+  assert.match(source, /from recurring_billing_schedules rbs/);
+  assert.match(source, /from customers c/);
   assert.match(source, /from webhook_events w/);
+  assert.match(source, /invoice_state = 'invoice_failed'/);
+  assert.match(source, /invoiceDeliveryStatus/);
+  assert.match(source, /last_synced_at/);
+  assert.match(source, /eboekhouden_link_status/);
   assert.doesNotMatch(source, /\bw\.payload\b/);
   assert.doesNotMatch(source, /secret|token|authorization/i);
 });

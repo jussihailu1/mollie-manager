@@ -98,7 +98,7 @@ export type UiAttentionRecord = {
   recommendedAction: string;
   severity: "critical" | "warning";
   title: string;
-  type: "payment" | "subscription" | "system";
+  type: "customer" | "payment" | "subscription" | "system";
 };
 
 export type UiActivityRecord = {

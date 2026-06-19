@@ -55,11 +55,11 @@ type AttentionRecord = {
   recommendedAction: string;
   severity: "critical" | "warning";
   title: string;
-  type: "payment" | "subscription" | "system";
+  type: "customer" | "payment" | "subscription" | "system";
 };
 
 type ReadFilter = "all" | "unread" | "read";
-type TypeFilter = "all" | "payment" | "subscription" | "system";
+type TypeFilter = "all" | "customer" | "payment" | "subscription" | "system";
 
 function getRelativeTime(dateString: string) {
   const date = new Date(dateString);
@@ -103,7 +103,12 @@ function getAttentionMeta(alert: AttentionRecord) {
   if (alert.severity === "critical") {
     return {
       borderClass: "border-l-destructive",
-      ctaText: alert.type === "payment" ? "Review payment" : "Review subscription",
+      ctaText:
+        alert.type === "payment"
+          ? "Review payment"
+          : alert.type === "system"
+            ? "Open settings"
+            : "Review customer",
       icon: <XCircle className="h-5 w-5 text-destructive" />,
     };
   }
@@ -113,7 +118,7 @@ function getAttentionMeta(alert: AttentionRecord) {
     ctaText:
       alert.type === "payment"
         ? "Open payment"
-        : alert.type === "subscription"
+        : alert.type === "subscription" || alert.type === "customer"
           ? "Open customer"
           : "Open settings",
     icon: <AlertTriangle className="h-5 w-5 text-orange-500" />,
@@ -301,6 +306,7 @@ export function NotificationsWorkspace({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Types</SelectItem>
+            <SelectItem value="customer">Customers</SelectItem>
             <SelectItem value="payment">Payments</SelectItem>
             <SelectItem value="subscription">Subscriptions</SelectItem>
             <SelectItem value="system">System Alerts</SelectItem>

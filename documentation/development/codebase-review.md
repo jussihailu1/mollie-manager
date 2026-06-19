@@ -77,7 +77,7 @@ Implemented so far:
 - the customer drawer now exposes protected customer-centered billing history for subscriptions, mandates, and payments
 - failed-payment outcome classification now starts in a pure helper before side effects, covering recurring failures, first-payment failures, mandate-only setup failures, mandate problems, refunds/reversals, chargebacks, and unsafe long-pending payments
 - failed-payment customer notification now uses a typed claim-before-send table and is triggered from reconciled Mollie payment sync rather than raw webhook payloads
-- the normal dashboard and notifications surface now share a typed Needs Attention query for failed-payment, subscription payment-action, out-of-sync, and failed-webhook items, with source-scope coverage and no raw webhook payload selection
+- the normal dashboard and notifications surface now share a typed Needs Attention query for failed payment, failed invoice, failed invoice delivery, missing relation, stale sync, missing mandate/setup, subscription payment-action, out-of-sync, and failed-webhook items, with source-scope coverage and no raw webhook payload selection
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as materially mitigated rather than still open.
 
