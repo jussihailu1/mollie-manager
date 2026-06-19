@@ -1537,6 +1537,8 @@ export function CustomerDrawer({
   const [invoiceLinks, setInvoiceLinks] = useState<CustomerInvoiceLinks | null>(null);
   const [invoiceLinksError, setInvoiceLinksError] = useState<string | null>(null);
   const [isInvoiceLinksLoading, setIsInvoiceLinksLoading] = useState(false);
+  const [resendingInvoiceKey, setResendingInvoiceKey] = useState<string | null>(null);
+  const [invoiceResendError, setInvoiceResendError] = useState<string | null>(null);
   const currentCustomerId = customer?.id ?? null;
 
   useEffect(() => {
@@ -1914,6 +1916,61 @@ export function CustomerDrawer({
       );
     } finally {
       setIsAddingNote(false);
+    }
+  }
+
+  async function handleResendInvoice(invoice: CustomerInvoiceLinks["invoices"][number]) {
+    if (!currentCustomerId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Resend this existing invoice email to the customer? This will not create a new invoice.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const resendKey = `${invoice.ownerType}:${invoice.ownerId}`;
+    setResendingInvoiceKey(resendKey);
+    setInvoiceResendError(null);
+
+    try {
+      const response = await fetch(
+        `/api/customers/${encodeURIComponent(currentCustomerId)}/invoices/resend`,
+        {
+          body: JSON.stringify({
+            ownerId: invoice.ownerId,
+            ownerType: invoice.ownerType,
+          }),
+          cache: "no-store",
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string; status?: string }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          payload && typeof payload.error === "string"
+            ? payload.error
+            : "Failed to resend invoice.",
+        );
+      }
+
+      setActivityTimelineRefreshKey((value) => value + 1);
+      router.refresh();
+    } catch (resendError) {
+      setInvoiceResendError(
+        resendError instanceof Error ? resendError.message : "Failed to resend invoice.",
+      );
+    } finally {
+      setResendingInvoiceKey(null);
     }
   }
 
@@ -2309,6 +2366,9 @@ export function CustomerDrawer({
                   {invoiceLinksError ? (
                     <p className="text-sm text-destructive">{invoiceLinksError}</p>
                   ) : null}
+                  {invoiceResendError ? (
+                    <p className="text-sm text-destructive">{invoiceResendError}</p>
+                  ) : null}
                   {invoiceLinks ? (
                     invoiceLinks.invoices.length > 0 ? (
                       invoiceLinks.invoices.slice(0, 6).map((invoice) => (
@@ -2322,16 +2382,36 @@ export function CustomerDrawer({
                           }
                           status={<Badge variant="secondary">{formatLabel(invoice.invoiceState)}</Badge>}
                           detail={
-                            invoice.invoicePdfUrl ? (
-                              <Button asChild variant="outline" size="sm">
-                                <a href={invoice.invoicePdfUrl} target="_blank" rel="noreferrer">
-                                  <FileText className="mr-2 h-4 w-4" />
-                                  Download
-                                </a>
+                            <div className="flex flex-col items-end gap-2">
+                              {invoice.invoicePdfUrl ? (
+                                <Button asChild variant="outline" size="sm">
+                                  <a href={invoice.invoicePdfUrl} target="_blank" rel="noreferrer">
+                                    <FileText className="mr-2 h-4 w-4" />
+                                    Download
+                                  </a>
+                                </Button>
+                              ) : (
+                                <span>No trusted PDF link</span>
+                              )}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={
+                                  resendingInvoiceKey ===
+                                  `${invoice.ownerType}:${invoice.ownerId}`
+                                }
+                                onClick={() => handleResendInvoice(invoice)}
+                              >
+                                {resendingInvoiceKey ===
+                                `${invoice.ownerType}:${invoice.ownerId}` ? (
+                                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Mail className="mr-2 h-4 w-4" />
+                                )}
+                                Resend
                               </Button>
-                            ) : (
-                              "No trusted PDF link"
-                            )
+                            </div>
                           }
                         />
                       ))

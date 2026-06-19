@@ -99,7 +99,7 @@ Reference: `../development/codebase-review.md`
 - [ ] payment failure follow-up queue
 - [x] better customer-facing Mollie return page with clearer success, pending, and failed states
 - [ ] manual invoice resend and operator invoice download links
-  Status: started. Payment drawer already shows guarded invoice download links when a trusted e-Boekhouden PDF URL is available. Customer drawer now loads authenticated customer invoice links for first-payment and recurring invoices through a server helper that normalizes trusted e-Boekhouden PDF URLs before returning client data. Remaining work: manual invoice resend.
+  Status: implemented for customer-centered workflow. Payment drawer shows guarded invoice download links when a trusted e-Boekhouden PDF URL is available. Customer drawer loads authenticated customer invoice links for first-payment and recurring invoices through a server helper that normalizes trusted e-Boekhouden PDF URLs before returning client data. Customer drawer also supports confirmed manual resend of an existing invoice email through the existing invoice delivery path; it does not create invoices.
 - [ ] plan catalog, invoice line templates, and VAT/revenue ledger mapping by plan
 - [ ] discounts, trials, setup fees, and proration rules after plan/catalog foundations exist
 - [ ] per-customer or per-subscription policy overrides
