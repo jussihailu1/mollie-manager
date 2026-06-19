@@ -81,6 +81,11 @@ export const customerPaymentNotificationTypeEnum = pgEnum(
   ["failed_payment"],
 );
 
+export const customerNoteSourceEnum = pgEnum("customer_note_source", [
+  "operator",
+  "legacy_customer_notes",
+]);
+
 export const subscriptionTermModeEnum = pgEnum("subscription_term_mode", [
   "open_ended",
   "fixed_term",
@@ -751,6 +756,45 @@ export const subscriptionOnboardingConsents = pgTable(
       )`,
     ),
     index("subscription_onboarding_consents_customer_idx").on(
+      table.customerId,
+      table.createdAt.desc(),
+    ),
+  ],
+);
+
+export const customerNotes = pgTable(
+  "customer_notes",
+  {
+    id: text("id").primaryKey(),
+    mode: mollieModeEnum("mode").notNull(),
+    customerId: text("customer_id").notNull(),
+    body: text("body").notNull(),
+    source: customerNoteSourceEnum("source").notNull().default("operator"),
+    createdAt: timestamp("created_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    archivedAt: timestamp("archived_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.customerId],
+      foreignColumns: [customers.id],
+      name: "customer_notes_customer_id_fkey",
+    }).onDelete("cascade"),
+    check("customer_notes_body_not_blank_check", sql`length(btrim(${table.body})) > 0`),
+    index("customer_notes_customer_created_idx").on(
       table.customerId,
       table.createdAt.desc(),
     ),

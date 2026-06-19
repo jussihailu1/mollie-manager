@@ -10,6 +10,7 @@ describe("customer activity timeline source", () => {
       "alert_opened",
       "audit_event",
       "customer_created",
+      "customer_note",
       "failed_payment_notification",
       "first_payment_invoice",
       "payment_status",

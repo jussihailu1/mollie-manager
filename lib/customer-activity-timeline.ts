@@ -10,6 +10,7 @@ export type CustomerActivityTimelineItemType =
   | "alert_opened"
   | "audit_event"
   | "customer_created"
+  | "customer_note"
   | "failed_payment_notification"
   | "first_payment_invoice"
   | "payment_status"
@@ -24,6 +25,7 @@ export type CustomerActivityTimelineItem = {
     | "alert"
     | "audit_log"
     | "customer"
+    | "customer_note"
     | "customer_payment_notification"
     | "payment"
     | "recurring_billing_schedule"
@@ -257,6 +259,30 @@ const listCustomerActivityTimelineByMode = cache(async (
       inner join payments p on p.id = cpn.payment_id
       where coalesce(cpn.customer_id, p.customer_id) = ${customerId}
         and (${modeParam}::mollie_mode is null or cpn.mode = ${modeParam})
+
+      union all
+
+      select
+        concat('customer-note:', cn.id) as id,
+        'customer_note' as "itemType",
+        'info' as severity,
+        case
+          when cn.source = 'legacy_customer_notes' then 'Legacy customer note'
+          else 'Customer note added'
+        end as title,
+        case
+          when length(cn.body) > 180 then concat(left(cn.body, 177), '...')
+          else cn.body
+        end as summary,
+        cn.created_at as "occurredAt",
+        'customer_note' as "entityType",
+        cn.id as "entityId",
+        cn.customer_id as "customerId",
+        concat('/customers?focus=', cn.customer_id) as href
+      from customer_notes cn
+      where cn.customer_id = ${customerId}
+        and cn.archived_at is null
+        and (${modeParam}::mollie_mode is null or cn.mode = ${modeParam})
 
       union all
 
