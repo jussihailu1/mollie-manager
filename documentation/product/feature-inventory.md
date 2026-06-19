@@ -97,7 +97,7 @@ Reference: `../development/codebase-review.md`
 
 - [ ] pause/resume and cancellation workflows with reason, effective date, and audit trail
 - [ ] payment failure follow-up queue
-- [ ] better customer-facing Mollie return page with clearer success, pending, and failed states
+- [x] better customer-facing Mollie return page with clearer success, pending, and failed states
 - [ ] manual invoice resend and operator invoice download links
 - [ ] plan catalog, invoice line templates, and VAT/revenue ledger mapping by plan
 - [ ] discounts, trials, setup fees, and proration rules after plan/catalog foundations exist

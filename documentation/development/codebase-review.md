@@ -84,6 +84,7 @@ Implemented so far:
 - the customer drawer now loads the sanitized activity timeline through an authenticated customer activity API, keeping raw details, payloads, and metadata out of the normal client surface
 - customer notes now have an explicit `customer_notes` table and server query helper with typed source, nonblank body constraint, and migration backfill from the legacy `customers.notes` column
 - customer note creation now uses an authenticated customer notes API and writes an audit entry that references the note id without copying note body text into audit details
+- the hosted onboarding return page now uses a pure state-copy helper for subscription confirmed, mandate-only complete, payment received, pending SEPA, and failed/expired checkout states without penalty or automatic cancellation wording
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as materially mitigated rather than still open.
 
