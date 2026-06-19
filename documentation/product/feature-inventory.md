@@ -59,7 +59,7 @@ Roadmap rule: feature sequencing comes from `implementation-roadmap.md`. This fi
 - [ ] Needs attention dashboard
   Status: substantially implemented. The dashboard and notifications page now use a shared Needs Attention query with stable item types, severity, entity links, and recommended actions for failed/reversed/expired payments, failed first-payment and recurring invoices, failed invoice email delivery, missing or broken e-Boekhouden relation links, stale Mollie sync state, missing mandate/setup blockers, subscription payment-action/out-of-sync states, and failed webhooks. Raw webhook payloads stay out of normal operator output. Remaining work is UI polish and any new source types discovered during real operator use.
 - [ ] Customer notes, activity timeline, and derived lifecycle state
-  Status: planned. Lifecycle state should be derived from facts first; manual override stays far-future.
+  Status: started. A pure derived lifecycle helper now maps existing customer/payment/subscription/setup facts into `onboarding`, `active`, `payment_issue`, `paused`, `cancelled`, `ended`, and `needs_setup` with a reason and plain-language explanation. Manual override remains out of scope. Next work: timeline query with stable item types, separate customer notes, and UI explanation in the customer workspace.
 - [ ] Retention policy UI and dry-run cleanup
   Status: policy baseline is decided and no longer blocked. Next step is showing the accepted policy, adding dry-run cleanup output, and keeping destructive cleanup explicit and scoped.
 
