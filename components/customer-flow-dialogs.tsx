@@ -200,6 +200,19 @@ type CustomerActivityTimeline = {
   }[];
 };
 
+type CustomerInvoiceLinks = {
+  invoices: {
+    createdAt: string | null;
+    eboekhoudenInvoiceId: string | null;
+    eboekhoudenInvoiceNumber: string | null;
+    invoicePdfUrl: string | null;
+    invoiceState: string;
+    ownerId: string;
+    ownerType: "payment" | "recurring_schedule";
+    plannedCollectionDate: string | null;
+  }[];
+};
+
 export type CustomerStage =
   | "new"
   | "payment_pending"
@@ -1521,6 +1534,9 @@ export function CustomerDrawer({
   const [noteBody, setNoteBody] = useState("");
   const [noteError, setNoteError] = useState<string | null>(null);
   const [isAddingNote, setIsAddingNote] = useState(false);
+  const [invoiceLinks, setInvoiceLinks] = useState<CustomerInvoiceLinks | null>(null);
+  const [invoiceLinksError, setInvoiceLinksError] = useState<string | null>(null);
+  const [isInvoiceLinksLoading, setIsInvoiceLinksLoading] = useState(false);
   const currentCustomerId = customer?.id ?? null;
 
   useEffect(() => {
@@ -1786,6 +1802,67 @@ export function CustomerDrawer({
       active = false;
     };
   }, [activityTimelineRefreshKey, currentCustomerId, open]);
+
+  useEffect(() => {
+    const customerId = currentCustomerId;
+
+    if (!open || !customerId) {
+      setInvoiceLinks(null);
+      setInvoiceLinksError(null);
+      setIsInvoiceLinksLoading(false);
+      return;
+    }
+
+    let active = true;
+    const resolvedCustomerId = customerId;
+    setInvoiceLinks(null);
+    setInvoiceLinksError(null);
+    setIsInvoiceLinksLoading(true);
+
+    async function loadInvoiceLinks() {
+      try {
+        const response = await fetch(
+          `/api/customers/${encodeURIComponent(resolvedCustomerId)}/invoices`,
+          {
+            cache: "no-store",
+          },
+        );
+        const payload = (await response.json().catch(() => null)) as
+          | (CustomerInvoiceLinks & { error?: string })
+          | null;
+
+        if (!response.ok) {
+          throw new Error(
+            payload && typeof payload.error === "string"
+              ? payload.error
+              : "Failed to load customer invoices.",
+          );
+        }
+
+        if (active) {
+          setInvoiceLinks(payload);
+        }
+      } catch (invoiceError) {
+        if (active) {
+          setInvoiceLinksError(
+            invoiceError instanceof Error
+              ? invoiceError.message
+              : "Failed to load customer invoices.",
+          );
+        }
+      } finally {
+        if (active) {
+          setIsInvoiceLinksLoading(false);
+        }
+      }
+    }
+
+    loadInvoiceLinks();
+
+    return () => {
+      active = false;
+    };
+  }, [currentCustomerId, open]);
 
   if (!customer) {
     return null;
@@ -2217,6 +2294,51 @@ export function CustomerDrawer({
                   ) : (
                     <p className="text-sm text-muted-foreground">No mandate rows.</p>
                   )}
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Invoices
+                  </p>
+                  {isInvoiceLinksLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                      Loading invoices...
+                    </div>
+                  ) : null}
+                  {invoiceLinksError ? (
+                    <p className="text-sm text-destructive">{invoiceLinksError}</p>
+                  ) : null}
+                  {invoiceLinks ? (
+                    invoiceLinks.invoices.length > 0 ? (
+                      invoiceLinks.invoices.slice(0, 6).map((invoice) => (
+                        <HistoryRow
+                          key={`${invoice.ownerType}:${invoice.ownerId}`}
+                          label={invoice.eboekhoudenInvoiceNumber ?? "Invoice"}
+                          meta={
+                            invoice.ownerType === "recurring_schedule"
+                              ? `Recurring period ${formatDate(invoice.plannedCollectionDate)}`
+                              : "First payment invoice"
+                          }
+                          status={<Badge variant="secondary">{formatLabel(invoice.invoiceState)}</Badge>}
+                          detail={
+                            invoice.invoicePdfUrl ? (
+                              <Button asChild variant="outline" size="sm">
+                                <a href={invoice.invoicePdfUrl} target="_blank" rel="noreferrer">
+                                  <FileText className="mr-2 h-4 w-4" />
+                                  Download
+                                </a>
+                              </Button>
+                            ) : (
+                              "No trusted PDF link"
+                            )
+                          }
+                        />
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No invoice rows.</p>
+                    )
+                  ) : null}
                 </div>
 
                 <div className="space-y-2">
