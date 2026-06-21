@@ -33,6 +33,7 @@ export type FailedPaymentNotificationDependencies = {
   markCustomerNotificationSent: (
     claim: FailedPaymentNotificationClaim,
   ) => Promise<void>;
+  notificationsAreConfigured: () => boolean;
   openOperatorTask: (context: FailedPaymentNotificationContext) => Promise<{
     id: string;
     isNew: boolean;
@@ -76,6 +77,22 @@ export async function runFailedPaymentNotificationFlow(
   }
 
   const operatorTask = await dependencies.openOperatorTask(context);
+
+  if (!dependencies.notificationsAreConfigured()) {
+    await dependencies.writeAudit({
+      action: "failed_payment.notification.skipped",
+      entityId: context.localPaymentId,
+      outcome: "success",
+      summary: "Skipped failed-payment customer notification.",
+    });
+
+    return {
+      customerEmailSent: false,
+      customerNotificationClaimed: false,
+      operatorTaskId: operatorTask.id,
+    };
+  }
+
   const customerEmail = buildFailedPaymentCustomerEmail(context);
 
   if (!customerEmail.shouldSend || !context.customerEmail) {
@@ -137,4 +154,3 @@ export async function runFailedPaymentNotificationFlow(
     throw error;
   }
 }
-

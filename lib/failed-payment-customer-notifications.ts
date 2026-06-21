@@ -180,14 +180,6 @@ export async function runFailedPaymentCustomerNotificationForSyncedPayment(input
   payment: Payment;
   recurringCollectionState: RecurringCollectionState;
 }) {
-  if (!notificationsAreConfigured()) {
-    return {
-      customerEmailSent: false,
-      customerNotificationClaimed: false,
-      operatorTaskId: null,
-    };
-  }
-
   const row = await loadPaymentNotificationContext(input.localPaymentId);
 
   if (!row) {
@@ -231,6 +223,7 @@ export async function runFailedPaymentCustomerNotificationForSyncedPayment(input
     claimCustomerNotification,
     markCustomerNotificationFailed,
     markCustomerNotificationSent,
+    notificationsAreConfigured,
     openOperatorTask: async (taskContext) => {
       return openAlert({
         customerId: taskContext.customerId,
@@ -267,4 +260,3 @@ export async function runFailedPaymentCustomerNotificationForSyncedPayment(input
     },
   });
 }
-
