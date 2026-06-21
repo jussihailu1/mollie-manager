@@ -2,14 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
-import { sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { writeAuditLog } from "@/lib/audit";
 import { requireViewerSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
-import { transaction } from "@/lib/db";
-import { getMollieClient } from "@/lib/mollie/client";
 import { syncSubscriptionByLocalId } from "@/lib/reliability/sync";
 import { getManagedSubscription } from "@/lib/reliability/sync-resource-state";
 import {
@@ -58,109 +54,6 @@ export async function syncSubscriptionAction(formData: FormData) {
     revalidatePath("/notifications");
     redirectWithMessage(parsed.data.returnTo, {
       notice: "Subscription and payment history refreshed from Mollie.",
-    });
-  } catch (error) {
-    unstable_rethrow(error);
-    redirectWithMessage(parsed.data.returnTo, {
-      error: serializeError(error),
-    });
-  }
-}
-
-export async function cancelSubscriptionAction(formData: FormData) {
-  const parsed = manageSubscriptionSchema.safeParse({
-    returnTo: formData.get("returnTo"),
-    subscriptionId: formData.get("subscriptionId"),
-  });
-
-  if (!parsed.success) {
-    redirectWithMessage("/customers", {
-      error: "Subscription id is missing.",
-    });
-  }
-
-  const session = await requireViewerSession();
-  const selectedMode = await getSelectedMollieMode();
-  const subscription = await getManagedSubscription(parsed.data.subscriptionId);
-
-  if (!subscription || subscription.mode !== selectedMode) {
-    redirectWithMessage("/customers", {
-      error: "Subscription not found in the selected Mollie mode.",
-    });
-  }
-
-  if (!subscription.mollieSubscriptionId || !subscription.customerMollieId) {
-    redirectWithMessage(parsed.data.returnTo, {
-      error: "Subscription is not linked to Mollie.",
-    });
-  }
-
-  if (subscription.localStatus === "future_charges_stopped") {
-    redirectWithMessage(parsed.data.returnTo, {
-      notice: "Future charges were already stopped for this subscription.",
-    });
-  }
-
-  try {
-    const mollie = getMollieClient(subscription.mode);
-    const canceledSubscription = await mollie.customerSubscriptions.cancel(
-      subscription.mollieSubscriptionId,
-      {
-        customerId: subscription.customerMollieId,
-        idempotencyKey: crypto.randomUUID(),
-      },
-    );
-
-    await transaction(async (client) => {
-      await client.execute(sql`
-          update subscriptions
-          set
-            local_status = 'future_charges_stopped',
-            mollie_status = ${canceledSubscription.status},
-            stop_after_current_period = true,
-            canceled_at = coalesce(${canceledSubscription.canceledAt ?? null}::timestamptz, now()),
-            metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
-              nextPaymentDate: canceledSubscription.nextPaymentDate ?? null,
-            })}::jsonb,
-            updated_at = now(),
-            last_synced_at = now()
-          where id = ${subscription.id}
-        `);
-
-      await writeAuditLog(
-        {
-          action: "subscription.cancel",
-          details: {
-            localSubscriptionId: subscription.id,
-            mollieSubscriptionId: subscription.mollieSubscriptionId,
-          },
-          entityId: subscription.id,
-          entityType: "subscription",
-          mode: subscription.mode,
-          outcome: "success",
-          summary: "Stopped future charges for the subscription in Mollie.",
-        },
-        client,
-        {
-          email: session.user.email ?? null,
-          kind: "user",
-        },
-      );
-    });
-
-    await syncSubscriptionByLocalId(subscription.id, {
-      actor: {
-        email: session.user.email ?? null,
-        kind: "user",
-      },
-      strictMode: true,
-    });
-
-    revalidatePath("/customers");
-    revalidatePath("/payments");
-    revalidatePath("/notifications");
-    redirectWithMessage(parsed.data.returnTo, {
-      notice: "Future charges stopped. The subscription state was refreshed from Mollie.",
     });
   } catch (error) {
     unstable_rethrow(error);

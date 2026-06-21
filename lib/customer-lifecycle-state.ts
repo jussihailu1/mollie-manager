@@ -110,8 +110,8 @@ export function deriveCustomerLifecycleState(
   ) {
     return {
       reason: "future_charges_stopped",
-      state: "paused",
-      summary: "Future charges are stopped while the current period remains in place.",
+      state: "cancelled",
+      summary: "Future charges are stopped. Service may continue until its separate end date.",
     };
   }
 

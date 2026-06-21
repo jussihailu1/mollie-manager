@@ -96,6 +96,7 @@ Reference: `../development/codebase-review.md`
 ## Deferred Or Later
 
 - [ ] pause/resume and cancellation workflows with reason, effective date, and audit trail
+  Status: pure operation policy foundation is implemented. It permits only reasoned, dated cancellation of active open-ended subscriptions, preserves existing invoice/payment collection state, distinguishes immediate service end from paid-period service end, requires scheduling for future effective dates, blocks fixed-term cancellation pending an early-termination policy, and blocks pause/resume because Mollie cancellation is not reversible. The old direct Mollie cancellation action was removed; no operation UI or provider side effect is exposed until durable intent and audit orchestration exist.
 - [ ] payment failure follow-up queue
 - [x] better customer-facing Mollie return page with clearer success, pending, and failed states
 - [ ] manual invoice resend and operator invoice download links

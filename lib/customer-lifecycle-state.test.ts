@@ -95,7 +95,7 @@ describe("customer lifecycle state", () => {
     );
   });
 
-  it("derives paused when future charges are stopped", () => {
+  it("does not mislabel irreversible stopped charges as paused", () => {
     const result = deriveCustomerLifecycleState(
       {
         eboekhoudenLinkStatus: "linked",
@@ -104,7 +104,7 @@ describe("customer lifecycle state", () => {
       { now },
     );
 
-    assert.equal(result.state, "paused");
+    assert.equal(result.state, "cancelled");
     assert.equal(result.reason, "future_charges_stopped");
   });
 

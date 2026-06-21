@@ -82,6 +82,34 @@ Customer-visible recurring invoice timing, direct-debit notice, failed collectio
   - customer-facing plan snapshot
 - Add tenant-level default policy storage now if needed by implementation, but do not implement per-subscription overrides yet.
 
+## Operator Subscription Operations Foundation
+
+The first operator-operations slice is intentionally policy-only. No pause,
+resume, or cancellation control may call Mollie until durable intent,
+idempotency, effective-date execution, and audit persistence exist.
+
+| Operation | Current decision | Billing effect | Service effect |
+| --- | --- | --- | --- |
+| Cancel active open-ended subscription | allowed only with an operator reason and valid effective date | stop future Mollie charges at the effective date; keep existing invoices and payment collection state unchanged | `immediate` ends service at the effective date; `end_of_paid_period` requires and preserves service through the paid-period end |
+| Cancel fixed-term subscription | blocked as `fixed_term_policy_undefined` | none | none |
+| Pause | blocked as `provider_operation_unsupported` | none | none |
+| Resume | blocked as `provider_operation_unsupported` | none | none |
+
+Additional rules:
+
+- Mollie cancellation is irreversible and is not a reversible pause.
+- A future effective date requires durable scheduling; the provider must not be
+  cancelled early.
+- A terminal, completed, already-cancelled, or future-charges-stopped
+  subscription rejects another operation.
+- Fixed-term cancellation remains blocked because stopping Mollie early would
+  change the agreed `total_payments` obligation. `cancellation_effect` controls
+  service entitlement and does not answer that billing decision.
+- Cancellation never settles, voids, retries, or duplicates an existing invoice
+  or payment, and never changes failed-payment collection state.
+- `future_charges_stopped` is a cancellation/billing-end signal, not a paused
+  state that can be resumed.
+
 ## Out Of Scope / Not In V1
 
 - Per-subscription overrides
