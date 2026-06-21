@@ -18,6 +18,7 @@ export type FailedPaymentNotificationContext = Omit<
 };
 
 export type FailedPaymentNotificationClaim = {
+  claimToken: string | null;
   id: string | null;
   isClaimed: boolean;
 };

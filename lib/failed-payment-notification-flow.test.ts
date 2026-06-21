@@ -37,6 +37,7 @@ function buildDependencies(events: string[] = []): FailedPaymentNotificationDepe
     claimCustomerNotification: async () => {
       events.push("claim");
       return {
+        claimToken: "claim_123",
         id: "notification_123",
         isClaimed: true,
       };
@@ -112,6 +113,7 @@ describe("failed payment notification flow", () => {
     dependencies.claimCustomerNotification = async () => {
       events.push("claim");
       return {
+        claimToken: null,
         id: "notification_123",
         isClaimed: false,
       };

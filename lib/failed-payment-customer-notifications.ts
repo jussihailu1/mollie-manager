@@ -14,6 +14,11 @@ import {
   type FailedPaymentNotificationClaim,
   type FailedPaymentNotificationContext,
 } from "@/lib/failed-payment-notification-flow";
+import {
+  FAILED_PAYMENT_NOTIFICATION_CLAIM_TIMEOUT_MS,
+  FAILED_PAYMENT_NOTIFICATION_RETRY_DELAY_MS,
+  MAX_FAILED_PAYMENT_NOTIFICATION_ATTEMPTS,
+} from "@/lib/failed-payment-notification-retry-policy";
 import { classifyPaymentOutcome } from "@/lib/payment-outcome-classification";
 import { sendEmailTo, notificationsAreConfigured } from "@/lib/notifications/email";
 import { openAlert } from "@/lib/reliability/alerts";
@@ -38,6 +43,7 @@ type PaymentNotificationContextRow = {
 };
 
 type ExistingNotificationRow = {
+  claimToken: string;
   id: string;
 };
 
@@ -91,6 +97,7 @@ async function claimCustomerNotification(
   const db = client ?? getDb();
   const email = buildFailedPaymentCustomerEmail(context);
   const notificationId = crypto.randomUUID();
+  const claimToken = crypto.randomUUID();
   const result = await db.execute<ExistingNotificationRow>(sql`
       insert into customer_payment_notifications (
         id,
@@ -104,7 +111,9 @@ async function claimCustomerNotification(
         subject,
         outcome_state,
         outcome_reason,
-        template_version
+        template_version,
+        attempt_count,
+        claim_token
       ) values (
         ${notificationId},
         ${context.mode},
@@ -117,20 +126,52 @@ async function claimCustomerNotification(
         ${email.shouldSend ? email.subject : null},
         ${context.outcome.state},
         ${context.outcome.reason},
-        1
+        1,
+        1,
+        ${claimToken}
       )
-      on conflict (mode, payment_id, notification_type) do nothing
-      returning id
+      on conflict (mode, payment_id, notification_type) do update
+      set
+        status = 'claimed',
+        customer_id = excluded.customer_id,
+        subscription_id = excluded.subscription_id,
+        recipient_email = excluded.recipient_email,
+        subject = excluded.subject,
+        outcome_state = excluded.outcome_state,
+        outcome_reason = excluded.outcome_reason,
+        template_version = excluded.template_version,
+        attempt_count = customer_payment_notifications.attempt_count + 1,
+        claim_token = excluded.claim_token,
+        claimed_at = now(),
+        sent_at = null,
+        failed_at = null,
+        last_error_message = null,
+        updated_at = now()
+      where customer_payment_notifications.attempt_count < ${MAX_FAILED_PAYMENT_NOTIFICATION_ATTEMPTS}
+        and (
+          (
+            customer_payment_notifications.status = 'failed'
+            and customer_payment_notifications.failed_at <=
+              now() - (${FAILED_PAYMENT_NOTIFICATION_RETRY_DELAY_MS} * interval '1 millisecond')
+          )
+          or (
+            customer_payment_notifications.status = 'claimed'
+            and customer_payment_notifications.claimed_at <=
+              now() - (${FAILED_PAYMENT_NOTIFICATION_CLAIM_TIMEOUT_MS} * interval '1 millisecond')
+          )
+        )
+      returning id, claim_token as "claimToken"
     `);
 
   return {
+    claimToken: result.rows[0]?.claimToken ?? null,
     id: result.rows[0]?.id ?? null,
     isClaimed: Boolean(result.rows[0]?.id),
   };
 }
 
 async function markCustomerNotificationSent(claim: FailedPaymentNotificationClaim) {
-  if (!claim.id) {
+  if (!claim.id || !claim.claimToken) {
     return;
   }
 
@@ -139,9 +180,10 @@ async function markCustomerNotificationSent(claim: FailedPaymentNotificationClai
       set
         status = 'sent',
         sent_at = now(),
-        attempt_count = attempt_count + 1,
         updated_at = now()
       where id = ${claim.id}
+        and status = 'claimed'
+        and claim_token = ${claim.claimToken}
     `);
 }
 
@@ -149,7 +191,7 @@ async function markCustomerNotificationFailed(
   claim: FailedPaymentNotificationClaim,
   errorMessage: string,
 ) {
-  if (!claim.id) {
+  if (!claim.id || !claim.claimToken) {
     return;
   }
 
@@ -158,10 +200,11 @@ async function markCustomerNotificationFailed(
       set
         status = 'failed',
         failed_at = now(),
-        attempt_count = attempt_count + 1,
         last_error_message = ${errorMessage.slice(0, 180)},
         updated_at = now()
       where id = ${claim.id}
+        and status = 'claimed'
+        and claim_token = ${claim.claimToken}
     `);
 }
 

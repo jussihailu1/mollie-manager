@@ -885,6 +885,7 @@ export const customerPaymentNotifications = pgTable(
     outcomeReason: text("outcome_reason").notNull(),
     templateVersion: integer("template_version").notNull().default(1),
     attemptCount: integer("attempt_count").notNull().default(0),
+    claimToken: text("claim_token"),
     claimedAt: timestamp("claimed_at", {
       mode: "string",
       withTimezone: true,
