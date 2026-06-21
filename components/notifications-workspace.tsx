@@ -58,8 +58,32 @@ type AttentionRecord = {
   type: "customer" | "payment" | "subscription" | "system";
 };
 
+type PaymentFollowUpRecord = {
+  alertId: string | null;
+  attemptCount: number;
+  createdAt: string;
+  customerId: string | null;
+  customerName: string | null;
+  href: string;
+  id: string;
+  notificationLabel: string;
+  notificationOccurredAt: string | null;
+  notificationStatus:
+    | "customer_notified"
+    | "delivery_failed"
+    | "delivery_in_progress"
+    | "delivery_skipped"
+    | "no_delivery_evidence";
+  recommendedAction: string;
+  taskLabel: string;
+  taskStatus: "completed" | "operator_work" | "untracked";
+  urgency: "high" | "medium" | "none";
+};
+
 type ReadFilter = "all" | "unread" | "read";
 type TypeFilter = "all" | "customer" | "payment" | "subscription" | "system";
+type FollowUpTaskFilter = "all" | "completed" | "needs_follow_up";
+type FollowUpDeliveryFilter = "all" | PaymentFollowUpRecord["notificationStatus"];
 
 function getRelativeTime(dateString: string) {
   const date = new Date(dateString);
@@ -130,16 +154,22 @@ export function NotificationsWorkspace({
   attentionAlerts,
   error,
   notice,
+  paymentFollowUps,
 }: Readonly<{
   alerts: AlertRecord[];
   attentionAlerts: AttentionRecord[];
   error?: string | null;
   notice?: string | null;
+  paymentFollowUps: PaymentFollowUpRecord[];
 }>) {
   const pathname = usePathname();
   const [readFilter, setReadFilter] = useState<ReadFilter>("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [followUpTaskFilter, setFollowUpTaskFilter] =
+    useState<FollowUpTaskFilter>("needs_follow_up");
+  const [followUpDeliveryFilter, setFollowUpDeliveryFilter] =
+    useState<FollowUpDeliveryFilter>("all");
   const itemsPerPage = 10;
   const unreadCount = alerts.filter((alert) => !alert.read).length;
 
@@ -168,6 +198,22 @@ export function NotificationsWorkspace({
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage,
   );
+  const filteredPaymentFollowUps = useMemo(
+    () =>
+      paymentFollowUps.filter(
+        (item) =>
+          (followUpTaskFilter === "all" ||
+            (followUpTaskFilter === "completed"
+              ? item.taskStatus === "completed"
+              : item.taskStatus !== "completed")) &&
+          (followUpDeliveryFilter === "all" ||
+            item.notificationStatus === followUpDeliveryFilter),
+      ),
+    [followUpDeliveryFilter, followUpTaskFilter, paymentFollowUps],
+  );
+  const openFollowUpCount = paymentFollowUps.filter(
+    (item) => item.taskStatus !== "completed",
+  ).length;
 
   return (
     <div className="p-8 space-y-8 max-w-6xl mx-auto pb-20">
@@ -252,6 +298,107 @@ export function NotificationsWorkspace({
                   </div>
                 );
               })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                Payment follow-up queue
+                {openFollowUpCount > 0 ? (
+                  <Badge variant="destructive">{openFollowUpCount}</Badge>
+                ) : null}
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Durable operator task and customer notification evidence for failed payments.
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Select
+                value={followUpTaskFilter}
+                onValueChange={(value) =>
+                  setFollowUpTaskFilter(value as FollowUpTaskFilter)
+                }
+              >
+                <SelectTrigger className="w-full sm:w-44">
+                  <SelectValue placeholder="Task status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All tasks</SelectItem>
+                  <SelectItem value="needs_follow_up">Needs follow-up</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={followUpDeliveryFilter}
+                onValueChange={(value) =>
+                  setFollowUpDeliveryFilter(value as FollowUpDeliveryFilter)
+                }
+              >
+                <SelectTrigger className="w-full sm:w-48">
+                  <SelectValue placeholder="Notification status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All notifications</SelectItem>
+                  <SelectItem value="customer_notified">Customer notified</SelectItem>
+                  <SelectItem value="delivery_in_progress">In progress</SelectItem>
+                  <SelectItem value="delivery_failed">Failed</SelectItem>
+                  <SelectItem value="delivery_skipped">Skipped</SelectItem>
+                  <SelectItem value="no_delivery_evidence">Not recorded</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {filteredPaymentFollowUps.length === 0 ? (
+            <div className="rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
+              No failed-payment follow-ups match these filters.
+            </div>
+          ) : (
+            <div className="divide-y rounded-md border">
+              {filteredPaymentFollowUps.map((item) => (
+                <div
+                  className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                  key={item.id}
+                >
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium">
+                        {item.customerName ?? "Customer payment"}
+                      </p>
+                      <Badge
+                        variant={item.urgency === "high" ? "destructive" : "outline"}
+                      >
+                        {item.taskLabel}
+                      </Badge>
+                      <Badge variant="secondary">{item.notificationLabel}</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {item.recommendedAction}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Payment issue {formatDateTime(item.createdAt)}
+                      {item.notificationOccurredAt
+                        ? ` / Notification updated ${formatDateTime(item.notificationOccurredAt)}`
+                        : " / No notification timestamp"}
+                      {item.attemptCount > 0
+                        ? ` / ${item.attemptCount} delivery attempt${item.attemptCount === 1 ? "" : "s"}`
+                        : ""}
+                    </p>
+                  </div>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={item.href}>
+                      Review payment
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              ))}
             </div>
           )}
         </CardContent>

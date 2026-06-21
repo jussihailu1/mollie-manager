@@ -130,6 +130,24 @@ const listNeedsAttentionItemsByMode = cache(async (
             'reversal_critical_review'
           )
         )
+        and not (
+          exists (
+            select 1
+            from alerts resolved_follow_up
+            where resolved_follow_up.payment_id = p.id
+              and resolved_follow_up.payload ->> 'notificationPolicy'
+                = 'failed_payment_customer_notification'
+              and resolved_follow_up.status = 'resolved'
+          )
+          and not exists (
+            select 1
+            from alerts active_follow_up
+            where active_follow_up.payment_id = p.id
+              and active_follow_up.payload ->> 'notificationPolicy'
+                = 'failed_payment_customer_notification'
+              and active_follow_up.status in ('open', 'acknowledged')
+          )
+        )
 
       union all
 
