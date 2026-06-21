@@ -198,6 +198,20 @@ type CustomerActivityTimeline = {
     summary: string;
     title: string;
   }[];
+  notifications: {
+    attemptCount: number;
+    claimedAt: string;
+    failedAt: string | null;
+    id: string;
+    notificationType: "failed_payment";
+    occurredAt: string;
+    outcomeReason: string;
+    outcomeState: string;
+    paymentId: string;
+    sentAt: string | null;
+    status: "claimed" | "failed" | "sent" | "skipped";
+    templateVersion: number;
+  }[];
 };
 
 type CustomerInvoiceLinks = {
@@ -2288,6 +2302,36 @@ export function CustomerDrawer({
                 ) : (
                   <p className="text-sm text-muted-foreground">No activity yet.</p>
                 )}
+              </div>
+            ) : null}
+            {activityTimeline?.notifications.length ? (
+              <div className="space-y-2 pt-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Customer notification history
+                </p>
+                {activityTimeline.notifications.map((notification) => (
+                  <div className="rounded-md border p-3" key={notification.id}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium">Failed-payment notification</p>
+                      <Badge
+                        variant={notification.status === "failed" ? "destructive" : "outline"}
+                      >
+                        {formatLabel(notification.status)}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Outcome: {formatLabel(notification.outcomeState)} / {formatLabel(notification.outcomeReason)}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Updated {formatDateTime(notification.occurredAt)} / {notification.attemptCount} attempt{notification.attemptCount === 1 ? "" : "s"} / template v{notification.templateVersion}
+                    </p>
+                    <Button asChild className="mt-2" size="sm" variant="ghost">
+                      <Link href={`/payments?focus=${notification.paymentId}`}>
+                        Review payment
+                      </Link>
+                    </Button>
+                  </div>
+                ))}
               </div>
             ) : null}
           </div>

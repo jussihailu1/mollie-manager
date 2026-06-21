@@ -14,7 +14,7 @@ describe("customer activity timeline surface", () => {
     assert.match(source, /getSelectedMollieMode/);
     assert.match(source, /getCustomerDetail/);
     assert.match(source, /listCustomerActivityTimeline/);
-    assert.match(source, /Response\.json\(\{ items \}\)/);
+    assert.match(source, /Response\.json\(\{ items, notifications \}\)/);
     assert.doesNotMatch(source, /\bdetails\b/);
     assert.doesNotMatch(source, /\bpayload\b/);
     assert.doesNotMatch(source, /\bmetadata\b/);

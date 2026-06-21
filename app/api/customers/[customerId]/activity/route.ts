@@ -2,6 +2,7 @@ import { type NextRequest } from "next/server";
 
 import { requireViewerSession } from "@/lib/auth/session";
 import { listCustomerActivityTimeline } from "@/lib/customer-activity-timeline";
+import { listCustomerNotificationHistory } from "@/lib/customer-notification-history";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { getCustomerDetail } from "@/lib/onboarding/data";
 
@@ -26,11 +27,18 @@ export async function GET(
     );
   }
 
-  const items = await listCustomerActivityTimeline({
-    customerId,
-    limit: 30,
-    mode: selectedMode,
-  });
+  const [items, notifications] = await Promise.all([
+    listCustomerActivityTimeline({
+      customerId,
+      limit: 30,
+      mode: selectedMode,
+    }),
+    listCustomerNotificationHistory({
+      customerId,
+      limit: 25,
+      mode: selectedMode,
+    }),
+  ]);
 
-  return Response.json({ items });
+  return Response.json({ items, notifications });
 }
