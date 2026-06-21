@@ -3,6 +3,7 @@ import { RefreshCw } from "lucide-react";
 
 import { BillingSettingsForm } from "@/app/(dashboard)/settings/billing-settings-form";
 import { DeveloperSettingsToggle } from "@/app/(dashboard)/settings/developer-settings-toggle";
+import { RetentionPolicyCard } from "@/app/(dashboard)/settings/retention-policy-card";
 import { InlineNotice } from "@/components/inline-notice";
 import {
   createDueFirstPaymentInvoicesAction,
@@ -203,6 +204,8 @@ export default async function SettingsPage({
           />
         ) : null}
 
+        <RetentionPolicyCard />
+
         <Card>
           <CardHeader>
             <div className="flex items-start justify-between gap-4">
@@ -332,6 +335,8 @@ export default async function SettingsPage({
           }
         />
       ) : null}
+
+      <RetentionPolicyCard />
 
       <DeveloperSettingsToggle className="order-2">
       <Card>

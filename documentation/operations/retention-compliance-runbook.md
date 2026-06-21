@@ -16,15 +16,15 @@ Roadmap context: retention policy UI and dry-run cleanup are tracked in `../prod
 
 ## Current Tooling
 
-- `npm run ops:retention-report -- [mode] [auditDays] [webhookDays] [consentDays]`
+- `npm run ops:retention-report -- inventory <live|test|all>`
+- `npm run ops:retention-report -- candidates <live|test>`
 
-This command is read-only. It reports:
+These commands are read-only. They report:
 
 - current row counts
-- rows older than the chosen threshold
-- oldest and newest timestamps
-- consent-token storage state
-- webhook retry pressure
+- policy-aligned candidate counts without row identifiers or stored payload values
+- preserved evidence counts and the intended impact of any future redaction
+- cleanup areas that remain blocked pending field/table allowlists
 
 ## Accepted Baseline Policy
 
@@ -83,3 +83,5 @@ Implementation must still follow these safeguards:
 ## Safe Default
 
 No automatic destructive cleanup. Use explicit dry-run, review, then scoped apply.
+
+The settings page displays the accepted policy from the same typed source used by the report. Candidate reporting requires an explicit `live` or `test` mode, runs in a read-only transaction, and proposes zero mutations. Audit details remain review-only; generic metadata and broad test-data cleanup remain blocked until explicit allowlists exist.

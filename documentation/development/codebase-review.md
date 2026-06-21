@@ -394,7 +394,7 @@ Current state:
 
 - retention windows and minimization rules are now decided in `documentation/operations/retention-compliance-runbook.md`
 - read-only inventory tooling exists
-- cleanup implementation should proceed as dry-run first, then explicit scoped apply
+- policy display and aggregate dry-run reporting are implemented; any future apply path still requires explicit scoped safeguards
 
 Operational implication:
 
@@ -543,7 +543,7 @@ Status:
 - the read-only retention inventory command now exists as `npm run ops:retention-report`
 - retention policy decisions are documented and no longer block implementation
 - destructive cleanup is intentionally not implemented yet
-- dry-run cleanup and redaction tooling are the next safe implementation step
+- typed policy display and read-only dry-run candidate reporting are implemented; destructive apply remains intentionally absent
 
 ## Recommended Current Order
 

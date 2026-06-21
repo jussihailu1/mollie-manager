@@ -20,7 +20,8 @@ Audience: developers and operators
 - `npm run db:generate`: generate Drizzle migration files from schema changes
 - `npm run db:smoke`: basic database smoke check
 - `npm run db:check-raw`: validate raw SQL assumptions and migration state
-- `npm run ops:retention-report -- [mode] [auditDays] [webhookDays] [consentDays]`: inspect retention exposure without changing data
+- `npm run ops:retention-report -- inventory <live|test|all>`: inspect retention inventory without changing data
+- `npm run ops:retention-report -- candidates <live|test>`: produce a policy-aligned cleanup dry-run with aggregate candidate and preserved-evidence counts
 
 ## UI
 
@@ -42,14 +43,10 @@ Example:
 
 ## Retention And Compliance Ops
 
-- `npm run ops:retention-report -- [mode] [auditDays] [webhookDays] [consentDays]`: read-only inventory of audit logs, webhook events, and consent evidence
+- `npm run ops:retention-report -- inventory <live|test|all>`: read-only aggregate inventory of audit logs, webhook events, and consent evidence
+- `npm run ops:retention-report -- candidates <live|test>`: read-only dry-run using the accepted fixed policy windows; `all` is rejected for candidate reporting
 
-Defaults:
-
-- `mode`: `all`
-- `auditDays`: `365`
-- `webhookDays`: `180`
-- `consentDays`: `365`
+Both commands require explicit scope. They return counts and policy impact only, never row identifiers or stored personal/payload values.
 
 ## Recommended Local Validation Before Shipping
 

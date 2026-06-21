@@ -3,40 +3,62 @@
 import nextEnv from "@next/env";
 import pg from "pg";
 
+import retentionPolicy from "../lib/retention-policy.ts";
+
+const {
+  parseRetentionMode,
+  RETENTION_POLICY,
+  RETENTION_POLICY_VERSION,
+  RETENTION_WINDOWS,
+} = retentionPolicy;
+
 const { loadEnvConfig } = nextEnv;
+const { Pool } = pg;
 
 loadEnvConfig(process.cwd());
 
-function parseMode(value) {
-  if (value === "live" || value === "test") {
-    return value;
+const REPORT_KINDS = new Set(["inventory", "candidates"]);
+const STATEMENT_TIMEOUT = "5s";
+const ACCEPTED_WINDOWS = {
+  auditDetailsDays: 180,
+  consentClientDataMonths: 12,
+  processedWebhookPayloadDays: 180,
+};
+
+function parseReportKind(value) {
+  if (!REPORT_KINDS.has(value)) {
+    throw new Error("report kind must be one of: inventory, candidates.");
   }
 
-  return null;
+  return value;
 }
 
-function parseDays(value, fallback, label) {
-  const parsed = Number.parseInt(value ?? `${fallback}`, 10);
-
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    throw new Error(`${label} must be a positive integer.`);
+function parseExplicitMode(value, reportKind) {
+  if (value === undefined || value === "") {
+    throw new Error("mode is required: live, test, or all for inventory.");
   }
 
-  return parsed;
+  const mode = parseRetentionMode(value);
+  if (reportKind === "candidates" && mode === "all") {
+    throw new Error("candidate reporting requires an explicit live or test mode.");
+  }
+
+  return mode;
 }
 
-const mode = parseMode(process.argv[2] ?? process.env.RETENTION_MODE ?? "all");
-const auditDays = parseDays(process.argv[3] ?? process.env.RETENTION_AUDIT_DAYS, 365, "auditDays");
-const webhookDays = parseDays(
-  process.argv[4] ?? process.env.RETENTION_WEBHOOK_DAYS,
-  180,
-  "webhookDays",
-);
-const consentDays = parseDays(
-  process.argv[5] ?? process.env.RETENTION_CONSENT_DAYS,
-  365,
-  "consentDays",
-);
+const reportKind = parseReportKind(process.argv[2]);
+const mode = parseExplicitMode(process.argv[3], reportKind);
+
+if (
+  RETENTION_WINDOWS.auditDetails !== ACCEPTED_WINDOWS.auditDetailsDays ||
+  RETENTION_WINDOWS.acceptedConsentClientDataMonths !==
+    ACCEPTED_WINDOWS.consentClientDataMonths ||
+  RETENTION_WINDOWS.processedWebhookPayload !==
+    ACCEPTED_WINDOWS.processedWebhookPayloadDays
+) {
+  throw new Error("retention policy windows are not approved for this report.");
+}
+
 const connectionString = process.env.DATABASE_URL;
 const useSsl = process.env.DATABASE_SSL === "true";
 
@@ -44,98 +66,165 @@ if (!connectionString) {
   throw new Error("DATABASE_URL is required for the retention report.");
 }
 
-const { Pool } = pg;
 const pool = new Pool({
   connectionString,
   ssl: useSsl ? true : undefined,
 });
+const client = await pool.connect();
 
 try {
-  const [auditLogsRows, webhookEventsRows, consentRows] = await Promise.all([
-    pool.query(
-      `
-        select
-          count(*)::int as total_count,
-          count(*) filter (where created_at < now() - $1::int * interval '1 day')::int as older_than_days_count,
-          count(*) filter (where outcome = 'failure')::int as failure_count,
-          count(*) filter (where mode is null)::int as global_count,
-          min(created_at) as oldest_created_at,
-          max(created_at) as newest_created_at
-        from audit_logs
-        where ($2::mollie_mode is null or mode = $2 or mode is null)
-      `,
-      [auditDays, mode],
-    ),
-    pool.query(
-      `
-        select
-          count(*)::int as total_count,
-          count(*) filter (where received_at < now() - $1::int * interval '1 day')::int as older_than_days_count,
-          count(*) filter (where processing_status = 'pending')::int as pending_count,
-          count(*) filter (where processing_status = 'processed')::int as processed_count,
-          count(*) filter (where processing_status = 'failed')::int as failed_count,
-          max(retry_count)::int as max_retry_count,
-          min(received_at) as oldest_received_at,
-          max(received_at) as newest_received_at
-        from webhook_events
-        where ($2::mollie_mode is null or mode = $2)
-      `,
-      [webhookDays, mode],
-    ),
-    pool.query(
-      `
-        select
-          count(*)::int as total_count,
-          count(*) filter (where consent_token is not null)::int as legacy_plaintext_token_count,
-          count(*) filter (where consent_token_hash is not null)::int as hashed_token_count,
-          count(*) filter (where consent_token_ciphertext is not null)::int as encrypted_token_count,
-          count(*) filter (where accepted_at is not null)::int as accepted_count,
-          count(*) filter (
-            where accepted_at < now() - $1::int * interval '1 day'
-          )::int as accepted_older_than_days_count,
-          count(*) filter (where accepted_ip is not null)::int as accepted_ip_count,
-          count(*) filter (where accepted_user_agent is not null)::int as accepted_user_agent_count,
-          min(created_at) as oldest_created_at,
-          min(accepted_at) as oldest_accepted_at,
-          max(accepted_at) as newest_accepted_at
-        from subscription_onboarding_consents
-        where ($2::mollie_mode is null or mode = $2)
-      `,
-      [consentDays, mode],
-    ),
-  ]);
+  await client.query("BEGIN READ ONLY");
+  await client.query(`SET LOCAL statement_timeout = '${STATEMENT_TIMEOUT}'`);
 
-  const auditLogs = auditLogsRows.rows[0] ?? null;
-  const webhookEvents = webhookEventsRows.rows[0] ?? null;
-  const consents = consentRows.rows[0] ?? null;
+  if (reportKind === "inventory") {
+    const [auditResult, consentResult, webhookResult] = await Promise.all([
+      client.query(
+        `
+          select count(*)::int as count
+          from audit_logs
+          where ($1::mollie_mode is null or mode = $1 or mode is null)
+        `,
+        [mode === "all" ? null : mode],
+      ),
+      client.query(
+        `
+          select count(*)::int as count
+          from subscription_onboarding_consents
+          where ($1::mollie_mode is null or mode = $1)
+        `,
+        [mode === "all" ? null : mode],
+      ),
+      client.query(
+        `
+          select count(*)::int as count
+          from webhook_events
+          where ($1::mollie_mode is null or mode = $1)
+        `,
+        [mode === "all" ? null : mode],
+      ),
+    ]);
 
-  const report = {
-    generatedAt: new Date().toISOString(),
-    mode: mode ?? "all",
-    thresholdsDays: {
-      audit: auditDays,
-      consent: consentDays,
-      webhook: webhookDays,
-    },
-    findings: {
-      auditLogs,
-      consentEvidence: consents,
-      webhookEvents,
-    },
-    recommendations: [
-      consents && Number(consents.legacy_plaintext_token_count) > 0
-        ? "Run the consent-token backfill before any purge work."
-        : "No legacy plaintext consent tokens found.",
-      auditLogs && Number(auditLogs.older_than_days_count) > 0
-        ? "Audit log retention windows still need a policy decision before any destructive cleanup."
-        : "No audit log rows currently exceed the report threshold.",
-      webhookEvents && Number(webhookEvents.older_than_days_count) > 0
-        ? "Webhook event retention windows still need a policy decision before any destructive cleanup."
-        : "No webhook event rows currently exceed the report threshold.",
-    ],
-  };
+    console.log(
+      JSON.stringify(
+        {
+          policy: {
+            records: RETENTION_POLICY,
+            version: RETENTION_POLICY_VERSION,
+          },
+          reportKind,
+          mode,
+          counts: {
+            auditCoreEvidence: auditResult.rows[0]?.count ?? 0,
+            consentCoreEvidence: consentResult.rows[0]?.count ?? 0,
+            webhookEvents: webhookResult.rows[0]?.count ?? 0,
+          },
+          proposedMutations: 0,
+        },
+        null,
+        2,
+      ),
+    );
+  } else {
+    const [auditResult, consentResult, webhookResult] = await Promise.all([
+      client.query(
+        `
+          select
+            count(*)::int as core_evidence_count,
+            count(*) filter (
+              where created_at < now() - interval '180 days'
+                and details <> '{}'::jsonb
+            )::int as review_candidate_count
+          from audit_logs
+          where mode = $1
+        `,
+        [mode],
+      ),
+      client.query(
+        `
+          select
+            count(*)::int as core_evidence_count,
+            count(*) filter (
+              where accepted_at < now() - interval '12 months'
+                and (accepted_ip is not null or accepted_user_agent is not null)
+            )::int as review_candidate_count
+          from subscription_onboarding_consents
+          where mode = $1
+        `,
+        [mode],
+      ),
+      client.query(
+        `
+          select
+            count(*) filter (
+              where processing_status = 'processed'
+                and retry_count = 0
+                and received_at < now() - interval '180 days'
+                and payload <> '{}'::jsonb
+            )::int as review_candidate_count,
+            count(*) filter (
+              where processing_status = 'failed'
+            )::int as unresolved_failed_preserved_count
+          from webhook_events
+          where mode = $1
+        `,
+        [mode],
+      ),
+    ]);
 
-  console.log(JSON.stringify(report, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          policyVersion: RETENTION_POLICY_VERSION,
+          reportKind,
+          mode,
+          windowsDays: {
+            auditDetails: RETENTION_WINDOWS.auditDetails,
+            consentClientDataMonths:
+              RETENTION_WINDOWS.acceptedConsentClientDataMonths,
+            processedWebhookPayload: RETENTION_WINDOWS.processedWebhookPayload,
+          },
+          plans: {
+            auditDetails: {
+              candidateCount: auditResult.rows[0]?.review_candidate_count ?? 0,
+              evidenceImpact: "The audit row and core event evidence remain preserved.",
+              intendedAction: "Manual review only; no automatic JSONB redaction is approved.",
+              status: "review_only",
+            },
+            consentIpOrUserAgent: {
+              candidateCount: consentResult.rows[0]?.review_candidate_count ?? 0,
+              evidenceImpact: "Core accepted consent, terms, checkbox, and plan evidence remain preserved.",
+              intendedAction: "Potentially redact accepted_ip and accepted_user_agent after evidence review.",
+              status: "potential_redaction",
+            },
+            processedWebhookPayload: {
+              candidateCount: webhookResult.rows[0]?.review_candidate_count ?? 0,
+              evidenceImpact: "Normalized webhook event facts and processing outcome remain preserved.",
+              intendedAction: "Potentially replace only the raw payload with an empty object.",
+              status: "potential_redaction",
+            },
+          },
+          preservedCounts: {
+            auditCoreEvidence: auditResult.rows[0]?.core_evidence_count ?? 0,
+            consentCoreEvidence: consentResult.rows[0]?.core_evidence_count ?? 0,
+            unresolvedFailedWebhookPayload:
+              webhookResult.rows[0]?.unresolved_failed_preserved_count ?? 0,
+          },
+          blockedPendingAllowlists: {
+            genericMetadata: "Blocked until field-specific evidence and redaction rules exist.",
+            testOperationalData: "Blocked until table-specific rules exclude live-linked evidence.",
+          },
+          proposedMutations: 0,
+        },
+        null,
+        2,
+      ),
+    );
+  }
 } finally {
-  await pool.end();
+  try {
+    await client.query("ROLLBACK");
+  } finally {
+    client.release();
+    await pool.end();
+  }
 }

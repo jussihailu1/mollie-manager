@@ -54,6 +54,22 @@ describe("ops surface hardening", () => {
     assert.match(authSource, /hasAdvancedOperationsAccess/);
   });
 
+  it("shows the accepted retention policy without exposing cleanup controls", () => {
+    const settingsSource = readFileSync(
+      resolve("app/(dashboard)/settings/page.tsx"),
+      "utf8",
+    );
+    const cardSource = readFileSync(
+      resolve("app/(dashboard)/settings/retention-policy-card.tsx"),
+      "utf8",
+    );
+
+    assert.match(settingsSource, /RetentionPolicyCard/);
+    assert.match(cardSource, /RETENTION_POLICY\.map/);
+    assert.match(cardSource, /No destructive cleanup runs automatically/);
+    assert.doesNotMatch(cardSource, /<form|server action|fetch\(/);
+  });
+
   it("defaults operator reconciliation to sync-only mode", () => {
     const source = readFileSync(resolve("app/(dashboard)/settings/page.tsx"), "utf8");
 
