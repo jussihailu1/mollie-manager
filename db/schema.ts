@@ -14,6 +14,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 export const mollieModeEnum = pgEnum("mollie_mode", ["test", "live"]);
@@ -862,6 +863,13 @@ export const alerts = pgTable(
       table.severity,
       table.createdAt.desc(),
     ),
+    uniqueIndex("alerts_unresolved_title_entity_key")
+      .on(
+        table.title,
+        sql`coalesce(${table.paymentId}, '')`,
+        sql`coalesce(${table.subscriptionId}, '')`,
+      )
+      .where(sql`${table.status} in ('open', 'acknowledged')`),
   ],
 );
 

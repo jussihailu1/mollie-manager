@@ -53,50 +53,58 @@ export async function openAlert(
   client?: DbClient,
 ) {
   const db = client ?? getDb();
-  const existing = await db.execute<ExistingAlert>(sql`
-    select id
-    from alerts
-    where status = 'open'
-      and title = ${input.title}
-      and coalesce(payment_id, '') = coalesce(${input.paymentId ?? null}, '')
-      and coalesce(subscription_id, '') = coalesce(${input.subscriptionId ?? null}, '')
-    limit 1
-  `);
+  const payload = JSON.stringify(input.payload ?? {});
 
-  if (existing.rows[0]?.id) {
-    return {
-      id: existing.rows[0].id,
-      isNew: false,
-    };
+  while (true) {
+    const inserted = await db.execute<ExistingAlert>(sql`
+      insert into alerts (
+        id,
+        severity,
+        title,
+        message,
+        customer_id,
+        subscription_id,
+        payment_id,
+        payload
+      ) values (
+        ${crypto.randomUUID()},
+        ${input.severity},
+        ${input.title},
+        ${input.message},
+        ${input.customerId ?? null},
+        ${input.subscriptionId ?? null},
+        ${input.paymentId ?? null},
+        ${payload}::jsonb
+      )
+      on conflict do nothing
+      returning id
+    `);
+
+    if (inserted.rows[0]?.id) {
+      return {
+        id: inserted.rows[0].id,
+        isNew: true,
+      };
+    }
+
+    const existing = await db.execute<ExistingAlert>(sql`
+      select id
+      from alerts
+      where status in ('open', 'acknowledged')
+        and title = ${input.title}
+        and coalesce(payment_id, '') = coalesce(${input.paymentId ?? null}, '')
+        and coalesce(subscription_id, '') = coalesce(${input.subscriptionId ?? null}, '')
+      order by created_at, id
+      limit 1
+    `);
+
+    if (existing.rows[0]?.id) {
+      return {
+        id: existing.rows[0].id,
+        isNew: false,
+      };
+    }
   }
-
-  const alertId = crypto.randomUUID();
-  await db.execute(sql`
-    insert into alerts (
-      id,
-      severity,
-      title,
-      message,
-      customer_id,
-      subscription_id,
-      payment_id,
-      payload
-    ) values (
-      ${alertId},
-      ${input.severity},
-      ${input.title},
-      ${input.message},
-      ${input.customerId ?? null},
-      ${input.subscriptionId ?? null},
-      ${input.paymentId ?? null},
-      ${JSON.stringify(input.payload ?? {})}::jsonb
-    )
-  `);
-
-  return {
-    id: alertId,
-    isNew: true,
-  };
 }
 
 export async function deliverAlertEmail(input: {
