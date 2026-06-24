@@ -357,6 +357,7 @@ What is good:
 - strong preference for local persistence before and after external sync
 - explicit mode separation for Mollie `test` and `live`
 - durable audit and alert model gives operators recovery tools
+- every `db/drizzle/*.sql` migration is covered by a journal-registration test so `db:apply` cannot silently skip new schema work
 
 What is still rough:
 

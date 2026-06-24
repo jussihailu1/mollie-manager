@@ -78,6 +78,34 @@
       "when": 1781822400000,
       "tag": "0010_failed_payment_customer_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1781908800000,
+      "tag": "0011_customer_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1781995200000,
+      "tag": "0012_failed_payment_notification_claim_token",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1782081600000,
+      "tag": "0013_unresolved_alert_uniqueness",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1782168000000,
+      "tag": "0014_subscription_operation_requests",
+      "breakpoints": true
     }
   ]
 }
