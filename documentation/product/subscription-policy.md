@@ -109,6 +109,12 @@ Additional rules:
   or payment, and never changes failed-payment collection state.
 - `future_charges_stopped` is a cancellation/billing-end signal, not a paused
   state that can be resumed.
+- Operator intent is stored in the typed `subscription_operation_requests`
+  model before any future provider call. It records operation, status, reason,
+  effective date, paid-period end, cancellation-effect snapshot, policy result,
+  provider-mutation requirement, and lifecycle timestamps without JSONB.
+- At most one unresolved `pending`, `scheduled`, or `processing` request may
+  exist for the same subscription and operation.
 
 ## Out Of Scope / Not In V1
 

@@ -97,6 +97,17 @@ export const cancellationEffectEnum = pgEnum("cancellation_effect", [
   "end_of_paid_period",
 ]);
 
+export const subscriptionOperationEnum = pgEnum("subscription_operation", [
+  "cancel",
+  "pause",
+  "resume",
+]);
+
+export const subscriptionOperationRequestStatusEnum = pgEnum(
+  "subscription_operation_request_status",
+  ["pending", "scheduled", "processing", "applied", "failed", "withdrawn"],
+);
+
 export const firstPaymentModeEnum = pgEnum("first_payment_mode", [
   "real_installment",
   "mandate_only",
@@ -344,6 +355,76 @@ export const subscriptions = pgTable(
       )
     `),
     index("subscriptions_customer_idx").on(table.customerId, table.localStatus),
+  ],
+);
+
+export const subscriptionOperationRequests = pgTable(
+  "subscription_operation_requests",
+  {
+    id: text("id").primaryKey(),
+    mode: mollieModeEnum("mode").notNull(),
+    subscriptionId: text("subscription_id").notNull(),
+    operation: subscriptionOperationEnum("operation").notNull(),
+    status: subscriptionOperationRequestStatusEnum("status")
+      .notNull()
+      .default("pending"),
+    operatorReason: text("operator_reason").notNull(),
+    requestedEffectiveAt: timestamp("requested_effective_at", {
+      mode: "string",
+      withTimezone: true,
+    }).notNull(),
+    paidPeriodEndAt: timestamp("paid_period_end_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    cancellationEffect: cancellationEffectEnum("cancellation_effect").notNull(),
+    policyReasonCode: text("policy_reason_code").notNull(),
+    providerMutationRequirement: text(
+      "provider_mutation_requirement",
+    ).notNull(),
+    requestedByEmail: text("requested_by_email"),
+    createdAt: timestamp("created_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    processingAt: timestamp("processing_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    appliedAt: timestamp("applied_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    failedAt: timestamp("failed_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    withdrawnAt: timestamp("withdrawn_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.subscriptionId],
+      foreignColumns: [subscriptions.id],
+      name: "subscription_operation_requests_subscription_id_fkey",
+    }).onDelete("cascade"),
+    check(
+      "subscription_operation_requests_operator_reason_not_blank_check",
+      sql`length(btrim(${table.operatorReason})) > 0`,
+    ),
+    uniqueIndex("subscription_operation_requests_unresolved_key")
+      .on(table.subscriptionId, table.operation)
+      .where(sql`${table.status} in ('pending', 'scheduled', 'processing')`),
   ],
 );
 
