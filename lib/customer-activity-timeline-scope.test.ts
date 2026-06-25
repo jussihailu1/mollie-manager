@@ -16,6 +16,7 @@ describe("customer activity timeline source", () => {
       "payment_status",
       "recurring_invoice",
       "subscription_consent",
+      "subscription_operation_request",
       "subscription_status",
     ]) {
       assert.match(source, new RegExp(`['"]${itemType}['"]`));
@@ -26,6 +27,7 @@ describe("customer activity timeline source", () => {
     assert.match(source, /from payments p/);
     assert.match(source, /from recurring_billing_schedules rbs/);
     assert.match(source, /from subscription_onboarding_consents soc/);
+    assert.match(source, /from subscription_operation_requests sor/);
     assert.match(source, /from customer_payment_notifications cpn/);
   });
 

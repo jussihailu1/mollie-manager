@@ -16,6 +16,7 @@ export type CustomerActivityTimelineItemType =
   | "payment_status"
   | "recurring_invoice"
   | "subscription_consent"
+  | "subscription_operation_request"
   | "subscription_status";
 
 export type CustomerActivityTimelineItem = {
@@ -29,6 +30,7 @@ export type CustomerActivityTimelineItem = {
     | "customer_payment_notification"
     | "payment"
     | "recurring_billing_schedule"
+    | "subscription_operation_request"
     | "subscription"
     | "subscription_onboarding_consent";
   href: string;
@@ -186,6 +188,52 @@ const listCustomerActivityTimelineByMode = cache(async (
       where s.customer_id = ${customerId}
         and (${modeParam}::mollie_mode is null or rbs.mode = ${modeParam})
         and rbs.invoice_state <> 'pending_invoice'
+
+      union all
+
+      select
+        concat('subscription-operation:', sor.id) as id,
+        'subscription_operation_request' as "itemType",
+        case
+          when sor.status = 'processing' then 'warning'
+          else 'info'
+        end as severity,
+        case
+          when sor.operation = 'cancel' then 'Cancellation request recorded'
+          when sor.operation = 'pause' then 'Pause request recorded'
+          else 'Resume request recorded'
+        end as title,
+        case
+          when sor.operation = 'cancel' and sor.cancellation_effect = 'end_of_paid_period'
+            then concat(
+              'Cancellation review request targets ',
+              sor.requested_effective_at::date::text,
+              ' and preserves service through ',
+              sor.paid_period_end_at::date::text,
+              '.',
+            )
+          when sor.operation = 'cancel'
+            then concat(
+              'Cancellation review request targets ',
+              sor.requested_effective_at::date::text,
+              ' with immediate service end policy.',
+            )
+          else concat(
+            initcap(sor.operation::text),
+            ' review request targets ',
+            sor.requested_effective_at::date::text,
+            '.',
+          )
+        end as summary,
+        sor.created_at as "occurredAt",
+        'subscription_operation_request' as "entityType",
+        sor.id as "entityId",
+        s.customer_id as "customerId",
+        concat('/customers?focus=', s.customer_id) as href
+      from subscription_operation_requests sor
+      inner join subscriptions s on s.id = sor.subscription_id and s.mode = sor.mode
+      where s.customer_id = ${customerId}
+        and (${modeParam}::mollie_mode is null or sor.mode = ${modeParam})
 
       union all
 
