@@ -2,12 +2,22 @@
 
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
+import { sql } from "drizzle-orm";
 import { z } from "zod";
 
+import { writeAuditLog } from "@/lib/audit";
 import { requireViewerSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
+import { transaction } from "@/lib/db";
 import { syncSubscriptionByLocalId } from "@/lib/reliability/sync";
-import { getManagedSubscription } from "@/lib/reliability/sync-resource-state";
+import {
+  getManagedSubscription,
+  lockCancellationRequestSubscription,
+} from "@/lib/reliability/sync-resource-state";
+import {
+  amsterdamDateStart,
+  recordCancellationRequestWithDependencies,
+} from "@/lib/subscription-operation-requests";
 import {
   redirectWithMessage,
   serializeError,
@@ -17,6 +27,158 @@ const manageSubscriptionSchema = z.object({
   returnTo: z.string().trim().startsWith("/").default("/customers"),
   subscriptionId: z.string().uuid(),
 });
+
+function isStrictCalendarDate(value: string) {
+  try {
+    amsterdamDateStart(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const strictCalendarDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(isStrictCalendarDate);
+
+const cancellationRequestSchema = z
+  .object({
+    operatorReason: z.string().trim().min(1).max(1000),
+    paidPeriodEndDate: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      strictCalendarDateSchema.optional(),
+    ),
+    requestedEffectiveDate: strictCalendarDateSchema,
+    subscriptionId: z.string().uuid(),
+  })
+  .strict();
+
+async function recordCancellationRequest(input: {
+  mode: "live" | "test";
+  operatorReason: string;
+  paidPeriodEndDate?: string;
+  requestedByEmail: string;
+  requestedEffectiveDate: string;
+  subscriptionId: string;
+}) {
+  return recordCancellationRequestWithDependencies(input, {
+    createId: () => crypto.randomUUID(),
+    now: () => new Date(),
+    runInTransaction: (callback) =>
+      transaction(async (client) =>
+        callback({
+          insertPendingRequest: async (request) => {
+            const result = await client.execute<{ id: string }>(sql`
+              insert into subscription_operation_requests (
+                id,
+                mode,
+                subscription_id,
+                operation,
+                status,
+                operator_reason,
+                requested_effective_at,
+                paid_period_end_at,
+                cancellation_effect,
+                policy_reason_code,
+                provider_mutation_requirement,
+                requested_by_email
+              ) values (
+                ${request.id},
+                ${request.mode},
+                ${request.subscriptionId},
+                'cancel',
+                'pending',
+                ${request.operatorReason},
+                ${request.requestedEffectiveAt}::timestamptz,
+                ${request.paidPeriodEndAt}::timestamptz,
+                ${request.cancellationEffect},
+                ${request.policyReasonCode},
+                ${request.providerMutationRequirement},
+                ${request.requestedByEmail}
+              )
+              on conflict (subscription_id, operation)
+                where status in ('pending', 'scheduled', 'processing')
+              do nothing
+              returning id
+            `);
+
+            return Boolean(result.rows[0]?.id);
+          },
+          lockSubscription: ({ mode, subscriptionId }) =>
+            lockCancellationRequestSubscription(client, subscriptionId, mode),
+          writeAudit: (audit) =>
+            writeAuditLog(
+              {
+                action: "subscription.cancellation_request.record",
+                details: audit,
+                entityId: audit.subscriptionId,
+                entityType: "subscription",
+                mode: input.mode,
+                outcome: "success",
+                summary:
+                  "Recorded cancellation intent only; no provider change occurred.",
+              },
+              client,
+              { email: input.requestedByEmail, kind: "user" },
+            ),
+        }),
+      ),
+  });
+}
+
+export async function recordCancellationRequestAction(formData: FormData) {
+  const parsed = cancellationRequestSchema.safeParse(
+    Object.fromEntries(formData.entries()),
+  );
+
+  if (!parsed.success) {
+    redirectWithMessage("/customers", {
+      error: "Cancellation request details are invalid.",
+    });
+  }
+
+  const session = await requireViewerSession();
+  const selectedMode = await getSelectedMollieMode();
+
+  try {
+    const result = await recordCancellationRequest({
+      mode: selectedMode,
+      operatorReason: parsed.data.operatorReason,
+      paidPeriodEndDate: parsed.data.paidPeriodEndDate,
+      requestedByEmail: session.user.email!,
+      requestedEffectiveDate: parsed.data.requestedEffectiveDate,
+      subscriptionId: parsed.data.subscriptionId,
+    });
+
+    if (result.status === "not_found") {
+      redirectWithMessage("/customers", {
+        error: "Subscription not found in the selected Mollie mode.",
+      });
+    }
+
+    if (result.status === "denied") {
+      redirectWithMessage(`/customers?focus=${encodeURIComponent(result.customerId)}`, {
+        error: "Cancellation request is not allowed for this subscription.",
+      });
+    }
+
+    if (result.status === "duplicate") {
+      redirectWithMessage(`/customers?focus=${encodeURIComponent(result.customerId)}`, {
+        notice: "Cancellation request was already recorded.",
+      });
+    }
+
+    redirectWithMessage(`/customers?focus=${encodeURIComponent(result.customerId)}`, {
+      notice: "Cancellation request recorded for review. No provider change was made.",
+    });
+  } catch (error) {
+    unstable_rethrow(error);
+    redirectWithMessage("/customers", {
+      error: "Cancellation request could not be recorded.",
+    });
+  }
+}
 
 export async function syncSubscriptionAction(formData: FormData) {
   const parsed = manageSubscriptionSchema.safeParse({

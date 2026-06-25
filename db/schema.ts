@@ -422,6 +422,25 @@ export const subscriptionOperationRequests = pgTable(
       "subscription_operation_requests_operator_reason_not_blank_check",
       sql`length(btrim(${table.operatorReason})) > 0`,
     ),
+    check(
+      "subscription_operation_requests_operator_reason_length_check",
+      sql`length(${table.operatorReason}) <= 1000`,
+    ),
+    check(
+      "subscription_operation_requests_cancellation_dates_check",
+      sql`
+        ${table.operation} <> 'cancel'
+        or (
+          ${table.cancellationEffect} = 'immediate'
+          and ${table.paidPeriodEndAt} is null
+        )
+        or (
+          ${table.cancellationEffect} = 'end_of_paid_period'
+          and ${table.paidPeriodEndAt} is not null
+          and ${table.paidPeriodEndAt} >= ${table.requestedEffectiveAt}
+        )
+      `,
+    ),
     uniqueIndex("subscription_operation_requests_unresolved_key")
       .on(table.subscriptionId, table.operation)
       .where(sql`${table.status} in ('pending', 'scheduled', 'processing')`),

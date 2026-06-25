@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { getDb, type DbClient, type DbTransaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { getMollieClient } from "@/lib/mollie/client";
+import type { CancellationRequestSubscription } from "@/lib/subscription-operation-requests";
 
 type LocalCustomerLink = {
   id: string;
@@ -80,6 +81,28 @@ export async function getManagedSubscription(subscriptionId: string) {
       where s.id = ${subscriptionId}
       limit 1
     `);
+
+  return result.rows[0] ?? null;
+}
+
+export async function lockCancellationRequestSubscription(
+  client: DbTransaction,
+  subscriptionId: string,
+  mode: MollieMode,
+) {
+  const result = await client.execute<CancellationRequestSubscription>(sql`
+    select
+      local_status as "localStatus",
+      mollie_status as "mollieStatus",
+      subscription_term_mode as "termMode",
+      cancellation_effect as "cancellationEffect",
+      service_end_at as "serviceEndAt",
+      customer_id as "customerId"
+    from subscriptions
+    where id = ${subscriptionId}
+      and mode = ${mode}
+    for update
+  `);
 
   return result.rows[0] ?? null;
 }

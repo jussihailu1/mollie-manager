@@ -113,6 +113,10 @@ Additional rules:
   model before any future provider call. It records operation, status, reason,
   effective date, paid-period end, cancellation-effect snapshot, policy result,
   provider-mutation requirement, and lifecycle timestamps without JSONB.
+- Operators can record a pending cancellation request from the customer workflow
+  only for an active, open-ended provider subscription. Recording the request
+  writes sanitized audit evidence and does not call Mollie, change invoices,
+  mutate payments, end service, or schedule execution.
 - At most one unresolved `pending`, `scheduled`, or `processing` request may
   exist for the same subscription and operation.
 

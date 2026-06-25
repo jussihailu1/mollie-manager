@@ -21,6 +21,7 @@ import {
   CreateSubscriptionDialog,
   CustomerDrawer,
   LinkEboekhoudenRelationDialog,
+  RecordCancellationRequestDialog,
   type CustomerFlowRecord,
   getCustomerDisplayName,
   getCustomerLifecycleBadge,
@@ -293,6 +294,7 @@ export function CustomersWorkspace({
   const [isCreatePaymentOpen, setIsCreatePaymentOpen] = useState(false);
   const [isConfirmPaymentOpen, setIsConfirmPaymentOpen] = useState(false);
   const [isCreateSubscriptionOpen, setIsCreateSubscriptionOpen] = useState(false);
+  const [isRecordCancellationRequestOpen, setIsRecordCancellationRequestOpen] = useState(false);
   const [isLinkEboekhoudenOpen, setIsLinkEboekhoudenOpen] = useState(false);
   const [archiveAction, setArchiveAction] = useState<"archive" | "restore">("archive");
   const [isArchiveDialogOpen, setIsArchiveDialogOpen] = useState(false);
@@ -775,6 +777,11 @@ export function CustomersWorkspace({
           setSelectedCustomerId(customer.id);
           setTimeout(() => setIsCreateSubscriptionOpen(true), 150);
         }}
+        onOpenRecordCancellationRequest={(customer) => {
+          setIsCustomerDrawerOpen(false);
+          setSelectedCustomerId(customer.id);
+          setTimeout(() => setIsRecordCancellationRequestOpen(true), 150);
+        }}
         onOpenArchiveCustomer={(customer) => {
           setIsCustomerDrawerOpen(false);
           setTimeout(() => openArchiveDialog(customer, "archive"), 150);
@@ -826,6 +833,15 @@ export function CustomersWorkspace({
         customer={selectedCustomer}
         open={isCreateSubscriptionOpen}
         onOpenChange={setIsCreateSubscriptionOpen}
+      />
+
+      <RecordCancellationRequestDialog
+        key={`customers-cancellation-${selectedCustomer?.id ?? "none"}-${Number(
+          isRecordCancellationRequestOpen,
+        )}`}
+        customer={selectedCustomer}
+        open={isRecordCancellationRequestOpen}
+        onOpenChange={setIsRecordCancellationRequestOpen}
       />
     </div>
   );

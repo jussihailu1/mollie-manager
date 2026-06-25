@@ -32,6 +32,7 @@ import {
   linkEboekhoudenRelationAction,
   syncCustomerBillingStateAction,
 } from "@/lib/onboarding/actions";
+import { recordCancellationRequestAction } from "@/lib/operations/actions";
 import { buildConsentLinkReturnTo } from "@/lib/onboarding/consent-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -448,6 +449,16 @@ export function getCustomerLifecycleBadge(customer: CustomerFlowRecord) {
     default:
       return <Badge variant="outline">{formatLabel(lifecycle.state)}</Badge>;
   }
+}
+
+export function canRecordCancellationRequest(customer: CustomerFlowRecord) {
+  return Boolean(
+    customer.latestSubscriptionId &&
+      customer.latestSubscriptionStatus === "active" &&
+      customer.latestSubscriptionMollieStatus === "active" &&
+      customer.latestSubscriptionTermMode === "open_ended" &&
+      !customer.latestSubscriptionStopAfterCurrentPeriod,
+  );
 }
 
 function HistoryRow({
@@ -1512,6 +1523,103 @@ export function CreateSubscriptionDialog({
   );
 }
 
+export function RecordCancellationRequestDialog({
+  customer,
+  open,
+  onOpenChange,
+}: Readonly<{
+  customer: CustomerFlowRecord | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}>) {
+  if (!customer || !canRecordCancellationRequest(customer)) {
+    return null;
+  }
+
+  const today = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Amsterdam",
+  }).format(new Date());
+  const cancellationEffect = customer.latestSubscriptionCancellationEffect;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Record cancellation request</DialogTitle>
+          <DialogDescription>
+            Record cancellation intent for review. No Mollie/provider, invoice, payment, service,
+            or billing change occurs yet.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form className="space-y-4 py-2" action={recordCancellationRequestAction}>
+          <input type="hidden" name="subscriptionId" value={customer.latestSubscriptionId ?? ""} />
+
+          <div className="space-y-2">
+            <Label htmlFor="cancellationEffect">Current cancellation effect</Label>
+            <Input
+              id="cancellationEffect"
+              value={formatLabel(cancellationEffect)}
+              readOnly
+              aria-readonly="true"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="operatorReason">Reason</Label>
+            <Textarea
+              id="operatorReason"
+              name="operatorReason"
+              maxLength={1000}
+              required
+              placeholder="Why is this cancellation being requested?"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="requestedEffectiveDate">Effective date</Label>
+            <Input
+              id="requestedEffectiveDate"
+              name="requestedEffectiveDate"
+              type="date"
+              min={today}
+              defaultValue={today}
+              required
+            />
+          </div>
+
+          {cancellationEffect === "end_of_paid_period" ? (
+            <div className="space-y-2">
+              <Label htmlFor="paidPeriodEndDate">Paid-period-end date</Label>
+              <Input
+                id="paidPeriodEndDate"
+                name="paidPeriodEndDate"
+                type="date"
+                min={today}
+                required
+              />
+            </div>
+          ) : null}
+
+          <p className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+            This records review intent only. It does not cancel or change the subscription.
+          </p>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
+            <Button type="submit">
+              <PenLine aria-hidden="true" />
+              Record cancellation request
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function CustomerDrawer({
   customer,
   open,
@@ -1520,6 +1628,7 @@ export function CustomerDrawer({
   onOpenConfirmPayment,
   onOpenLinkEboekhouden,
   onOpenCreateSubscription,
+  onOpenRecordCancellationRequest,
   onOpenArchiveCustomer,
   onOpenRestoreCustomer,
 }: Readonly<{
@@ -1530,6 +1639,7 @@ export function CustomerDrawer({
   onOpenConfirmPayment: (customer: CustomerFlowRecord) => void;
   onOpenLinkEboekhouden: (customer: CustomerFlowRecord) => void;
   onOpenCreateSubscription: (customer: CustomerFlowRecord) => void;
+  onOpenRecordCancellationRequest: (customer: CustomerFlowRecord) => void;
   onOpenArchiveCustomer: (customer: CustomerFlowRecord) => void;
   onOpenRestoreCustomer: (customer: CustomerFlowRecord) => void;
 }>) {
@@ -2610,6 +2720,17 @@ export function CustomerDrawer({
               <Button className="w-full" variant="outline" onClick={() => onOpenCreateSubscription(customer)}>
                 <Repeat className="mr-2 h-4 w-4" />
                 Retry Subscription Activation
+              </Button>
+            ) : null}
+
+            {!isArchived && canRecordCancellationRequest(customer) ? (
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={() => onOpenRecordCancellationRequest(customer)}
+              >
+                <PenLine className="mr-2 h-4 w-4" aria-hidden="true" />
+                Record cancellation request
               </Button>
             ) : null}
 
