@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 
 import { writeAuditLog } from "@/lib/audit";
+import { normalizeCustomerNoteBody } from "@/lib/customer-note-policy";
 import { transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { assertRelationIsAvailable, getLocalCustomer, updateRelationFromLocalFields } from "@/lib/onboarding/action-helpers";
@@ -65,6 +66,7 @@ export async function linkCustomerToEboekhoudenRelation(
     input.fields.eboekhoudenRelationId,
     relationFields,
   );
+  const normalizedNote = normalizeCustomerNoteBody(input.fields.notes ?? "");
 
   await transaction(async (client) => {
     await client.execute(sql`
@@ -77,7 +79,6 @@ export async function linkCustomerToEboekhoudenRelation(
         eboekhouden_relation_snapshot = ${JSON.stringify(linkedRelation)}::jsonb,
         full_name = ${input.fields.businessName},
         email = ${input.fields.email},
-        notes = ${input.fields.notes ?? null},
         metadata = metadata || ${JSON.stringify({
           address: input.fields.address ?? null,
           businessName: input.fields.businessName,
@@ -89,6 +90,24 @@ export async function linkCustomerToEboekhoudenRelation(
       where id = ${customer.id}
         and mode = ${input.mode}
     `);
+
+    if (normalizedNote) {
+      await client.execute(sql`
+        insert into customer_notes (
+          id,
+          mode,
+          customer_id,
+          body,
+          source
+        ) values (
+          ${crypto.randomUUID()},
+          ${input.mode},
+          ${customer.id},
+          ${normalizedNote},
+          'operator'
+        )
+      `);
+    }
 
     await writeAuditLog(
       {

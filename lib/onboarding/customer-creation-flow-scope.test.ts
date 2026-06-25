@@ -15,6 +15,9 @@ describe("customer creation flow module boundary", () => {
     assert.match(flowSource, /customers\.create/);
     assert.match(flowSource, /updateRelationFromLocalFields/);
     assert.match(flowSource, /insert into customers/);
+    assert.match(flowSource, /insert into customer_notes/);
+    assert.match(flowSource, /normalizeCustomerNoteBody/);
+    assert.doesNotMatch(flowSource, /insert into customers[\s\S]*\bnotes\b/);
     assert.doesNotMatch(actionsSource, /customers\.create/);
     assert.doesNotMatch(actionsSource, /updateRelationFromLocalFields\(relationIdToLink/);
     assert.doesNotMatch(actionsSource, /insert into customers/);

@@ -2,6 +2,7 @@ import { Locale } from "@mollie/api-client";
 import { sql } from "drizzle-orm";
 
 import { writeAuditLog } from "@/lib/audit";
+import { normalizeCustomerNoteBody } from "@/lib/customer-note-policy";
 import { transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { getMollieClient } from "@/lib/mollie/client";
@@ -30,6 +31,7 @@ export async function createCustomerFlow(input: {
     input.input.source === "eboekhouden"
       ? input.input.eboekhoudenRelationId
       : undefined;
+  const normalizedNote = normalizeCustomerNoteBody(input.input.notes ?? "");
 
   if (relationIdToLink) {
     await assertRelationIsAvailable(relationIdToLink, input.mode);
@@ -69,7 +71,6 @@ export async function createCustomerFlow(input: {
         full_name,
         email,
         locale,
-        notes,
         metadata,
         created_at,
         updated_at,
@@ -86,7 +87,6 @@ export async function createCustomerFlow(input: {
         ${input.input.businessName},
         ${input.input.email},
         ${createdCustomer.locale ?? "nl_NL"},
-        ${input.input.notes ?? null},
         ${JSON.stringify({
           address: input.input.address ?? null,
           businessName: input.input.businessName,
@@ -99,6 +99,24 @@ export async function createCustomerFlow(input: {
         now()
       )
     `);
+
+    if (normalizedNote) {
+      await client.execute(sql`
+        insert into customer_notes (
+          id,
+          mode,
+          customer_id,
+          body,
+          source
+        ) values (
+          ${crypto.randomUUID()},
+          ${input.mode},
+          ${localCustomerId},
+          ${normalizedNote},
+          'operator'
+        )
+      `);
+    }
 
     await writeAuditLog(
       {
