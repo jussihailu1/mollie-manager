@@ -6,6 +6,7 @@ import { cache } from "react";
 import type { DashboardModeFilter } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
 import { REPAIR_STALE_AFTER_MS } from "@/lib/freshness";
+import { listPendingSubscriptionOperationRequests } from "@/lib/pending-subscription-operation-requests";
 
 export type NeedsAttentionItemType =
   | "customer_sync_stale"
@@ -19,6 +20,7 @@ export type NeedsAttentionItemType =
   | "missing_mandate"
   | "mandate_problem"
   | "payment_action_required_subscription"
+  | "pending_subscription_cancellation"
   | "payment_sync_stale"
   | "reversed_payment"
   | "subscription_out_of_sync"
@@ -44,7 +46,7 @@ function toModeParam(mode?: DashboardModeFilter) {
   return !mode || mode === "all" ? null : mode;
 }
 
-const listNeedsAttentionItemsByMode = cache(async (
+const listBaseNeedsAttentionItemsByMode = cache(async (
   mode: DashboardModeFilter,
   limit: number,
 ) => {
@@ -493,12 +495,49 @@ const listNeedsAttentionItemsByMode = cache(async (
   return result.rows;
 });
 
+function toPendingOperationAttentionItem(
+  request: Awaited<
+    ReturnType<typeof listPendingSubscriptionOperationRequests>
+  >[number],
+): NeedsAttentionItem {
+  return {
+    createdAt: request.createdAt,
+    customerEmail: request.customerEmail,
+    customerId: request.customerId,
+    customerName: request.customerName,
+    entityId: request.subscriptionId,
+    href: request.href,
+    id: `subscription-operation:${request.id}`,
+    itemType: "pending_subscription_cancellation",
+    recommendedAction: request.recommendedAction,
+    severity: "warning",
+    summary: request.summary,
+    title: request.title,
+    type: "subscription",
+  };
+}
+
 export async function listNeedsAttentionItems(options?: {
   limit?: number;
   mode?: DashboardModeFilter;
 }) {
-  return listNeedsAttentionItemsByMode(
-    options?.mode ?? "all",
-    options?.limit ?? 20,
-  );
+  const mode = options?.mode ?? "all";
+  const limit = options?.limit ?? 20;
+  const baseItems = await listBaseNeedsAttentionItemsByMode(mode, limit);
+  const pendingOperationItems =
+    mode === "all"
+      ? []
+      : await listPendingSubscriptionOperationRequests({ limit, mode });
+
+  return [...baseItems, ...pendingOperationItems.map(toPendingOperationAttentionItem)]
+    .sort((left, right) => {
+      if (left.severity !== right.severity) {
+        return left.severity === "critical" ? -1 : 1;
+      }
+
+      return (
+        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+      );
+    })
+    .slice(0, Math.max(1, Math.min(limit, 50)));
 }

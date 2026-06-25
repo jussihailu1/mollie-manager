@@ -87,6 +87,7 @@ Implemented so far:
 - the hosted onboarding return page now uses a pure state-copy helper for subscription confirmed, mandate-only complete, payment received, pending SEPA, and failed/expired checkout states without penalty or automatic cancellation wording
 - customer drawer invoice downloads now come from an authenticated customer invoices API backed by a server-side trusted e-Boekhouden PDF URL normalizer, covering first-payment and recurring invoice rows without exposing untrusted document URLs
 - customer drawer manual invoice resend now targets an existing first-payment or recurring invoice and reuses the invoice delivery helper, with dependency-injected coverage proving the flow loads one existing target and does not create invoices
+- unresolved subscription operation requests now have a dedicated sanitized query and surface read-only in Needs Attention and the customer drawer without exposing operator reason, requester email, or raw metadata
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as materially mitigated rather than still open.
 

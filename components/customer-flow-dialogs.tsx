@@ -213,6 +213,19 @@ type CustomerActivityTimeline = {
     status: "claimed" | "failed" | "sent" | "skipped";
     templateVersion: number;
   }[];
+  operationRequests: {
+    cancellationEffect: "immediate" | "end_of_paid_period";
+    createdAt: string;
+    id: string;
+    operation: "cancel" | "pause" | "resume";
+    paidPeriodEndAt: string | null;
+    recommendedAction: string;
+    requestedEffectiveAt: string;
+    status: "pending" | "processing" | "scheduled";
+    summary: string;
+    subscriptionId: string;
+    title: string;
+  }[];
 };
 
 type CustomerInvoiceLinks = {
@@ -385,6 +398,23 @@ function getTimelineSeverityBadge(severity: CustomerActivityTimeline["items"][nu
       );
     default:
       return <Badge variant="secondary">Info</Badge>;
+  }
+}
+
+function getOperationRequestStatusBadge(
+  status: CustomerActivityTimeline["operationRequests"][number]["status"],
+) {
+  switch (status) {
+    case "processing":
+      return <Badge variant="destructive">Processing</Badge>;
+    case "scheduled":
+      return <Badge variant="secondary">Scheduled</Badge>;
+    default:
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100/80">
+          Pending
+        </Badge>
+      );
   }
 }
 
@@ -2440,6 +2470,33 @@ export function CustomerDrawer({
                         Review payment
                       </Link>
                     </Button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {activityTimeline?.operationRequests.length ? (
+              <div className="space-y-2 pt-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Pending subscription requests
+                </p>
+                {activityTimeline.operationRequests.map((request) => (
+                  <div className="rounded-md border p-3" key={request.id}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium">{request.title}</p>
+                      {getOperationRequestStatusBadge(request.status)}
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {request.summary}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Effective {formatDate(request.requestedEffectiveAt)} / Service{" "}
+                      {request.cancellationEffect === "immediate"
+                        ? "ends immediately"
+                        : `kept through ${formatDate(request.paidPeriodEndAt)}`}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Recorded {formatDateTime(request.createdAt)} / {request.recommendedAction}
+                    </p>
                   </div>
                 ))}
               </div>

@@ -117,6 +117,10 @@ Additional rules:
   only for an active, open-ended provider subscription. Recording the request
   writes sanitized audit evidence and does not call Mollie, change invoices,
   mutate payments, end service, or schedule execution.
+- Unresolved operator requests are surfaced read-only in the normal operator
+  Needs Attention flow and customer workflow with status, effective dates, and
+  recommended next action, without exposing operator reason, requester email,
+  or raw metadata outside the protected action path.
 - At most one unresolved `pending`, `scheduled`, or `processing` request may
   exist for the same subscription and operation.
 

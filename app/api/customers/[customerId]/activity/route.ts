@@ -5,6 +5,7 @@ import { listCustomerActivityTimeline } from "@/lib/customer-activity-timeline";
 import { listCustomerNotificationHistory } from "@/lib/customer-notification-history";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { getCustomerDetail } from "@/lib/onboarding/data";
+import { listPendingSubscriptionOperationRequests } from "@/lib/pending-subscription-operation-requests";
 
 export async function GET(
   _request: NextRequest,
@@ -27,7 +28,7 @@ export async function GET(
     );
   }
 
-  const [items, notifications] = await Promise.all([
+  const [items, notifications, operationRequests] = await Promise.all([
     listCustomerActivityTimeline({
       customerId,
       limit: 30,
@@ -38,7 +39,12 @@ export async function GET(
       limit: 25,
       mode: selectedMode,
     }),
+    listPendingSubscriptionOperationRequests({
+      customerId,
+      limit: 10,
+      mode: selectedMode,
+    }),
   ]);
 
-  return Response.json({ items, notifications });
+  return Response.json({ items, notifications, operationRequests });
 }

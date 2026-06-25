@@ -14,7 +14,8 @@ describe("customer activity timeline surface", () => {
     assert.match(source, /getSelectedMollieMode/);
     assert.match(source, /getCustomerDetail/);
     assert.match(source, /listCustomerActivityTimeline/);
-    assert.match(source, /Response\.json\(\{ items, notifications \}\)/);
+    assert.match(source, /listPendingSubscriptionOperationRequests/);
+    assert.match(source, /Response\.json\(\{ items, notifications, operationRequests \}\)/);
     assert.doesNotMatch(source, /\bdetails\b/);
     assert.doesNotMatch(source, /\bpayload\b/);
     assert.doesNotMatch(source, /\bmetadata\b/);
@@ -28,6 +29,9 @@ describe("customer activity timeline surface", () => {
     assert.match(source, /\/api\/customers\/\$\{encodeURIComponent\(resolvedCustomerId\)\}\/activity/);
     assert.match(source, /Activity timeline/);
     assert.match(source, /TimelineRow/);
+    assert.match(source, /Pending subscription requests/);
+    assert.match(source, /operationRequests/);
+    assert.match(source, /requestedEffectiveAt/);
     assert.match(source, /getTimelineSeverityBadge/);
   });
 });

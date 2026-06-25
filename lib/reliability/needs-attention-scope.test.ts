@@ -24,6 +24,7 @@ test("needs attention query exposes stable typed sources without raw webhook pay
     "missing_mandate",
     "mandate_problem",
     "payment_action_required_subscription",
+    "pending_subscription_cancellation",
     "payment_sync_stale",
     "reversed_payment",
     "subscription_out_of_sync",
@@ -33,6 +34,7 @@ test("needs attention query exposes stable typed sources without raw webhook pay
   }
 
   assert.match(source, /recommendedAction/);
+  assert.match(source, /listPendingSubscriptionOperationRequests/);
   assert.match(source, /from payments p/);
   assert.match(source, /from subscriptions s/);
   assert.match(source, /from recurring_billing_schedules rbs/);
