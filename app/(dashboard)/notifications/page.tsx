@@ -1,6 +1,7 @@
 import { NotificationsWorkspace } from "@/components/notifications-workspace";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { getSingleSearchParam } from "@/lib/format";
+import { listPendingSubscriptionOperationRequests } from "@/lib/pending-subscription-operation-requests";
 import { listAlertInbox } from "@/lib/reliability/data";
 import { listNeedsAttentionItems } from "@/lib/reliability/needs-attention";
 import { listPaymentFollowUpQueue } from "@/lib/payment-follow-up-queue";
@@ -12,11 +13,18 @@ export default async function NotificationsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
   const selectedMode = await getSelectedMollieMode();
-  const [resolvedSearchParams, alertsResult, attentionResult, followUpResult] = await Promise.all([
+  const [
+    resolvedSearchParams,
+    alertsResult,
+    attentionResult,
+    followUpResult,
+    operationRequestResult,
+  ] = await Promise.all([
     searchParams,
     listAlertInbox({ mode: selectedMode }),
     listNeedsAttentionItems({ mode: selectedMode }),
     listPaymentFollowUpQueue({ mode: selectedMode }),
+    listPendingSubscriptionOperationRequests({ mode: selectedMode }),
   ]);
 
   return (
@@ -26,6 +34,7 @@ export default async function NotificationsPage({
       error={getSingleSearchParam(resolvedSearchParams.error) ?? null}
       notice={getSingleSearchParam(resolvedSearchParams.notice) ?? null}
       paymentFollowUps={followUpResult}
+      pendingOperationRequests={operationRequestResult}
     />
   );
 }

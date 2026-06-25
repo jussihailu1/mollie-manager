@@ -80,6 +80,23 @@ type PaymentFollowUpRecord = {
   urgency: "high" | "medium" | "none";
 };
 
+type PendingOperationRequestRecord = {
+  cancellationEffect: "immediate" | "end_of_paid_period";
+  createdAt: string;
+  customerId: string | null;
+  customerName: string | null;
+  href: string;
+  id: string;
+  operation: "cancel" | "pause" | "resume";
+  paidPeriodEndAt: string | null;
+  recommendedAction: string;
+  requestedEffectiveAt: string;
+  status: "pending" | "processing" | "scheduled";
+  summary: string;
+  subscriptionId: string;
+  title: string;
+};
+
 type ReadFilter = "all" | "unread" | "read";
 type TypeFilter = "all" | "customer" | "payment" | "subscription" | "system";
 type FollowUpTaskFilter = "all" | "completed" | "needs_follow_up";
@@ -155,12 +172,14 @@ export function NotificationsWorkspace({
   error,
   notice,
   paymentFollowUps,
+  pendingOperationRequests,
 }: Readonly<{
   alerts: AlertRecord[];
   attentionAlerts: AttentionRecord[];
   error?: string | null;
   notice?: string | null;
   paymentFollowUps: PaymentFollowUpRecord[];
+  pendingOperationRequests: PendingOperationRequestRecord[];
 }>) {
   const pathname = usePathname();
   const [readFilter, setReadFilter] = useState<ReadFilter>("all");
@@ -214,6 +233,7 @@ export function NotificationsWorkspace({
   const openFollowUpCount = paymentFollowUps.filter(
     (item) => item.taskStatus !== "completed",
   ).length;
+  const openOperationRequestCount = pendingOperationRequests.length;
 
   return (
     <div className="p-8 space-y-8 max-w-6xl mx-auto pb-20">
@@ -394,6 +414,70 @@ export function NotificationsWorkspace({
                   <Button asChild size="sm" variant="outline">
                     <Link href={item.href}>
                       Review payment
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-4">
+          <div className="space-y-1">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              Pending subscription requests
+              {openOperationRequestCount > 0 ? (
+                <Badge variant="secondary">{openOperationRequestCount}</Badge>
+              ) : null}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Recorded lifecycle requests awaiting manual review or future execution.
+            </p>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {pendingOperationRequests.length === 0 ? (
+            <div className="rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
+              No pending subscription requests.
+            </div>
+          ) : (
+            <div className="divide-y rounded-md border">
+              {pendingOperationRequests.map((request) => (
+                <div
+                  className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                  key={request.id}
+                >
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium">
+                        {request.customerName ?? "Customer subscription"}
+                      </p>
+                      <Badge variant="outline">{request.title}</Badge>
+                      <Badge
+                        variant={
+                          request.status === "processing" ? "destructive" : "secondary"
+                        }
+                      >
+                        {request.status}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{request.summary}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Effective {formatDate(request.requestedEffectiveAt)} / Service{" "}
+                      {request.cancellationEffect === "immediate"
+                        ? "ends immediately"
+                        : `kept through ${formatDate(request.paidPeriodEndAt)}`}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Recorded {formatDateTime(request.createdAt)} / {request.recommendedAction}
+                    </p>
+                  </div>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={request.href}>
+                      Open customer
                       <ArrowRight className="h-4 w-4" />
                     </Link>
                   </Button>
