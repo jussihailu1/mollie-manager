@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { formatCurrency, formatDateTime } from "@/lib/format";
+import {
+  getNeedsAttentionImpact,
+  getNeedsAttentionPriorityMeta,
+} from "@/lib/needs-attention-presentation";
 import { listCustomers, listPayments } from "@/lib/onboarding/data";
 import { listRecentAuditActivity } from "@/lib/reliability/data";
 import { listNeedsAttentionItems } from "@/lib/reliability/needs-attention";
@@ -29,6 +33,12 @@ export default async function OverviewPage() {
   const payments = paymentsResult.map(toUiPaymentRecord);
   const activity = activityResult.map(toUiActivityRecord);
   const attentionItems = attentionResult.map(toUiAttentionRecord);
+  const groupedAttentionItems = (["critical", "warning"] as const)
+    .map((severity) => ({
+      items: attentionItems.filter((item) => item.severity === severity),
+      severity,
+    }))
+    .filter((group) => group.items.length > 0);
 
   const totalCustomers = customers.length;
   const pendingPayments = customers.filter((customer) => {
@@ -110,34 +120,67 @@ export default async function OverviewPage() {
               No items need attention.
             </div>
           ) : (
-            <div className="divide-y rounded-md border">
-              {attentionItems.map((item) => (
-                <div key={item.id} className="grid gap-3 p-4 md:grid-cols-[1fr_auto] md:items-center">
-                  <div className="min-w-0 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <AlertTriangle
-                        className={
-                          item.severity === "critical"
-                            ? "h-4 w-4 text-destructive"
-                            : "h-4 w-4 text-orange-500"
-                        }
-                      />
-                      <p className="font-medium">{item.title}</p>
-                      <Badge variant={item.severity === "critical" ? "destructive" : "secondary"}>
-                        {item.severity}
-                      </Badge>
+            <div className="space-y-4">
+              {groupedAttentionItems.map((group) => {
+                const priority = getNeedsAttentionPriorityMeta(group.severity);
+
+                return (
+                  <div key={group.severity} className="rounded-md border">
+                    <div className="border-b bg-muted/30 px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={
+                            group.severity === "critical" ? "destructive" : "secondary"
+                          }
+                        >
+                          {group.items.length}
+                        </Badge>
+                        <p className="font-medium">{priority.title}</p>
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {priority.description}
+                      </p>
                     </div>
-                    <p className="text-sm text-muted-foreground">{item.message}</p>
-                    <p className="text-sm">{item.recommendedAction}</p>
+                    <div className="divide-y">
+                      {group.items.map((item) => {
+                        const impact = getNeedsAttentionImpact(item);
+
+                        return (
+                          <div
+                            key={item.id}
+                            className="grid gap-3 p-4 md:grid-cols-[1fr_auto] md:items-center"
+                          >
+                            <div className="min-w-0 space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <AlertTriangle
+                                  className={
+                                    item.severity === "critical"
+                                      ? "h-4 w-4 text-destructive"
+                                      : "h-4 w-4 text-orange-500"
+                                  }
+                                />
+                                <p className="font-medium">{item.title}</p>
+                                <Badge variant="outline">{impact.label}</Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">{item.message}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {impact.description}
+                              </p>
+                              <p className="text-sm">{item.recommendedAction}</p>
+                            </div>
+                            <Button asChild variant="secondary" size="sm">
+                              <Link href={item.href}>
+                                Open
+                                <ArrowRight className="h-4 w-4" />
+                              </Link>
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <Button asChild variant="secondary" size="sm">
-                    <Link href={item.href}>
-                      Open
-                      <ArrowRight className="h-4 w-4" />
-                    </Link>
-                  </Button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>

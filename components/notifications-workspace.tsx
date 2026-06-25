@@ -19,6 +19,10 @@ import {
   openAlertAction,
   setAlertStatusAction,
 } from "@/lib/reliability/actions";
+import {
+  getNeedsAttentionImpact,
+  getNeedsAttentionPriorityMeta,
+} from "@/lib/needs-attention-presentation";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -234,6 +238,16 @@ export function NotificationsWorkspace({
     (item) => item.taskStatus !== "completed",
   ).length;
   const openOperationRequestCount = pendingOperationRequests.length;
+  const groupedAttentionAlerts = useMemo(
+    () =>
+      (["critical", "warning"] as const)
+        .map((severity) => ({
+          items: attentionAlerts.filter((alert) => alert.severity === severity),
+          severity,
+        }))
+        .filter((group) => group.items.length > 0),
+    [attentionAlerts],
+  );
 
   return (
     <div className="p-8 space-y-8 max-w-6xl mx-auto pb-20">
@@ -288,33 +302,70 @@ export function NotificationsWorkspace({
               </p>
             </div>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {attentionAlerts.map((alert) => {
-                const meta = getAttentionMeta(alert);
+            <div className="space-y-4">
+              {groupedAttentionAlerts.map((group) => {
+                const priority = getNeedsAttentionPriorityMeta(group.severity);
 
                 return (
-                  <div
-                    key={alert.id}
-                    className={`flex flex-col justify-between p-4 rounded-lg border bg-card shadow-sm border-l-4 ${meta.borderClass}`}
-                  >
-                    <div className="space-y-2 mb-4">
+                  <div className="rounded-lg border" key={group.severity}>
+                    <div className="border-b bg-muted/30 px-4 py-3">
                       <div className="flex items-center gap-2">
-                        {meta.icon}
-                        <h4 className="font-semibold text-sm">{alert.title}</h4>
+                        <Badge
+                          variant={
+                            group.severity === "critical" ? "destructive" : "secondary"
+                          }
+                        >
+                          {group.items.length}
+                        </Badge>
+                        <p className="font-medium">{priority.title}</p>
                       </div>
-                      <p className="text-sm text-muted-foreground line-clamp-2">
-                        {alert.message}
-                      </p>
-                      <p className="text-xs text-muted-foreground line-clamp-2">
-                        {alert.recommendedAction}
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {priority.description}
                       </p>
                     </div>
-                    <Button asChild variant="secondary" size="sm" className="w-full justify-between group">
-                      <Link href={alert.href}>
-                        {meta.ctaText}
-                        <ArrowRight className="h-4 w-4 opacity-50 transition-opacity group-hover:opacity-100" />
-                      </Link>
-                    </Button>
+                    <div className="grid gap-3 p-3 md:grid-cols-2 lg:grid-cols-3">
+                      {group.items.map((alert) => {
+                        const impact = getNeedsAttentionImpact(alert);
+                        const meta = getAttentionMeta(alert);
+
+                        return (
+                          <div
+                            key={alert.id}
+                            className={`flex flex-col justify-between rounded-lg border bg-card p-4 shadow-sm border-l-4 ${meta.borderClass}`}
+                          >
+                            <div className="mb-4 space-y-2">
+                              <div className="flex items-center gap-2">
+                                {meta.icon}
+                                <h4 className="font-semibold text-sm">{alert.title}</h4>
+                              </div>
+                              <Badge variant="outline" className="w-fit">
+                                {impact.label}
+                              </Badge>
+                              <p className="text-sm text-muted-foreground line-clamp-2">
+                                {alert.message}
+                              </p>
+                              <p className="text-xs text-muted-foreground line-clamp-2">
+                                {impact.description}
+                              </p>
+                              <p className="text-xs text-muted-foreground line-clamp-2">
+                                {alert.recommendedAction}
+                              </p>
+                            </div>
+                            <Button
+                              asChild
+                              variant="secondary"
+                              size="sm"
+                              className="w-full justify-between group"
+                            >
+                              <Link href={alert.href}>
+                                {meta.ctaText}
+                                <ArrowRight className="h-4 w-4 opacity-50 transition-opacity group-hover:opacity-100" />
+                              </Link>
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })}
