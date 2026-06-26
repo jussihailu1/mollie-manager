@@ -32,6 +32,10 @@ describe("customer activity timeline surface", () => {
     assert.match(source, /Pending subscription requests/);
     assert.match(source, /operationRequests/);
     assert.match(source, /requestedEffectiveAt/);
+    assert.match(source, /transitionOperationRequestAction/);
+    assert.match(source, /Mark scheduled/);
+    assert.match(source, /Start processing/);
+    assert.match(source, /Return to scheduled/);
     assert.match(source, /withdrawOperationRequestAction/);
     assert.match(source, /Withdraw request/);
     assert.match(source, /getTimelineSeverityBadge/);

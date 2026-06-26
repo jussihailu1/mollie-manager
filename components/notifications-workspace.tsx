@@ -20,6 +20,7 @@ import {
   setAlertStatusAction,
 } from "@/lib/reliability/actions";
 import { withdrawOperationRequestAction } from "@/lib/operations/actions";
+import { transitionOperationRequestAction } from "@/lib/operations/actions";
 import {
   getNeedsAttentionImpact,
   getNeedsAttentionPriorityMeta,
@@ -106,6 +107,23 @@ type ReadFilter = "all" | "unread" | "read";
 type TypeFilter = "all" | "customer" | "payment" | "subscription" | "system";
 type FollowUpTaskFilter = "all" | "completed" | "needs_follow_up";
 type FollowUpDeliveryFilter = "all" | PaymentFollowUpRecord["notificationStatus"];
+
+function getOperationRequestTransitionControls(
+  status: PendingOperationRequestRecord["status"],
+) {
+  if (status === "pending") {
+    return [
+      { label: "Mark scheduled", targetStatus: "scheduled" as const },
+      { label: "Start processing", targetStatus: "processing" as const },
+    ];
+  }
+
+  if (status === "scheduled") {
+    return [{ label: "Start processing", targetStatus: "processing" as const }];
+  }
+
+  return [{ label: "Return to scheduled", targetStatus: "scheduled" as const }];
+}
 
 function getRelativeTime(dateString: string) {
   const date = new Date(dateString);
@@ -528,6 +546,20 @@ export function NotificationsWorkspace({
                     </p>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row">
+                    {getOperationRequestTransitionControls(request.status).map((control) => (
+                      <form action={transitionOperationRequestAction} key={control.targetStatus}>
+                        <input type="hidden" name="operationRequestId" value={request.id} />
+                        <input type="hidden" name="returnTo" value={pathname} />
+                        <input
+                          type="hidden"
+                          name="targetStatus"
+                          value={control.targetStatus}
+                        />
+                        <Button size="sm" type="submit" variant="outline">
+                          {control.label}
+                        </Button>
+                      </form>
+                    ))}
                     <form action={withdrawOperationRequestAction}>
                       <input type="hidden" name="operationRequestId" value={request.id} />
                       <input type="hidden" name="returnTo" value={pathname} />

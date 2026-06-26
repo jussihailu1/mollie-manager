@@ -93,4 +93,22 @@ describe("cancellation request source boundaries", () => {
       /update\s+(subscriptions|invoices|payments)|insert into recurring_billing_schedules/i,
     );
   });
+
+  it("transitions only unresolved request state and keeps provider changes unavailable", () => {
+    assert.match(actionSource, /const transitionOperationRequestSchema/);
+    assert.match(actionSource, /targetStatus: z\.enum\(\["processing", "scheduled"\]\)/);
+    assert.match(actionSource, /export async function transitionOperationRequestAction/);
+    assert.match(actionSource, /transitionSubscriptionOperationRequestWithDependencies/);
+    assert.match(actionSource, /update subscription_operation_requests/);
+    assert.match(actionSource, /processing_at = case/);
+    assert.match(actionSource, /when \$\{nextStatus\} = 'processing'/);
+    assert.match(actionSource, /status = \$\{previousStatus\}/);
+    assert.match(actionSource, /subscription\.operation_request\.transition/);
+    assert.match(actionSource, /no provider change occurred/);
+    assert.doesNotMatch(actionSource, /@mollie\/api-client|getMollieClient|customerSubscriptions/);
+    assert.doesNotMatch(
+      actionSource,
+      /update\s+(subscriptions|invoices|payments)|insert into recurring_billing_schedules/i,
+    );
+  });
 });

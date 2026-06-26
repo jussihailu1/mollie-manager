@@ -23,6 +23,10 @@ describe("pending subscription request notifications surface", () => {
     assert.match(workspaceSource, /Recorded lifecycle requests awaiting manual review or future execution/);
     assert.match(workspaceSource, /request\.requestedEffectiveAt/);
     assert.match(workspaceSource, /request\.cancellationEffect === "immediate"/);
+    assert.match(workspaceSource, /transitionOperationRequestAction/);
+    assert.match(workspaceSource, /Mark scheduled/);
+    assert.match(workspaceSource, /Start processing/);
+    assert.match(workspaceSource, /Return to scheduled/);
     assert.match(workspaceSource, /withdrawOperationRequestAction/);
     assert.match(workspaceSource, /Withdraw request/);
     assert.match(workspaceSource, /Open customer/);

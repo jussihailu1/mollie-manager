@@ -70,6 +70,15 @@ type WithdrawalRequestAudit = {
   subscriptionId: string;
 };
 
+type TransitionRequestAudit = {
+  nextStatus: "processing" | "scheduled";
+  operation: "cancel" | "pause" | "resume";
+  operationRequestId: string;
+  previousStatus: "pending" | "processing" | "scheduled";
+  providerChangeOccurred: false;
+  subscriptionId: string;
+};
+
 export type CancellationRequestTransaction = {
   insertPendingRequest: (input: CancellationRequestInsert) => Promise<boolean>;
   lockSubscription: (input: {
@@ -88,6 +97,19 @@ export type WithdrawalRequestTransaction = {
   writeAudit: (input: WithdrawalRequestAudit) => Promise<void>;
 };
 
+export type TransitionRequestTransaction = {
+  lockOperationRequest: (input: {
+    mode: MollieMode;
+    operationRequestId: string;
+  }) => Promise<WithdrawableOperationRequest | null>;
+  updateStatus: (input: {
+    nextStatus: "processing" | "scheduled";
+    operationRequestId: string;
+    previousStatus: "pending" | "processing" | "scheduled";
+  }) => Promise<boolean>;
+  writeAudit: (input: TransitionRequestAudit) => Promise<void>;
+};
+
 export type CancellationRequestDependencies = {
   createId: () => string;
   now: () => Date;
@@ -99,6 +121,12 @@ export type CancellationRequestDependencies = {
 export type WithdrawalRequestDependencies = {
   runInTransaction: <T>(
     callback: (transaction: WithdrawalRequestTransaction) => Promise<T>,
+  ) => Promise<T>;
+};
+
+export type TransitionRequestDependencies = {
+  runInTransaction: <T>(
+    callback: (transaction: TransitionRequestTransaction) => Promise<T>,
   ) => Promise<T>;
 };
 
@@ -130,6 +158,43 @@ export type WithdrawSubscriptionOperationRequestResult =
       operation: "cancel" | "pause" | "resume";
       status: "withdrawn";
     };
+
+export type TransitionSubscriptionOperationRequestResult =
+  | { status: "not_found" }
+  | {
+      customerId: string;
+      operation: "cancel" | "pause" | "resume";
+      requestStatus: "applied" | "failed" | "withdrawn";
+      status: "not_transitionable";
+    }
+  | {
+      customerId: string;
+      operation: "cancel" | "pause" | "resume";
+      requestStatus: "pending" | "processing" | "scheduled";
+      status: "transition_denied";
+      targetStatus: "processing" | "scheduled";
+    }
+  | {
+      customerId: string;
+      operation: "cancel" | "pause" | "resume";
+      status: "transitioned";
+      targetStatus: "processing" | "scheduled";
+    };
+
+function canTransitionRequestStatus(
+  previousStatus: "pending" | "processing" | "scheduled",
+  nextStatus: "processing" | "scheduled",
+) {
+  if (previousStatus === "pending") {
+    return nextStatus === "processing" || nextStatus === "scheduled";
+  }
+
+  if (previousStatus === "scheduled") {
+    return nextStatus === "processing";
+  }
+
+  return nextStatus === "scheduled";
+}
 
 function getDateParts(value: string) {
   if (!strictDatePattern.test(value)) {
@@ -329,6 +394,75 @@ export async function withdrawSubscriptionOperationRequestWithDependencies(
       customerId: request.customerId,
       operation: request.operation,
       status: "withdrawn",
+    };
+  });
+}
+
+export async function transitionSubscriptionOperationRequestWithDependencies(
+  input: {
+    mode: MollieMode;
+    operationRequestId: string;
+    targetStatus: "processing" | "scheduled";
+  },
+  dependencies: TransitionRequestDependencies,
+): Promise<TransitionSubscriptionOperationRequestResult> {
+  return dependencies.runInTransaction(async (transaction) => {
+    const request = await transaction.lockOperationRequest({
+      mode: input.mode,
+      operationRequestId: input.operationRequestId,
+    });
+
+    if (!request) {
+      return { status: "not_found" };
+    }
+
+    if (
+      request.status !== "pending" &&
+      request.status !== "processing" &&
+      request.status !== "scheduled"
+    ) {
+      return {
+        customerId: request.customerId,
+        operation: request.operation,
+        requestStatus: request.status,
+        status: "not_transitionable",
+      };
+    }
+
+    if (!canTransitionRequestStatus(request.status, input.targetStatus)) {
+      return {
+        customerId: request.customerId,
+        operation: request.operation,
+        requestStatus: request.status,
+        status: "transition_denied",
+        targetStatus: input.targetStatus,
+      };
+    }
+
+    const updated = await transaction.updateStatus({
+      nextStatus: input.targetStatus,
+      operationRequestId: input.operationRequestId,
+      previousStatus: request.status,
+    });
+
+    if (!updated) {
+      return { status: "not_found" };
+    }
+
+    await transaction.writeAudit({
+      nextStatus: input.targetStatus,
+      operation: request.operation,
+      operationRequestId: request.id,
+      previousStatus: request.status,
+      providerChangeOccurred: false,
+      subscriptionId: request.subscriptionId,
+    });
+
+    return {
+      customerId: request.customerId,
+      operation: request.operation,
+      status: "transitioned",
+      targetStatus: input.targetStatus,
     };
   });
 }

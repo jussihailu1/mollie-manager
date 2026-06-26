@@ -34,6 +34,7 @@ import {
 } from "@/lib/onboarding/actions";
 import {
   recordCancellationRequestAction,
+  transitionOperationRequestAction,
   withdrawOperationRequestAction,
 } from "@/lib/operations/actions";
 import { buildConsentLinkReturnTo } from "@/lib/onboarding/consent-link";
@@ -419,6 +420,23 @@ function getOperationRequestStatusBadge(
         </Badge>
       );
   }
+}
+
+function getOperationRequestTransitionControls(
+  status: CustomerActivityTimeline["operationRequests"][number]["status"],
+) {
+  if (status === "pending") {
+    return [
+      { label: "Mark scheduled", targetStatus: "scheduled" as const },
+      { label: "Start processing", targetStatus: "processing" as const },
+    ];
+  }
+
+  if (status === "scheduled") {
+    return [{ label: "Start processing", targetStatus: "processing" as const }];
+  }
+
+  return [{ label: "Return to scheduled", targetStatus: "scheduled" as const }];
 }
 
 function getSubscriptionStatusBadge(status: CustomerFlowRecord["latestSubscriptionStatus"]) {
@@ -2501,6 +2519,24 @@ export function CustomerDrawer({
                       Recorded {formatDateTime(request.createdAt)} / {request.recommendedAction}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
+                      {getOperationRequestTransitionControls(request.status).map((control) => (
+                        <form action={transitionOperationRequestAction} key={control.targetStatus}>
+                          <input type="hidden" name="operationRequestId" value={request.id} />
+                          <input
+                            type="hidden"
+                            name="returnTo"
+                            value={`/customers?focus=${encodeURIComponent(customer.id)}`}
+                          />
+                          <input
+                            type="hidden"
+                            name="targetStatus"
+                            value={control.targetStatus}
+                          />
+                          <Button size="sm" type="submit" variant="outline">
+                            {control.label}
+                          </Button>
+                        </form>
+                      ))}
                       <form action={withdrawOperationRequestAction}>
                         <input type="hidden" name="operationRequestId" value={request.id} />
                         <input

@@ -7,6 +7,8 @@ import {
   type CancellationRequestSubscription,
   recordCancellationRequestWithDependencies,
   type SubscriptionOperationRequestStatus,
+  transitionSubscriptionOperationRequestWithDependencies,
+  type TransitionRequestDependencies,
   withdrawSubscriptionOperationRequestWithDependencies,
   type WithdrawalRequestDependencies,
 } from "@/lib/subscription-operation-requests";
@@ -98,6 +100,53 @@ function createWithdrawalDependencies(options: {
         },
         async markWithdrawn() {
           events.push("withdraw");
+          return options.updated ?? true;
+        },
+        async writeAudit(input) {
+          events.push("audit");
+          audits.push(input);
+        },
+      });
+      events.push("transaction:end");
+      return result;
+    },
+  };
+
+  return { audits, dependencies, events };
+}
+
+function createTransitionDependencies(options: {
+  request?:
+    | {
+        customerId: string;
+        id: string;
+        operation: "cancel" | "pause" | "resume";
+        status: SubscriptionOperationRequestStatus;
+        subscriptionId: string;
+      }
+    | null;
+  updated?: boolean;
+} = {}) {
+  const audits: Record<string, unknown>[] = [];
+  const events: string[] = [];
+  const dependencies: TransitionRequestDependencies = {
+    async runInTransaction(callback) {
+      events.push("transaction:start");
+      const result = await callback({
+        async lockOperationRequest() {
+          events.push("lock");
+          return (
+            options.request ?? {
+              customerId: "customer_1",
+              id: "request_1",
+              operation: "cancel",
+              status: "pending",
+              subscriptionId: baseInput.subscriptionId,
+            }
+          );
+        },
+        async updateStatus(input) {
+          events.push(`update:${input.previousStatus}->${input.nextStatus}`);
           return options.updated ?? true;
         },
         async writeAudit(input) {
@@ -247,6 +296,66 @@ describe("subscription operation request withdrawal", () => {
       operation: "cancel",
       requestStatus: "withdrawn",
       status: "not_withdrawable",
+    });
+    assert.deepEqual(context.events, ["transaction:start", "lock", "transaction:end"]);
+    assert.equal(context.audits.length, 0);
+  });
+});
+
+describe("subscription operation request transitions", () => {
+  it("moves pending request to scheduled with audit only", async () => {
+    const context = createTransitionDependencies();
+    const result = await transitionSubscriptionOperationRequestWithDependencies(
+      {
+        mode: "test",
+        operationRequestId: "request_1",
+        targetStatus: "scheduled",
+      },
+      context.dependencies,
+    );
+
+    assert.deepEqual(result, {
+      customerId: "customer_1",
+      operation: "cancel",
+      status: "transitioned",
+      targetStatus: "scheduled",
+    });
+    assert.deepEqual(context.events, [
+      "transaction:start",
+      "lock",
+      "update:pending->scheduled",
+      "audit",
+      "transaction:end",
+    ]);
+    assert.match(JSON.stringify(context.audits[0]), /"nextStatus":"scheduled"/);
+    assert.doesNotMatch(JSON.stringify(context.audits[0]), /requestedByEmail|operatorReason/);
+  });
+
+  it("denies unsupported unresolved transition without mutating", async () => {
+    const context = createTransitionDependencies({
+      request: {
+        customerId: "customer_1",
+        id: "request_1",
+        operation: "cancel",
+        status: "scheduled",
+        subscriptionId: baseInput.subscriptionId,
+      },
+    });
+    const result = await transitionSubscriptionOperationRequestWithDependencies(
+      {
+        mode: "test",
+        operationRequestId: "request_1",
+        targetStatus: "scheduled",
+      },
+      context.dependencies,
+    );
+
+    assert.deepEqual(result, {
+      customerId: "customer_1",
+      operation: "cancel",
+      requestStatus: "scheduled",
+      status: "transition_denied",
+      targetStatus: "scheduled",
     });
     assert.deepEqual(context.events, ["transaction:start", "lock", "transaction:end"]);
     assert.equal(context.audits.length, 0);

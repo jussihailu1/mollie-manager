@@ -18,6 +18,7 @@ import {
 import {
   amsterdamDateStart,
   recordCancellationRequestWithDependencies,
+  transitionSubscriptionOperationRequestWithDependencies,
   withdrawSubscriptionOperationRequestWithDependencies,
 } from "@/lib/subscription-operation-requests";
 import {
@@ -59,6 +60,12 @@ const cancellationRequestSchema = z
 const withdrawOperationRequestSchema = z.object({
   operationRequestId: z.string().uuid(),
   returnTo: z.string().trim().startsWith("/").default("/customers"),
+});
+
+const transitionOperationRequestSchema = z.object({
+  operationRequestId: z.string().uuid(),
+  returnTo: z.string().trim().startsWith("/").default("/customers"),
+  targetStatus: z.enum(["processing", "scheduled"]),
 });
 
 async function recordCancellationRequest(input: {
@@ -179,6 +186,60 @@ async function withdrawOperationRequest(input: {
   });
 }
 
+async function transitionOperationRequest(input: {
+  mode: "live" | "test";
+  operationRequestId: string;
+  requestedByEmail: string;
+  targetStatus: "processing" | "scheduled";
+}) {
+  return transitionSubscriptionOperationRequestWithDependencies(input, {
+    runInTransaction: (callback) =>
+      transaction(async (client) =>
+        callback({
+          lockOperationRequest: ({ mode, operationRequestId }) =>
+            lockManagedOperationRequest(client, operationRequestId, mode),
+          updateStatus: async ({
+            nextStatus,
+            operationRequestId,
+            previousStatus,
+          }) => {
+            const result = await client.execute<{ id: string }>(sql`
+              update subscription_operation_requests
+              set
+                status = ${nextStatus},
+                processing_at = case
+                  when ${nextStatus} = 'processing'
+                    then coalesce(processing_at, now())
+                  else null
+                end,
+                updated_at = now()
+              where id = ${operationRequestId}
+                and status = ${previousStatus}
+              returning id
+            `);
+
+            return Boolean(result.rows[0]?.id);
+          },
+          writeAudit: (audit) =>
+            writeAuditLog(
+              {
+                action: "subscription.operation_request.transition",
+                details: audit,
+                entityId: audit.subscriptionId,
+                entityType: "subscription",
+                mode: input.mode,
+                outcome: "success",
+                summary:
+                  "Changed pending subscription operation request status only; no provider change occurred.",
+              },
+              client,
+              { email: input.requestedByEmail, kind: "user" },
+            ),
+        }),
+      ),
+  });
+}
+
 export async function recordCancellationRequestAction(formData: FormData) {
   const parsed = cancellationRequestSchema.safeParse(
     Object.fromEntries(formData.entries()),
@@ -275,6 +336,65 @@ export async function withdrawOperationRequestAction(formData: FormData) {
     unstable_rethrow(error);
     redirectWithMessage(parsed.data.returnTo, {
       error: "Subscription request could not be withdrawn.",
+    });
+  }
+}
+
+function formatOperationRequestStatusLabel(status: "processing" | "scheduled") {
+  return status === "processing" ? "processing" : "scheduled";
+}
+
+export async function transitionOperationRequestAction(formData: FormData) {
+  const parsed = transitionOperationRequestSchema.safeParse({
+    operationRequestId: formData.get("operationRequestId"),
+    returnTo: formData.get("returnTo") || undefined,
+    targetStatus: formData.get("targetStatus"),
+  });
+
+  if (!parsed.success) {
+    redirectWithMessage("/customers", {
+      error: "Subscription request transition details are missing.",
+    });
+  }
+
+  const session = await requireViewerSession();
+  const selectedMode = await getSelectedMollieMode();
+
+  try {
+    const result = await transitionOperationRequest({
+      mode: selectedMode,
+      operationRequestId: parsed.data.operationRequestId,
+      requestedByEmail: session.user.email!,
+      targetStatus: parsed.data.targetStatus,
+    });
+
+    if (result.status === "not_found") {
+      redirectWithMessage(parsed.data.returnTo, {
+        error: "Subscription request not found in the selected Mollie mode.",
+      });
+    }
+
+    if (result.status === "not_transitionable") {
+      redirectWithMessage(parsed.data.returnTo, {
+        notice: `Subscription request is already ${result.requestStatus}.`,
+      });
+    }
+
+    if (result.status === "transition_denied") {
+      redirectWithMessage(parsed.data.returnTo, {
+        error: `Subscription request cannot move from ${result.requestStatus} to ${result.targetStatus}.`,
+      });
+    }
+
+    revalidatePath("/customers");
+    revalidatePath("/notifications");
+    redirectWithMessage(parsed.data.returnTo, {
+      notice: `Subscription request marked ${formatOperationRequestStatusLabel(parsed.data.targetStatus)}. No provider change was made.`,
+    });
+  } catch (error) {
+    unstable_rethrow(error);
+    redirectWithMessage(parsed.data.returnTo, {
+      error: "Subscription request status could not be updated.",
     });
   }
 }
