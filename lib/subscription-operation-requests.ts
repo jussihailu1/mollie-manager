@@ -46,6 +46,30 @@ type CancellationRequestAudit = {
   subscriptionId: string;
 };
 
+export type SubscriptionOperationRequestStatus =
+  | "applied"
+  | "failed"
+  | "pending"
+  | "processing"
+  | "scheduled"
+  | "withdrawn";
+
+export type WithdrawableOperationRequest = {
+  customerId: string;
+  id: string;
+  operation: "cancel" | "pause" | "resume";
+  status: SubscriptionOperationRequestStatus;
+  subscriptionId: string;
+};
+
+type WithdrawalRequestAudit = {
+  operation: "cancel" | "pause" | "resume";
+  operationRequestId: string;
+  previousStatus: "pending" | "processing" | "scheduled";
+  providerChangeOccurred: false;
+  subscriptionId: string;
+};
+
 export type CancellationRequestTransaction = {
   insertPendingRequest: (input: CancellationRequestInsert) => Promise<boolean>;
   lockSubscription: (input: {
@@ -55,11 +79,26 @@ export type CancellationRequestTransaction = {
   writeAudit: (input: CancellationRequestAudit) => Promise<void>;
 };
 
+export type WithdrawalRequestTransaction = {
+  lockOperationRequest: (input: {
+    mode: MollieMode;
+    operationRequestId: string;
+  }) => Promise<WithdrawableOperationRequest | null>;
+  markWithdrawn: (input: { operationRequestId: string }) => Promise<boolean>;
+  writeAudit: (input: WithdrawalRequestAudit) => Promise<void>;
+};
+
 export type CancellationRequestDependencies = {
   createId: () => string;
   now: () => Date;
   runInTransaction: <T>(
-    callback: (transaction: CancellationRequestTransaction) => Promise<T>,
+      callback: (transaction: CancellationRequestTransaction) => Promise<T>,
+  ) => Promise<T>;
+};
+
+export type WithdrawalRequestDependencies = {
+  runInTransaction: <T>(
+    callback: (transaction: WithdrawalRequestTransaction) => Promise<T>,
   ) => Promise<T>;
 };
 
@@ -77,6 +116,20 @@ export type RecordCancellationRequestResult =
   | { customerId: string; status: "denied" }
   | { customerId: string; status: "duplicate" }
   | { customerId: string; status: "recorded" };
+
+export type WithdrawSubscriptionOperationRequestResult =
+  | { status: "not_found" }
+  | {
+      customerId: string;
+      operation: "cancel" | "pause" | "resume";
+      requestStatus: "applied" | "failed" | "withdrawn";
+      status: "not_withdrawable";
+    }
+  | {
+      customerId: string;
+      operation: "cancel" | "pause" | "resume";
+      status: "withdrawn";
+    };
 
 function getDateParts(value: string) {
   if (!strictDatePattern.test(value)) {
@@ -223,5 +276,59 @@ export async function recordCancellationRequestWithDependencies(
     });
 
     return { customerId: subscription.customerId, status: "recorded" };
+  });
+}
+
+export async function withdrawSubscriptionOperationRequestWithDependencies(
+  input: {
+    mode: MollieMode;
+    operationRequestId: string;
+  },
+  dependencies: WithdrawalRequestDependencies,
+): Promise<WithdrawSubscriptionOperationRequestResult> {
+  return dependencies.runInTransaction(async (transaction) => {
+    const request = await transaction.lockOperationRequest({
+      mode: input.mode,
+      operationRequestId: input.operationRequestId,
+    });
+
+    if (!request) {
+      return { status: "not_found" };
+    }
+
+    if (
+      request.status !== "pending" &&
+      request.status !== "processing" &&
+      request.status !== "scheduled"
+    ) {
+      return {
+        customerId: request.customerId,
+        operation: request.operation,
+        requestStatus: request.status,
+        status: "not_withdrawable",
+      };
+    }
+
+    const updated = await transaction.markWithdrawn({
+      operationRequestId: input.operationRequestId,
+    });
+
+    if (!updated) {
+      return { status: "not_found" };
+    }
+
+    await transaction.writeAudit({
+      operation: request.operation,
+      operationRequestId: request.id,
+      previousStatus: request.status,
+      providerChangeOccurred: false,
+      subscriptionId: request.subscriptionId,
+    });
+
+    return {
+      customerId: request.customerId,
+      operation: request.operation,
+      status: "withdrawn",
+    };
   });
 }

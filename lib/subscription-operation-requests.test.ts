@@ -6,6 +6,9 @@ import {
   type CancellationRequestDependencies,
   type CancellationRequestSubscription,
   recordCancellationRequestWithDependencies,
+  type SubscriptionOperationRequestStatus,
+  withdrawSubscriptionOperationRequestWithDependencies,
+  type WithdrawalRequestDependencies,
 } from "@/lib/subscription-operation-requests";
 
 const baseSubscription = {
@@ -61,6 +64,53 @@ function createDependencies(options: {
   };
 
   return { audits, dependencies, events, inserts };
+}
+
+function createWithdrawalDependencies(options: {
+  request?:
+    | {
+        customerId: string;
+        id: string;
+        operation: "cancel" | "pause" | "resume";
+        status: SubscriptionOperationRequestStatus;
+        subscriptionId: string;
+      }
+    | null;
+  updated?: boolean;
+} = {}) {
+  const audits: Record<string, unknown>[] = [];
+  const events: string[] = [];
+  const dependencies: WithdrawalRequestDependencies = {
+    async runInTransaction(callback) {
+      events.push("transaction:start");
+      const result = await callback({
+        async lockOperationRequest() {
+          events.push("lock");
+          return (
+            options.request ?? {
+              customerId: "customer_1",
+              id: "request_1",
+              operation: "cancel",
+              status: "pending",
+              subscriptionId: baseInput.subscriptionId,
+            }
+          );
+        },
+        async markWithdrawn() {
+          events.push("withdraw");
+          return options.updated ?? true;
+        },
+        async writeAudit(input) {
+          events.push("audit");
+          audits.push(input);
+        },
+      });
+      events.push("transaction:end");
+      return result;
+    },
+  };
+
+  return { audits, dependencies, events };
 }
 
 describe("Amsterdam date normalization", () => {
@@ -143,6 +193,62 @@ describe("cancellation request recording", () => {
       "insert",
       "transaction:end",
     ]);
+    assert.equal(context.audits.length, 0);
+  });
+});
+
+describe("subscription operation request withdrawal", () => {
+  it("withdraws unresolved intent, then audits without provider data", async () => {
+    const context = createWithdrawalDependencies();
+    const result = await withdrawSubscriptionOperationRequestWithDependencies(
+      {
+        mode: "test",
+        operationRequestId: "request_1",
+      },
+      context.dependencies,
+    );
+
+    assert.deepEqual(result, {
+      customerId: "customer_1",
+      operation: "cancel",
+      status: "withdrawn",
+    });
+    assert.deepEqual(context.events, [
+      "transaction:start",
+      "lock",
+      "withdraw",
+      "audit",
+      "transaction:end",
+    ]);
+    assert.match(JSON.stringify(context.audits[0]), /"providerChangeOccurred":false/);
+    assert.doesNotMatch(JSON.stringify(context.audits[0]), /requestedByEmail|operatorReason/);
+  });
+
+  it("rejects already terminal requests without mutating or auditing", async () => {
+    const context = createWithdrawalDependencies({
+      request: {
+        customerId: "customer_1",
+        id: "request_1",
+        operation: "cancel",
+        status: "withdrawn",
+        subscriptionId: baseInput.subscriptionId,
+      },
+    });
+    const result = await withdrawSubscriptionOperationRequestWithDependencies(
+      {
+        mode: "test",
+        operationRequestId: "request_1",
+      },
+      context.dependencies,
+    );
+
+    assert.deepEqual(result, {
+      customerId: "customer_1",
+      operation: "cancel",
+      requestStatus: "withdrawn",
+      status: "not_withdrawable",
+    });
+    assert.deepEqual(context.events, ["transaction:start", "lock", "transaction:end"]);
     assert.equal(context.audits.length, 0);
   });
 });

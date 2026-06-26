@@ -6,7 +6,10 @@ import { sql } from "drizzle-orm";
 import { getDb, type DbClient, type DbTransaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { getMollieClient } from "@/lib/mollie/client";
-import type { CancellationRequestSubscription } from "@/lib/subscription-operation-requests";
+import type {
+  CancellationRequestSubscription,
+  WithdrawableOperationRequest,
+} from "@/lib/subscription-operation-requests";
 
 type LocalCustomerLink = {
   id: string;
@@ -101,6 +104,30 @@ export async function lockCancellationRequestSubscription(
     from subscriptions
     where id = ${subscriptionId}
       and mode = ${mode}
+    for update
+  `);
+
+  return result.rows[0] ?? null;
+}
+
+export async function lockManagedOperationRequest(
+  client: DbTransaction,
+  operationRequestId: string,
+  mode: MollieMode,
+) {
+  const result = await client.execute<WithdrawableOperationRequest>(sql`
+    select
+      sor.id,
+      sor.operation,
+      sor.status,
+      sor.subscription_id as "subscriptionId",
+      s.customer_id as "customerId"
+    from subscription_operation_requests sor
+    inner join subscriptions s
+      on s.id = sor.subscription_id
+      and s.mode = sor.mode
+    where sor.id = ${operationRequestId}
+      and sor.mode = ${mode}
     for update
   `);
 

@@ -13,10 +13,12 @@ import { syncSubscriptionByLocalId } from "@/lib/reliability/sync";
 import {
   getManagedSubscription,
   lockCancellationRequestSubscription,
+  lockManagedOperationRequest,
 } from "@/lib/reliability/sync-resource-state";
 import {
   amsterdamDateStart,
   recordCancellationRequestWithDependencies,
+  withdrawSubscriptionOperationRequestWithDependencies,
 } from "@/lib/subscription-operation-requests";
 import {
   redirectWithMessage,
@@ -53,6 +55,11 @@ const cancellationRequestSchema = z
     subscriptionId: z.string().uuid(),
   })
   .strict();
+
+const withdrawOperationRequestSchema = z.object({
+  operationRequestId: z.string().uuid(),
+  returnTo: z.string().trim().startsWith("/").default("/customers"),
+});
 
 async function recordCancellationRequest(input: {
   mode: "live" | "test";
@@ -127,6 +134,51 @@ async function recordCancellationRequest(input: {
   });
 }
 
+async function withdrawOperationRequest(input: {
+  mode: "live" | "test";
+  operationRequestId: string;
+  requestedByEmail: string;
+}) {
+  return withdrawSubscriptionOperationRequestWithDependencies(input, {
+    runInTransaction: (callback) =>
+      transaction(async (client) =>
+        callback({
+          lockOperationRequest: ({ mode, operationRequestId }) =>
+            lockManagedOperationRequest(client, operationRequestId, mode),
+          markWithdrawn: async ({ operationRequestId }) => {
+            const result = await client.execute<{ id: string }>(sql`
+              update subscription_operation_requests
+              set
+                status = 'withdrawn',
+                withdrawn_at = now(),
+                updated_at = now()
+              where id = ${operationRequestId}
+                and status in ('pending', 'scheduled', 'processing')
+              returning id
+            `);
+
+            return Boolean(result.rows[0]?.id);
+          },
+          writeAudit: (audit) =>
+            writeAuditLog(
+              {
+                action: "subscription.operation_request.withdraw",
+                details: audit,
+                entityId: audit.subscriptionId,
+                entityType: "subscription",
+                mode: input.mode,
+                outcome: "success",
+                summary:
+                  "Withdrew pending subscription operation request; no provider change occurred.",
+              },
+              client,
+              { email: input.requestedByEmail, kind: "user" },
+            ),
+        }),
+      ),
+  });
+}
+
 export async function recordCancellationRequestAction(formData: FormData) {
   const parsed = cancellationRequestSchema.safeParse(
     Object.fromEntries(formData.entries()),
@@ -176,6 +228,53 @@ export async function recordCancellationRequestAction(formData: FormData) {
     unstable_rethrow(error);
     redirectWithMessage("/customers", {
       error: "Cancellation request could not be recorded.",
+    });
+  }
+}
+
+export async function withdrawOperationRequestAction(formData: FormData) {
+  const parsed = withdrawOperationRequestSchema.safeParse({
+    operationRequestId: formData.get("operationRequestId"),
+    returnTo: formData.get("returnTo") || undefined,
+  });
+
+  if (!parsed.success) {
+    redirectWithMessage("/customers", {
+      error: "Subscription request details are missing.",
+    });
+  }
+
+  const session = await requireViewerSession();
+  const selectedMode = await getSelectedMollieMode();
+
+  try {
+    const result = await withdrawOperationRequest({
+      mode: selectedMode,
+      operationRequestId: parsed.data.operationRequestId,
+      requestedByEmail: session.user.email!,
+    });
+
+    if (result.status === "not_found") {
+      redirectWithMessage(parsed.data.returnTo, {
+        error: "Subscription request not found in the selected Mollie mode.",
+      });
+    }
+
+    if (result.status === "not_withdrawable") {
+      redirectWithMessage(parsed.data.returnTo, {
+        notice: `Subscription request is already ${result.requestStatus}.`,
+      });
+    }
+
+    revalidatePath("/customers");
+    revalidatePath("/notifications");
+    redirectWithMessage(parsed.data.returnTo, {
+      notice: "Subscription request withdrawn. No provider change was made.",
+    });
+  } catch (error) {
+    unstable_rethrow(error);
+    redirectWithMessage(parsed.data.returnTo, {
+      error: "Subscription request could not be withdrawn.",
     });
   }
 }

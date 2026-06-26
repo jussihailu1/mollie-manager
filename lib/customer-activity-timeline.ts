@@ -195,15 +195,24 @@ const listCustomerActivityTimelineByMode = cache(async (
         concat('subscription-operation:', sor.id) as id,
         'subscription_operation_request' as "itemType",
         case
+          when sor.status = 'withdrawn' then 'info'
           when sor.status = 'processing' then 'warning'
           else 'info'
         end as severity,
         case
+          when sor.status = 'withdrawn' and sor.operation = 'cancel'
+            then 'Cancellation request withdrawn'
+          when sor.status = 'withdrawn' and sor.operation = 'pause'
+            then 'Pause request withdrawn'
+          when sor.status = 'withdrawn'
+            then 'Resume request withdrawn'
           when sor.operation = 'cancel' then 'Cancellation request recorded'
           when sor.operation = 'pause' then 'Pause request recorded'
           else 'Resume request recorded'
         end as title,
         case
+          when sor.status = 'withdrawn'
+            then 'Subscription operation request was withdrawn before any provider change.'
           when sor.operation = 'cancel' and sor.cancellation_effect = 'end_of_paid_period'
             then concat(
               'Cancellation review request targets ',
@@ -225,7 +234,7 @@ const listCustomerActivityTimelineByMode = cache(async (
             '.',
           )
         end as summary,
-        sor.created_at as "occurredAt",
+        coalesce(sor.withdrawn_at, sor.created_at) as "occurredAt",
         'subscription_operation_request' as "entityType",
         sor.id as "entityId",
         s.customer_id as "customerId",

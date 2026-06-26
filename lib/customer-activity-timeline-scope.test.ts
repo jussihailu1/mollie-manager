@@ -38,4 +38,10 @@ describe("customer activity timeline source", () => {
     assert.doesNotMatch(source, /accepted_ip|accepted_user_agent|consent_token/i);
     assert.doesNotMatch(source, /authorization|secret/i);
   });
+
+  it("records withdrawn subscription requests as timeline-safe history", () => {
+    assert.match(source, /Cancellation request withdrawn/);
+    assert.match(source, /Subscription operation request was withdrawn before any provider change/);
+    assert.match(source, /coalesce\(sor\.withdrawn_at, sor\.created_at\)/);
+  });
 });

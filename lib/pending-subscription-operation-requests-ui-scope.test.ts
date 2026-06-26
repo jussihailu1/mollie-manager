@@ -18,11 +18,13 @@ describe("pending subscription request notifications surface", () => {
     assert.match(pageSource, /pendingOperationRequests=\{operationRequestResult\}/);
   });
 
-  it("renders a read-only pending subscription request queue", () => {
+  it("renders pending subscription request controls without provider mutation", () => {
     assert.match(workspaceSource, /Pending subscription requests/);
     assert.match(workspaceSource, /Recorded lifecycle requests awaiting manual review or future execution/);
     assert.match(workspaceSource, /request\.requestedEffectiveAt/);
     assert.match(workspaceSource, /request\.cancellationEffect === "immediate"/);
+    assert.match(workspaceSource, /withdrawOperationRequestAction/);
+    assert.match(workspaceSource, /Withdraw request/);
     assert.match(workspaceSource, /Open customer/);
     assert.doesNotMatch(workspaceSource, /recordCancellationRequestAction/);
   });

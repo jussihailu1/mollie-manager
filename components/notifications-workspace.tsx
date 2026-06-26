@@ -19,6 +19,7 @@ import {
   openAlertAction,
   setAlertStatusAction,
 } from "@/lib/reliability/actions";
+import { withdrawOperationRequestAction } from "@/lib/operations/actions";
 import {
   getNeedsAttentionImpact,
   getNeedsAttentionPriorityMeta,
@@ -526,12 +527,21 @@ export function NotificationsWorkspace({
                       Recorded {formatDateTime(request.createdAt)} / {request.recommendedAction}
                     </p>
                   </div>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={request.href}>
-                      Open customer
-                      <ArrowRight className="h-4 w-4" />
-                    </Link>
-                  </Button>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <form action={withdrawOperationRequestAction}>
+                      <input type="hidden" name="operationRequestId" value={request.id} />
+                      <input type="hidden" name="returnTo" value={pathname} />
+                      <Button size="sm" type="submit" variant="outline">
+                        Withdraw request
+                      </Button>
+                    </form>
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={request.href}>
+                        Open customer
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

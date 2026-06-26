@@ -14,6 +14,10 @@ const resourceStateSource = readFileSync(
 );
 const cancellationSchemaSource = actionSource.slice(
   actionSource.indexOf("const cancellationRequestSchema"),
+  actionSource.indexOf("const withdrawOperationRequestSchema"),
+);
+const withdrawSchemaSource = actionSource.slice(
+  actionSource.indexOf("const withdrawOperationRequestSchema"),
   actionSource.indexOf("async function recordCancellationRequest"),
 );
 const auditTypeSource = requestSource.slice(
@@ -67,6 +71,25 @@ describe("cancellation request source boundaries", () => {
     assert.doesNotMatch(requestSource, /@mollie\/api-client|getMollieClient|customerSubscriptions/);
     assert.doesNotMatch(
       requestSource,
+      /update\s+(subscriptions|invoices|payments)|insert into recurring_billing_schedules/i,
+    );
+  });
+
+  it("withdraws only unresolved request state and keeps provider changes unavailable", () => {
+    assert.match(withdrawSchemaSource, /operationRequestId: z\.string\(\)\.uuid\(\)/);
+    assert.match(withdrawSchemaSource, /returnTo: z\.string\(\)\.trim\(\)\.startsWith\("\/"\)/);
+    assert.match(actionSource, /export async function withdrawOperationRequestAction/);
+    assert.match(resourceStateSource, /export async function lockManagedOperationRequest/);
+    assert.match(resourceStateSource, /from subscription_operation_requests sor/);
+    assert.match(actionSource, /update subscription_operation_requests/);
+    assert.match(actionSource, /status = 'withdrawn'/);
+    assert.match(actionSource, /withdrawn_at = now\(\)/);
+    assert.match(actionSource, /status in \('pending', 'scheduled', 'processing'\)/);
+    assert.match(actionSource, /subscription\.operation_request\.withdraw/);
+    assert.match(actionSource, /no provider change occurred/);
+    assert.doesNotMatch(actionSource, /@mollie\/api-client|getMollieClient|customerSubscriptions/);
+    assert.doesNotMatch(
+      actionSource,
       /update\s+(subscriptions|invoices|payments)|insert into recurring_billing_schedules/i,
     );
   });

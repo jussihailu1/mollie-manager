@@ -121,6 +121,10 @@ Additional rules:
   Needs Attention flow and customer workflow with status, effective dates, and
   recommended next action, without exposing operator reason, requester email,
   or raw metadata outside the protected action path.
+- Operators may withdraw an unresolved request from normal operator surfaces.
+  Withdrawal changes only the durable request status, writes sanitized audit
+  evidence, and does not call Mollie, mutate invoices/payments, end service, or
+  schedule execution.
 - At most one unresolved `pending`, `scheduled`, or `processing` request may
   exist for the same subscription and operation.
 

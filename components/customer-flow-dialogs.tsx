@@ -32,7 +32,10 @@ import {
   linkEboekhoudenRelationAction,
   syncCustomerBillingStateAction,
 } from "@/lib/onboarding/actions";
-import { recordCancellationRequestAction } from "@/lib/operations/actions";
+import {
+  recordCancellationRequestAction,
+  withdrawOperationRequestAction,
+} from "@/lib/operations/actions";
 import { buildConsentLinkReturnTo } from "@/lib/onboarding/consent-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -2497,6 +2500,19 @@ export function CustomerDrawer({
                     <p className="mt-1 text-xs text-muted-foreground">
                       Recorded {formatDateTime(request.createdAt)} / {request.recommendedAction}
                     </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <form action={withdrawOperationRequestAction}>
+                        <input type="hidden" name="operationRequestId" value={request.id} />
+                        <input
+                          type="hidden"
+                          name="returnTo"
+                          value={`/customers?focus=${encodeURIComponent(customer.id)}`}
+                        />
+                        <Button size="sm" type="submit" variant="outline">
+                          Withdraw request
+                        </Button>
+                      </form>
+                    </div>
                   </div>
                 ))}
               </div>
