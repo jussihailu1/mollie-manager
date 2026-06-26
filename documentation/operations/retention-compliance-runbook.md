@@ -14,6 +14,9 @@ This runbook tracks the current retention/compliance hardening work for complian
 
 Roadmap context: retention policy UI and dry-run cleanup are tracked in `../product/implementation-roadmap.md` as Phase 4. Failed-payment correctness remains the earlier product priority.
 
+For shared-app tenant scope and release boundaries, also use
+`../product/multi-tenant-pilot-scope.md`.
+
 ## Current Tooling
 
 - `npm run ops:retention-report -- inventory <live|test|all>`
@@ -25,6 +28,11 @@ These commands are read-only. They report:
 - policy-aligned candidate counts without row identifiers or stored payload values
 - preserved evidence counts and the intended impact of any future redaction
 - cleanup areas that remain blocked pending field/table allowlists
+
+Current commands are not yet tenant-aware in product terms. Before a shared
+multi-tenant pilot is considered ready, any operator-facing reporting surface
+and any future destructive apply path must require explicit tenant scope in
+addition to mode and data-area scope.
 
 ## Accepted Baseline Policy
 
@@ -75,7 +83,7 @@ Implementation must still follow these safeguards:
 
 - keep `npm run ops:retention-report` read-only
 - add cleanup as dry-run first
-- require explicit mode, table/data-area, and window selection for any future destructive apply
+- require explicit tenant, mode, table/data-area, and window selection for any future destructive apply
 - preserve invoice, payment, mandate, consent core evidence, and audit evidence unless the accepted policy explicitly permits removal/redaction
 - separate raw payload redaction from row deletion where normalized evidence should remain
 - log cleanup actions without storing the cleaned payload content again
@@ -84,4 +92,4 @@ Implementation must still follow these safeguards:
 
 No automatic destructive cleanup. Use explicit dry-run, review, then scoped apply.
 
-The settings page displays the accepted policy from the same typed source used by the report. Candidate reporting requires an explicit `live` or `test` mode, runs in a read-only transaction, and proposes zero mutations. Audit details remain review-only; generic metadata and broad test-data cleanup remain blocked until explicit allowlists exist.
+The settings page displays the accepted policy from the same typed source used by the report. Candidate reporting currently requires an explicit `live` or `test` mode, runs in a read-only transaction, and proposes zero mutations. For the shared multi-tenant pilot, operator-facing reporting and any future apply path must also require explicit tenant scope. Audit details remain review-only; generic metadata and broad test-data cleanup remain blocked until explicit allowlists exist.

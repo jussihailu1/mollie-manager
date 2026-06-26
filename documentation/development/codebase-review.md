@@ -22,13 +22,36 @@ This document records the current engineering assessment of the codebase before 
 
 The codebase is structurally serious: typed, parameterized, and backed by passing `lint`, `typecheck`, tests, and production build checks. The main risks are not obvious broken code.
 
-The current issues are concentrated in three areas:
+The current issues are concentrated in four areas:
 
 1. failed-payment handling must become more explicit, customer-notified, and operator-task driven before bigger product work
-2. compliance implementation work remains around retention UI, dry-run cleanup, and scoped redaction safeguards
-3. future feature work must keep the completed security, module, and test hardening patterns instead of reintroducing secret, metadata, or orchestration risk
+2. shared-app multi-tenant pilot work now requires explicit tenant isolation, membership-based access, and tenant-owned provider credential resolution before release
+3. compliance implementation work remains around retention UI, dry-run cleanup, and scoped redaction safeguards
+4. future feature work must keep the completed security, module, and test hardening patterns instead of reintroducing secret, metadata, or orchestration risk
 
 Development should continue, but the next feature pass should be combined with targeted hardening so the app does not accumulate risk faster than functionality.
+
+## Release Target Update
+
+The near-term release target is now a shared-app, manually provisioned
+multi-tenant pilot rather than a one-context product rollout.
+
+That changes the priority of one class of work:
+
+- tenant isolation and tenant-owned provider/policy configuration are now
+  release-blocking foundation work
+- broad SaaS administration is still later scope
+
+Current code still carries single-context assumptions such as:
+
+- single allowlisted-email access gating
+- app-wide env-backed Mollie credentials
+- app-wide env-backed e-Boekhouden credentials
+- app-wide default-row assumptions in tenant-named settings tables
+
+Those assumptions are acceptable only as migration debt to be removed by the
+multi-tenant pilot foundation. They are not acceptable as the end-state release
+model for the pilot.
 
 ## Status Update
 

@@ -19,6 +19,7 @@ Use this split:
 
 - `subscription-policy.md`: subscription terms, consent, cancellation disclosure, term mode, service-end semantics
 - `recurring-billing-policy.md`: recurring invoice notice timing, direct-debit collection handling, failed collection handling, mandate-only setup behavior
+- `multi-tenant-pilot-scope.md`: shared-app tenant scope and release boundaries
 
 Do not treat accounting configuration as policy. The following belong in tenant billing settings, not here:
 
@@ -28,6 +29,17 @@ Do not treat accounting configuration as policy. The following belong in tenant 
 - VAT configuration
 - invoice numbering preferences
 - internal display labels for selected accounting mappings
+
+## Tenant Scope And Settings Ownership
+
+- Customer-facing recurring billing behavior runs inside one tenant context.
+- Recurring billing notice wording, planned collection wording, failed-payment
+  customer notifications, and billing/accounting defaults must be resolved from
+  the active tenant's configuration and stored evidence.
+- A tenant's later billing-setting changes must not silently rewrite the meaning
+  of previously accepted consent or previously issued invoice evidence.
+- Platform-wide SMTP may remain shared for the pilot, but shared delivery
+  infrastructure does not make the billing policy app-wide.
 
 ## Locked Product Decisions
 
@@ -60,6 +72,9 @@ Do not treat accounting configuration as policy. The following belong in tenant 
 - Because the SEPA Core default pre-notification timeline is 14 calendar days unless another timeline is agreed, V1 must disclose and agree the shorter 5-day timeline in the customer terms and consent flow.
 - The consent snapshot should capture that recurring invoices are sent before automatic collection and that the debit happens on the planned collection date.
 - Customer-facing wording should avoid promising immediate settlement finality for SEPA direct debit because a debit can still fail or be reversed later.
+- For the shared multi-tenant pilot, the wording and timing shown to the customer
+  must come from the tenant-owned consent/policy snapshot tied to that customer
+  flow, not from one mutable app-wide live default.
 
 ## V1 Failed Collection Policy
 
@@ -90,6 +105,10 @@ Normal operator attention items should show classified failed payments with a
 manual safe next action. They may recommend review, mandate renewal, or checking
 Mollie/e-Boekhouden, but must not recommend automatic cancellation, fees, or
 dunning as the default action.
+
+Failed-payment customer communications must stay tenant-scoped. No customer
+notification flow may mix tenant contact paths, tenant terms, or tenant provider
+evidence across businesses.
 
 The current persisted recurring collection enum remains the narrower storage
 shape for compatibility. Plain outcomes are mapped into existing review states
@@ -184,6 +203,9 @@ operator surfaces.
 - Future recovery flows may automate reminders, retries, or recovery links, but they must preserve the rule that a failed collection does not create duplicate invoices for the same billing period.
 - Future recovery flows must separate detection and notification from consequences such as pause, cancellation, fees, dunning, or legal escalation.
 - Future tenant settings may make the pre-notification lead time configurable, but V1 should treat 5 calendar days as the canonical default.
+- Future tenant-specific SMTP overrides may change sender infrastructure, but
+  they must not change the billing-policy separation between invoice/accounting
+  truth and customer communication behavior.
 - If customer self-serve billing recovery is added later, it must preserve the distinction between:
   - invoice state
   - payment collection state

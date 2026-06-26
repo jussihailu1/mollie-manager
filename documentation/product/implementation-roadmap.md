@@ -9,6 +9,11 @@ This is the autonomous-development roadmap for turning the app into a product th
 
 Use this roadmap before starting feature work. `feature-inventory.md` records what exists; this file defines the order and quality bar for what comes next.
 
+Near-term release target: a shared-app, manually provisioned multi-tenant pilot
+as defined in `multi-tenant-pilot-scope.md`. This is earlier than broad SaaS
+administration and does not include self-serve signup, invites, platform
+billing, or a full role matrix.
+
 ## Product Direction
 
 The app should default to a guided, plain-language workflow:
@@ -20,6 +25,10 @@ The app should default to a guided, plain-language workflow:
 - hide advanced diagnostics, repair, replay, and policy controls unless the operator has the right access and opens the advanced surface
 
 The app should not require operators to understand Mollie internals, e-Boekhouden internals, SEPA timing, retry policy, or invoice-state implementation details for normal use.
+
+The near-term product target is no longer "one operational context first" in the
+release sense. It is a shared-app multi-tenant pilot with manual provisioning
+and explicit tenant isolation, while broad tenant administration remains later.
 
 ## Hard Rules For All Roadmap Work
 
@@ -37,6 +46,10 @@ These rules prevent repeating previous cleanup and hardening mistakes:
 - add dependency-injected seam coverage for flows with external services
 - add database-backed coverage when a feature depends on multiple tables staying consistent
 - keep public and normal-operator surfaces narrow; put raw diagnostics and repair controls behind advanced access
+- resolve an explicit tenant for every tenant business query, mutation, webhook, repair, replay, cron, invoice, sync, and notification flow
+- do not allow `AUTH_ADVANCED_EMAILS` or developer mode to bypass tenant membership or tenant context
+- use tenant-owned Mollie and e-Boekhouden credentials for tenant business flows; do not fall back to one shared provider account
+- keep tenant business data isolated in schema, query scope, audit scope, and operator UI scope
 - design destructive cleanup as report-only first, then dry-run, then explicit scoped apply
 - update docs in the same slice as behavior changes
 
@@ -91,6 +104,51 @@ Acceptance criteria:
 - audit log written without sensitive payload leakage
 - failed payment state can be rebuilt by reconciliation
 
+## Phase 0.5: Multi-Tenant Pilot Foundation
+
+Goal:
+
+- make the app safely usable by multiple tenants in one shared deployment
+  without cross-tenant leakage or provider-credential mixing.
+
+Scope:
+
+- tenant entity and tenant membership model
+- current-tenant session/context resolution for authenticated operators
+- keep normal operator routes on `/customers`, `/payments`, `/notifications`,
+  and `/settings`
+- public consent/return routes resolve tenant implicitly through the token and
+  linked local state
+- tenant-owned Mollie credentials
+- tenant-owned e-Boekhouden credentials
+- tenant-owned subscription policy defaults and billing/accounting settings
+- tenant-scoped core business tables, indexes, and uniqueness rules
+- tenant-aware webhook, replay, repair, reconciliation, cron, onboarding,
+  invoice, and notification flows
+
+Required behavior:
+
+- signing in alone does not grant product access
+- an operator may access tenant data only through explicit membership or a
+  controlled platform-operator bootstrap path
+- one tenant is active for an authenticated operator workflow at a time
+- no tenant business flow may use an implicit app-wide default tenant
+- no tenant business flow may use one global provider account as payment or
+  accounting truth
+- cross-tenant data must not appear in normal or advanced operator surfaces
+- current money-flow safeguards must still hold after tenant scoping
+
+Acceptance criteria:
+
+- canonical scope is documented in `multi-tenant-pilot-scope.md`
+- tenant entity and operator membership model are documented before code
+- schema and query rules make tenant scope explicit for tenant business data
+- tenant-owned provider credential resolution exists before live tenant actions
+- webhook and cron follow-up cannot proceed without resolved tenant context
+- focused tests prove no cross-tenant read/write leakage in core flows
+- current hosted onboarding and billing flows still work with tenant resolution
+- broad SaaS administration remains out of scope
+
 ## Phase 1: Needs Attention Dashboard
 
 Goal:
@@ -122,6 +180,7 @@ Acceptance criteria:
 - each item has stable type, severity, entity references, and recommended action
 - source data is covered by focused tests
 - no raw webhook payloads or sensitive metadata shown to normal operators
+- current source list stays frozen until docs explicitly add a new attention class
 
 ## Phase 2: Customer Activity Timeline And Derived Lifecycle State
 
@@ -171,6 +230,8 @@ Required behavior:
 - explain "failed" without implying cancellation or penalties
 - keep advanced configuration available but out of the primary path
 - show "what to do next" near every issue state
+- keep the operator aware of the active tenant context without requiring
+  tenant-namespaced URLs
 
 Acceptance criteria:
 
@@ -194,6 +255,8 @@ Scope:
 Required behavior:
 
 - separate live and test data decisions
+- any future operator-facing report or apply path must also require explicit
+  tenant scope
 - preserve invoice, payment, mandate, consent, and audit evidence unless policy explicitly allows removal
 - redact or delete stale personal-data fragments only through scoped rules
 - every future destructive action must require explicit mode/table/window selection
@@ -235,6 +298,7 @@ Acceptance criteria:
 - pure state-transition helpers with tests
 - audit trail for every lifecycle action
 - no conflict with fixed-term subscription semantics
+- payment follow-up queue remains read-only evidence unless the roadmap later adds an explicit ownership/due-date/disposition slice
 
 ## Phase 6: Plan Catalog And Accounting Mapping
 
@@ -287,12 +351,12 @@ Scope:
 
 Default:
 
-- tenant/app defaults remain the simple path
+- tenant defaults remain the simple path
 - overrides must be advanced and visibly exceptional
 
 Acceptance criteria:
 
-- policy precedence is explicit: app default -> tenant default -> customer/subscription override
+- policy precedence is explicit: platform fallback -> tenant default -> customer/subscription override
 - every override is included in customer-facing consent where relevant
 - override audit trail exists
 - no override silently changes already-agreed customer terms
@@ -303,24 +367,30 @@ These are intentionally far future:
 
 - real roles such as admin, finance, support, developer, and auditor
 - multi-user invites
-- tenant separation and broader SaaS management
+- self-serve tenant signup
+- broad tenant administration UX
+- platform billing
+- tenant SMTP overrides and richer provider-linking UX
 - customer self-serve portal beyond simple invoice downloads or recovery links
 - full onboarding for new users of this app
 
 Reason:
 
-- the app should first become correct, understandable, and safe for one operational context before adding platform breadth.
+- the app should first become correct, understandable, safe, and tenant-isolated
+  before adding broader platform administration.
 
 ## Current Autonomous Development Order
 
 1. Phase 0 failed payment correctness
-2. Phase 1 needs attention dashboard
-3. Phase 2 customer timeline and derived lifecycle state
-4. Phase 3 noob-friendly UX and invoice resend/downloads
-5. Phase 4 retention policy UI and dry-run cleanup
-6. Phase 5 subscription operations
-7. Phase 6 plan catalog and accounting mapping
-8. Phase 7 advanced policy overrides
-9. very late platform track
+2. Phase 0.5 multi-tenant pilot foundation
+3. Phase 1 needs attention dashboard
+4. Phase 2 customer timeline and derived lifecycle state
+5. Phase 3 noob-friendly UX and invoice resend/downloads
+6. Phase 4 retention policy UI and dry-run cleanup
+7. Phase 5 subscription operations
+8. Phase 6 plan catalog and accounting mapping
+9. Phase 7 advanced policy overrides
+10. very late platform track
 
-If a later feature needs a Phase 0-4 foundation, build the foundation first.
+If a later feature needs a Phase 0, Phase 0.5, or Phase 1-4 foundation, build
+the foundation first.

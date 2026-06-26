@@ -9,13 +9,21 @@ Mollie is the payment and mandate source of truth for this app.
 
 The app stores local operational state, but payment, mandate, and subscription truth must reconcile back to Mollie.
 
+For the shared multi-tenant pilot, each tenant owns its own Mollie
+credentials/configuration. Tenant business flows must not rely on one shared
+app-wide Mollie account.
+
 ## Mode Model
 
 - Supported modes: `test` and `live`
-- Default mode comes from `MOLLIE_DEFAULT_MODE`
+- Default mode may still bootstrap from `MOLLIE_DEFAULT_MODE` during current
+  implementation debt, but target live operation is tenant-aware
 - The operator-selected mode is stored in the `mollie_manager_mode` cookie
 - In `APP_ENV=test`, the app forces `test` mode and blocks live mode
 - Persisted records keep their own `mode` column
+
+Mode and tenant are separate concerns. A tenant business record must resolve
+both its tenant and its Mollie mode.
 
 ## Main Usage Areas
 
@@ -27,6 +35,9 @@ The app stores local operational state, but payment, mandate, and subscription t
 - payment, payment-link, and subscription sync
 - webhook-driven refresh
 
+All of these flows must resolve the tenant's Mollie credentials before calling
+Mollie.
+
 ## Integration Boundaries
 
 - `lib/mollie/client.ts`: mode-aware client creation and webhook URL building
@@ -36,20 +47,31 @@ The app stores local operational state, but payment, mandate, and subscription t
 
 ## Webhooks
 
-- Webhook URL is built from `MOLLIE_WEBHOOK_PUBLIC_BASE_URL`
+- Webhook URL may still be built from `MOLLIE_WEBHOOK_PUBLIC_BASE_URL` while the
+  current code remains env-backed, but webhook follow-up must resolve tenant
+  context from local state before tenant business processing continues
 - Webhook URLs do not include shared secrets
 - Webhook events are stored locally before processing
 - Processing re-fetches current Mollie state instead of trusting the webhook payload blindly
 - Payment and payment-link webhooks must resolve back to managed local app state before processing
+- If a webhook cannot be mapped to one tenant-owned local resource and tenant
+  context, processing must fail safely and never fall back to one shared global
+  Mollie account
 
 ## Operational Rules
 
 - A recurring SEPA direct debit in `pending` state is not automatically treated as failed.
 - The app distinguishes first payments from recurring payments.
 - The hosted consent flow is part of the onboarding contract and precedes Mollie checkout.
+- Hosted consent and hosted return flows may keep normal product URLs; tenant
+  context is resolved from the onboarding token and linked local state.
 - Hosted consent tokens are looked up by hash and recovered for authenticated operator reuse via encrypted storage; run the consent-token backfill after the schema migration to erase legacy plaintext rows.
 - Failed Mollie webhook events can be replayed from the operator ops surface, but replay is now limited to failed stored events in the selected mode.
 - Repair and reconciliation flows must not silently change invoice truth in e-Boekhouden.
+- Tenant-owned Mollie credentials must be used consistently in onboarding,
+  subscription creation, sync, replay, repair, and webhook follow-up flows.
+- Current global env-backed Mollie credentials are implementation debt to remove
+  during the multi-tenant pilot foundation.
 
 ## Relevant Env
 
@@ -59,3 +81,7 @@ The app stores local operational state, but payment, mandate, and subscription t
 - `MOLLIE_ORGANIZATION_ID`
 - `MOLLIE_PROFILE_ID`
 - `MOLLIE_WEBHOOK_PUBLIC_BASE_URL`
+
+These env values describe current implementation/bootstrap behavior. They are
+not the desired long-term live credential model for the shared multi-tenant
+pilot.

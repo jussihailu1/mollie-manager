@@ -11,6 +11,9 @@ This file is normative for implementation. Keep it aligned with code changes.
 
 Customer-visible recurring invoice timing, direct-debit notice, failed collection handling, and the EUR 0.01 mandate-setup flow are defined separately in `recurring-billing-policy.md`.
 
+For shared-app tenant scope and release boundaries, also use
+`multi-tenant-pilot-scope.md`.
+
 ## Canonical Terms
 
 - `subscription_term_mode`: `open_ended | fixed_term`
@@ -33,6 +36,8 @@ Customer-visible recurring invoice timing, direct-debit notice, failed collectio
 - `real_installment` remains the default first-payment mode.
 - `mandate_only` in V1 is fixed at `EUR 0.01` and is used only for mandate setup before recurring charges.
 - Customer-visible recurring billing notice rules must stay separate from accounting configuration such as invoice templates, email templates, VAT, and ledger mapping.
+- For the shared multi-tenant pilot, subscription-policy defaults are tenant-owned
+  defaults rather than one live app-wide product default.
 
 ## V1 Policy Rules
 
@@ -50,6 +55,18 @@ Customer-visible recurring invoice timing, direct-debit notice, failed collectio
 - Fixed-term validation minimums:
   - `real_installment` requires `total_payments >= 2`
   - `mandate_only` requires `total_payments >= 1`
+
+## Tenant Ownership And Consent Evidence
+
+- Cancellation email, terms URL, privacy URL, terms version, and default
+  cancellation effect are tenant-owned defaults.
+- The customer must accept the exact tenant-owned terms shown at the moment of
+  consent.
+- Consent evidence must keep enough tenant-owned snapshot data to explain the
+  agreed terms later without relying on mutable current defaults.
+- Future tenant default changes must not silently rewrite past consent meaning.
+- Public hosted consent and hosted return routes may keep normal product URLs;
+  tenant context is resolved through the onboarding token and linked local state.
 
 ## V1 Onboarding Flow Shape
 
@@ -80,7 +97,15 @@ Customer-visible recurring invoice timing, direct-debit notice, failed collectio
   - accepted checkbox set
   - acceptance timestamp
   - customer-facing plan snapshot
-- Add tenant-level default policy storage now if needed by implementation, but do not implement per-subscription overrides yet.
+- Add tenant-ready typed default policy storage as current-direction foundation work.
+  The model should support one default-policy record per tenant even if the
+  first shipped environment still operates a single tenant. Do not collapse new
+  implementation back to a permanently app-wide-only policy row. Live multi-tenant
+  operation must resolve the tenant-owned row rather than one shared default row.
+  Per-subscription overrides still remain out of scope for this phase.
+- The meaning of `platform fallback` is limited to controlled bootstrap behavior
+  when a tenant row has not been initialized yet. It is not a live shared runtime
+  policy row for active tenant business flows.
 
 ## Operator Subscription Operations Foundation
 
@@ -228,9 +253,13 @@ Recommended audit/result detail for future provider execution:
 - Per-subscription overrides
 - Customer self-serve cancellation UI
 - Generalized legal rule engine
-- Full multi-tenant SaaS policy management
+- Full multi-tenant tenant-admin product surface, such as tenant switching,
+  invite workflows, platform billing, and broad SaaS administration
 
 ## Forward-Compatibility Notes
 
-- Current implementation work should assume a tenant default policy exists conceptually, even if the first pass stores a single app-wide default.
+- Current implementation work should assume tenant-ready typed default policy
+  storage, even if the immediate deployment still operates a single tenant.
+- The shared multi-tenant pilot should treat tenant-owned defaults as the normal
+  operating model and platform fallback as bootstrap-only behavior.
 - Future policy override support must extend the current model, not replace the meaning of `subscription_term_mode`, `total_payments`, `service_end_at`, or `cancellation_effect`.

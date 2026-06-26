@@ -16,11 +16,18 @@ The app uses e-Boekhouden for:
 - recurring invoice creation
 - invoice reconciliation
 
+For the shared multi-tenant pilot, each tenant owns its own e-Boekhouden
+credentials/session context. Tenant business flows must not rely on one shared
+app-wide e-Boekhouden token.
+
 ## Authentication Model
 
-- The app starts a session with `EBOEKHOUDEN_API_TOKEN`
+- Current code starts a session with `EBOEKHOUDEN_API_TOKEN`
 - `EBOEKHOUDEN_API_SOURCE` is sent with the session request
 - Session tokens are cached in memory and renewed when needed
+- The multi-tenant pilot foundation must replace the app-wide token assumption
+  with tenant-owned credential/session resolution
+- Any e-Boekhouden session cache must be tenant-aware
 
 Main implementation:
 
@@ -35,6 +42,8 @@ Main implementation:
   - `eboekhouden_link_status`
   - sync timestamp and snapshot metadata
 - Linking is mode-aware and prevents duplicate local linking in the same mode
+- Linking must run against the active tenant's e-Boekhouden account and must not
+  mix relations across tenants
 
 ## Invoice Model
 
@@ -48,6 +57,10 @@ Current invoice areas:
 - recurring invoice tracking on `recurring_billing_schedules`
 - tenant accounting defaults in `tenant_billing_settings`
 
+Invoice template discovery, revenue-ledger discovery, invoice creation, and
+invoice reconciliation must all run against the active tenant's e-Boekhouden
+company/account.
+
 ## Safety Rules
 
 - Claim rows before calling the upstream invoice API
@@ -55,6 +68,11 @@ Current invoice areas:
 - Write audit logs for success and failure
 - Open operator alerts for important failures
 - Do not treat `mandate_only` EUR 0.01 flows as normal recurring invoice events
+- Resolve tenant context before relation lookup, relation linking, template
+  discovery, ledger discovery, invoice creation, invoice retry, reconciliation,
+  or PDF URL trust decisions
+- Current global env-backed e-Boekhouden credentials are implementation debt to
+  remove during the multi-tenant pilot foundation
 
 ## Relevant Files
 
@@ -71,3 +89,7 @@ Current invoice areas:
 - `EBOEKHOUDEN_API_SOURCE`
 - `INVOICE_EMAIL_OVERRIDE_TO`
 - SMTP env values used by app-owned delivery
+
+These env values describe current implementation/bootstrap behavior. They are
+not the desired long-term live credential model for the shared multi-tenant
+pilot.
