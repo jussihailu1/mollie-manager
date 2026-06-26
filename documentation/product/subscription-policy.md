@@ -128,6 +128,56 @@ Additional rules:
 - At most one unresolved `pending`, `scheduled`, or `processing` request may
   exist for the same subscription and operation.
 
+### Pre-Execution Request Lifecycle
+
+Before any provider-side execution exists, `subscription_operation_requests`
+use these statuses with strict meaning:
+
+| Status | Meaning now | Allowed side effects now |
+| --- | --- | --- |
+| `pending` | request intake recorded, not yet dispositioned for execution | sanitized audit only |
+| `scheduled` | operator approved future manual execution path for a later effective date; provider action still deferred | sanitized audit only |
+| `processing` | operator is actively reviewing or performing a controlled manual execution attempt; provider action is still not implied by status alone | sanitized audit only |
+| `withdrawn` | request is no longer active and must not be executed | sanitized audit only |
+| `applied` | reserved for future provider-execution flow after documented implementation exists | none in V1 |
+| `failed` | reserved for future provider-execution flow after documented implementation exists | none in V1 |
+
+Current policy rules for those statuses:
+
+- New operator intake starts as `pending`.
+- `scheduled` is allowed only when execution remains future-facing and explicit;
+  it must not imply automatic background execution.
+- `processing` is an explicit operator-held state, not an automatic worker
+  lease, cron claim, or hidden orchestration state in V1.
+- `withdrawn` is terminal for the request and removes it from unresolved queue
+  uniqueness.
+- `applied` and `failed` remain reserved until actual provider execution,
+  idempotency, retry, and reconciliation rules are documented first.
+- `requested_effective_at` remains the business-effective target date; V1 does
+  not require a separate scheduled-execution timestamp before provider mutation
+  exists.
+- `updated_at` plus sanitized audit history is enough current evidence for
+  status progression; add dedicated approval/scheduling timestamps only when a
+  real execution flow needs them.
+
+Safe pre-execution disposition flow for V1 and next slices:
+
+- `pending` -> `withdrawn`
+- `pending` -> `scheduled`
+- `pending` -> `processing`
+- `scheduled` -> `withdrawn`
+- `scheduled` -> `processing`
+- `processing` -> `withdrawn`
+- `processing` -> `scheduled` if operator stops active execution work but still
+  intends future manual execution
+
+These state changes still must not:
+
+- call Mollie
+- mutate subscriptions, invoices, payments, or service entitlement
+- create retries, fees, dunning, or legal escalation
+- bypass a fresh authoritative Mollie re-fetch before any future execution path
+
 ## Out Of Scope / Not In V1
 
 - Per-subscription overrides
