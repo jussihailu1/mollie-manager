@@ -128,7 +128,7 @@ Additional rules:
 - At most one unresolved `pending`, `scheduled`, or `processing` request may
   exist for the same subscription and operation.
 
-### Pre-Execution Request Lifecycle
+### Request Lifecycle
 
 Before any provider-side execution exists, `subscription_operation_requests`
 use these statuses with strict meaning:
@@ -137,7 +137,7 @@ use these statuses with strict meaning:
 | --- | --- | --- |
 | `pending` | request intake recorded, not yet dispositioned for execution | sanitized audit only |
 | `scheduled` | operator approved future manual execution path for a later effective date; provider action still deferred | sanitized audit only |
-| `processing` | operator is actively reviewing or performing a controlled manual execution attempt; provider action is still not implied by status alone | sanitized audit only |
+| `processing` | operator explicitly started one controlled execution attempt | sanitized audit only until real provider execution is implemented |
 | `withdrawn` | request is no longer active and must not be executed | sanitized audit only |
 | `applied` | reserved for future provider-execution flow after documented implementation exists | none in V1 |
 | `failed` | reserved for future provider-execution flow after documented implementation exists | none in V1 |
@@ -177,6 +177,51 @@ These state changes still must not:
 - mutate subscriptions, invoices, payments, or service entitlement
 - create retries, fees, dunning, or legal escalation
 - bypass a fresh authoritative Mollie re-fetch before any future execution path
+
+### Provider Execution Rules
+
+When provider-side cancellation is implemented later, it should follow these
+rules:
+
+- `scheduled` remains planning state only. It does not auto-run when the target
+  date arrives.
+- A `scheduled` request becomes eligible for manual execution only when
+  `requested_effective_at <= now` and a fresh Mollie re-fetch still confirms
+  the subscription state matches policy assumptions.
+- Only `processing` may move to `applied` or `failed`.
+- `processing` -> `applied` requires both provider-call success and a
+  post-action Mollie re-fetch that confirms the expected provider state.
+- `processing` -> `failed` is required when the provider call errors, times
+  out, is rejected, or cannot be confirmed by post-action re-fetch.
+- `pending` and `scheduled` must not jump directly to `applied` or `failed`.
+- If a fresh re-fetch already shows the intended provider state before a retry,
+  the request should reconcile to `applied` instead of repeating provider
+  mutation.
+
+Recommended post-execution transition model:
+
+- `processing` -> `applied`
+- `processing` -> `failed`
+- `failed` -> `scheduled`
+- `failed` -> `withdrawn`
+
+Recommended retry and idempotency rules:
+
+- only one operator-started execution attempt may be active at a time
+- every retry starts with a fresh authoritative Mollie re-fetch
+- retries must not blindly repeat provider mutation when outcome is uncertain
+- generic UI should requeue or return a failed request to `scheduled` before a
+  later manual retry, instead of offering repeated blind provider calls
+
+Recommended audit/result detail for future provider execution:
+
+- keep normalized evidence in audit logs: request id, prior status, next
+  status, operator identity, mode, policy reason code, provider-mutation
+  requirement, attempt timestamps, and normalized result code
+- do not place raw provider payloads, secrets, headers, callback URLs, or
+  broad error bodies into generic audit details
+- if deeper provider diagnostics are ever needed, store them separately behind
+  tighter access controls than normal operator audit output
 
 ## Out Of Scope / Not In V1
 

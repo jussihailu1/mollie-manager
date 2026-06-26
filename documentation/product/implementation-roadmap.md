@@ -223,6 +223,7 @@ Required behavior:
 - pause/resume/cancel actions are explicit operator actions
 - cancellation must separate service end, billing end, and collection state
 - pre-execution request statuses must have explicit meaning before any provider execution is implemented
+- provider execution must require fresh Mollie re-fetch before action and provider confirmation after action
 - failed payment follow-up should recommend actions before automating consequences
 - customer communication should be stored with outcome evidence
 
@@ -230,6 +231,7 @@ Acceptance criteria:
 
 - state transition policy documented before code
 - pre-execution request lifecycle (`pending`, `scheduled`, `processing`, `withdrawn`) documented before UI or server-action transitions
+- execution-state policy (`processing` -> `applied|failed`, retry/requeue rules, confirmation rules) documented before provider mutation code
 - pure state-transition helpers with tests
 - audit trail for every lifecycle action
 - no conflict with fixed-term subscription semantics
