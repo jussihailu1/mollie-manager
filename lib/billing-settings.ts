@@ -9,8 +9,8 @@ import {
   type EboekhoudenInvoiceTemplate,
   type EboekhoudenLedger,
 } from "@/lib/eboekhouden/client";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
-export const TENANT_BILLING_SETTINGS_ID = "default";
 export const DEFAULT_SUBSCRIPTION_VAT_CODE = "HOOG_VERK_21";
 export const DEFAULT_SUBSCRIPTION_VAT_PERCENTAGE = "21.00";
 
@@ -20,6 +20,7 @@ export type TenantBillingSettings = {
   invoiceLineDescriptionSource: string;
   invoiceTemplateId: number | null;
   revenueLedgerId: number | null;
+  tenantId: string;
   vatCode: string;
   vatPercentage: string;
 };
@@ -35,21 +36,27 @@ function normalizeItems<T>(items: T[] | undefined) {
 }
 
 function ledgerLabel(ledger: EboekhoudenLedger) {
-  return [
-    ledger.code,
-    ledger.description,
-    ledger.name,
-  ]
-    .filter((value): value is string => typeof value === "string" && value.length > 0)
+  return [ledger.code, ledger.description, ledger.name]
+    .filter(
+      (value): value is string =>
+        typeof value === "string" && value.length > 0,
+    )
     .join(" ")
     .toLowerCase();
 }
 
-export async function ensureTenantBillingSettings() {
+async function resolveTenantId(tenantId?: string) {
+  return tenantId ?? (await getSingleTenantIdOrThrow());
+}
+
+export async function ensureTenantBillingSettings(tenantId?: string) {
+  const resolvedTenantId = await resolveTenantId(tenantId);
+
   await transaction(async (tx) => {
     await tx.execute(sql`
       insert into tenant_billing_settings (
         id,
+        tenant_id,
         vat_code,
         vat_percentage,
         invoice_line_description_source,
@@ -57,7 +64,8 @@ export async function ensureTenantBillingSettings() {
         created_at,
         updated_at
       ) values (
-        ${TENANT_BILLING_SETTINGS_ID},
+        ${resolvedTenantId},
+        ${resolvedTenantId},
         ${DEFAULT_SUBSCRIPTION_VAT_CODE},
         ${DEFAULT_SUBSCRIPTION_VAT_PERCENTAGE},
         'subscription_description',
@@ -65,17 +73,19 @@ export async function ensureTenantBillingSettings() {
         now(),
         now()
       )
-      on conflict (id) do nothing
+      on conflict (tenant_id) do nothing
     `);
   });
 
-  return getTenantBillingSettings();
+  return getTenantBillingSettings(resolvedTenantId);
 }
 
-export async function getTenantBillingSettings() {
+export async function getTenantBillingSettings(tenantId?: string) {
+  const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await getDb().execute<TenantBillingSettings>(sql`
     select
       id,
+      tenant_id as "tenantId",
       invoice_template_id as "invoiceTemplateId",
       revenue_ledger_id as "revenueLedgerId",
       vat_code as "vatCode",
@@ -83,22 +93,28 @@ export async function getTenantBillingSettings() {
       invoice_line_description_source as "invoiceLineDescriptionSource",
       invoice_email_delivery_mode as "invoiceEmailDeliveryMode"
     from tenant_billing_settings
-    where id = ${TENANT_BILLING_SETTINGS_ID}
+    where tenant_id = ${resolvedTenantId}
     limit 1
   `);
 
   return result.rows[0] ?? null;
 }
 
-export async function updateTenantBillingSettings(input: {
-  invoiceEmailDeliveryMode: "app_smtp" | "eboekhouden" | "none";
-  invoiceTemplateId: number | null;
-  revenueLedgerId: number | null;
-}) {
+export async function updateTenantBillingSettings(
+  input: {
+    invoiceEmailDeliveryMode: "app_smtp" | "eboekhouden" | "none";
+    invoiceTemplateId: number | null;
+    revenueLedgerId: number | null;
+  },
+  tenantId?: string,
+) {
+  const resolvedTenantId = await resolveTenantId(tenantId);
+
   await transaction(async (tx) => {
     await tx.execute(sql`
       insert into tenant_billing_settings (
         id,
+        tenant_id,
         invoice_template_id,
         revenue_ledger_id,
         vat_code,
@@ -108,7 +124,8 @@ export async function updateTenantBillingSettings(input: {
         created_at,
         updated_at
       ) values (
-        ${TENANT_BILLING_SETTINGS_ID},
+        ${resolvedTenantId},
+        ${resolvedTenantId},
         ${input.invoiceTemplateId},
         ${input.revenueLedgerId},
         ${DEFAULT_SUBSCRIPTION_VAT_CODE},
@@ -118,7 +135,7 @@ export async function updateTenantBillingSettings(input: {
         now(),
         now()
       )
-      on conflict (id)
+      on conflict (tenant_id)
       do update set
         invoice_template_id = excluded.invoice_template_id,
         revenue_ledger_id = excluded.revenue_ledger_id,
@@ -130,7 +147,7 @@ export async function updateTenantBillingSettings(input: {
     `);
   });
 
-  return getTenantBillingSettings();
+  return getTenantBillingSettings(resolvedTenantId);
 }
 
 export async function discoverEboekhoudenBillingSettings(): Promise<BillingDiscovery> {

@@ -58,7 +58,7 @@ Current implementation debt still present in code today:
 - `SUBSCRIPTION_TERMS_VERSION`
 
 Do not extend product scope around those app-wide business credentials. The
-multi-tenant pilot foundation must replace them with tenant-owned stored
+multi-tenant pilot foundation is actively replacing them with tenant-owned stored
 configuration, while platform env should remain for platform/runtime concerns
 such as auth, database, app URL, cron secrets, and shared SMTP.
 
@@ -83,8 +83,8 @@ such as auth, database, app URL, cron secrets, and shared SMTP.
   based: a signed-in operator must have tenant membership or a controlled
   platform-operator bootstrap path.
 - `AUTH_ALLOWED_EMAIL` is current implementation debt, not the desired product
-  access model. Replace it during the multi-tenant pilot foundation and do not
-  build new product behavior on top of it.
+  access model. Do not build new product behavior on top of it while the
+  membership-based access slice is still being finished.
 - `AUTH_ADVANCED_EMAILS` is a comma-separated allowlist for technical settings
   controls such as diagnostics, repair, replay, reconciliation, SMTP tests, and
   invoice batch/retry controls. It does not create product access by itself and
@@ -126,6 +126,17 @@ Expected flow:
 8. run readiness checks in that tenant context before live customer usage
 
 No self-serve tenant signup or invite flow is required for the pilot.
+
+Current implementation note:
+
+- tenant, platform-operator, and operator-membership tables now exist
+- tenant-owned subscription-policy defaults and billing/accounting defaults now
+  persist per tenant instead of one shared `"default"` row
+- a legacy `legacy-default` tenant row is created by migration only to keep the
+  current single-context deployment bootable during the foundation work
+- provision real tenants with `npm run tenant:provision -- --slug <slug> --name <name> --operator-email <email>`
+- full tenant-scoped auth/session resolution and tenant-scoped core business
+  tables are still required before the shared multi-tenant pilot is ready
 
 ## Database Notes
 

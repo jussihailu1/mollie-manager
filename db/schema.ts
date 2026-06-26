@@ -153,6 +153,84 @@ export const invoiceEmailDeliveryModeEnum = pgEnum(
   ["app_smtp", "eboekhouden", "none"],
 );
 
+export const tenants = pgTable(
+  "tenants",
+  {
+    id: text("id").primaryKey(),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [unique("tenants_slug_key").on(table.slug)],
+);
+
+export const platformOperators = pgTable(
+  "platform_operators",
+  {
+    id: text("id").primaryKey(),
+    operatorEmail: text("operator_email").notNull(),
+    createdAt: timestamp("created_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("platform_operators_operator_email_key").on(table.operatorEmail),
+  ],
+);
+
+export const operatorTenantMemberships = pgTable(
+  "operator_tenant_memberships",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    operatorEmail: text("operator_email").notNull(),
+    createdAt: timestamp("created_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+      name: "operator_tenant_memberships_tenant_id_fkey",
+    }).onDelete("cascade"),
+    unique("operator_tenant_memberships_tenant_email_key").on(
+      table.tenantId,
+      table.operatorEmail,
+    ),
+    index("operator_tenant_memberships_email_idx").on(table.operatorEmail),
+  ],
+);
+
 export const customers = pgTable(
   "customers",
   {
@@ -451,6 +529,7 @@ export const tenantSubscriptionPolicyDefaults = pgTable(
   "tenant_subscription_policy_defaults",
   {
     id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
     cancellationEmail: text("cancellation_email").notNull(),
     termsUrl: text("terms_url").notNull(),
     privacyUrl: text("privacy_url").notNull(),
@@ -473,43 +552,65 @@ export const tenantSubscriptionPolicyDefaults = pgTable(
       .notNull()
       .defaultNow(),
   },
+  (table) => [
+    foreignKey({
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+      name: "tenant_subscription_policy_defaults_tenant_id_fkey",
+    }).onDelete("cascade"),
+    unique("tenant_subscription_policy_defaults_tenant_id_key").on(
+      table.tenantId,
+    ),
+  ],
 );
 
-export const tenantBillingSettings = pgTable("tenant_billing_settings", {
-  id: text("id").primaryKey(),
-  invoiceTemplateId: integer("invoice_template_id"),
-  revenueLedgerId: integer("revenue_ledger_id"),
-  revenueLedgerName: text("revenue_ledger_name")
-    .notNull()
-    .default("Omzet abonnementen"),
-  vatCode: text("vat_code").notNull().default("HOOG_VERK_21"),
-  vatPercentage: numeric("vat_percentage", {
-    precision: 5,
-    scale: 2,
-  })
-    .notNull()
-    .default("21.00"),
-  invoiceLineDescriptionSource: text("invoice_line_description_source")
-    .notNull()
-    .default("subscription_description"),
-  invoiceEmailDeliveryMode: invoiceEmailDeliveryModeEnum(
-    "invoice_email_delivery_mode",
-  )
-    .notNull()
-    .default("app_smtp"),
-  createdAt: timestamp("created_at", {
-    mode: "string",
-    withTimezone: true,
-  })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", {
-    mode: "string",
-    withTimezone: true,
-  })
-    .notNull()
-    .defaultNow(),
-});
+export const tenantBillingSettings = pgTable(
+  "tenant_billing_settings",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    invoiceTemplateId: integer("invoice_template_id"),
+    revenueLedgerId: integer("revenue_ledger_id"),
+    revenueLedgerName: text("revenue_ledger_name")
+      .notNull()
+      .default("Omzet abonnementen"),
+    vatCode: text("vat_code").notNull().default("HOOG_VERK_21"),
+    vatPercentage: numeric("vat_percentage", {
+      precision: 5,
+      scale: 2,
+    })
+      .notNull()
+      .default("21.00"),
+    invoiceLineDescriptionSource: text("invoice_line_description_source")
+      .notNull()
+      .default("subscription_description"),
+    invoiceEmailDeliveryMode: invoiceEmailDeliveryModeEnum(
+      "invoice_email_delivery_mode",
+    )
+      .notNull()
+      .default("app_smtp"),
+    createdAt: timestamp("created_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+      name: "tenant_billing_settings_tenant_id_fkey",
+    }).onDelete("cascade"),
+    unique("tenant_billing_settings_tenant_id_key").on(table.tenantId),
+  ],
+);
 
 export const payments = pgTable(
   "payments",

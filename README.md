@@ -2,7 +2,7 @@
 
 Mollie Manager is an internal backoffice for managing Mollie subscription onboarding, recurring billing operations, invoice creation, and reliability workflows.
 
-This app is built for a single operator. Mollie remains the payment source of truth. e-Boekhouden remains the invoice and accounting source of truth. The local PostgreSQL database is the operational layer that ties onboarding, reconciliation, alerts, audit logging, and invoice automation together.
+The current release target is a shared-app, manually provisioned multi-tenant pilot. Mollie remains the payment source of truth. e-Boekhouden remains the invoice and accounting source of truth. The local PostgreSQL database is the operational layer that ties onboarding, reconciliation, alerts, audit logging, and invoice automation together.
 
 ## Core Workflow
 
@@ -17,7 +17,7 @@ This app is built for a single operator. Mollie remains the payment source of tr
 
 - Next.js 16 App Router
 - React 19
-- NextAuth v5 beta with Google sign-in allowlist
+- NextAuth v5 beta with Google sign-in
 - PostgreSQL
 - Drizzle ORM and Drizzle migrations
 - Mollie API
@@ -49,6 +49,7 @@ Useful checks:
 - `npm run typecheck`
 - `npm run test:node`
 - `npm run build`
+- `npm run tenant:provision -- --slug pilot --name "Pilot Tenant" --operator-email owner@example.com`
 
 ## Documentation
 
