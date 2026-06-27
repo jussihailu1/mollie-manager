@@ -1,12 +1,12 @@
 import { type NextRequest } from "next/server";
 
-import { requireViewerSession } from "@/lib/auth/session";
 import {
   type CustomerInvoiceOwnerType,
   resendCustomerInvoiceEmail,
 } from "@/lib/customer-invoice-resend";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { getCustomerDetail } from "@/lib/onboarding/data";
+import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
 function parseOwnerType(value: unknown): CustomerInvoiceOwnerType | null {
   return value === "payment" || value === "recurring_schedule" ? value : null;
@@ -16,11 +16,12 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ customerId: string }> },
 ) {
-  const session = await requireViewerSession();
+  const { currentTenant, session } = await getCurrentTenantSelectionForViewer();
 
   const { customerId } = await params;
   const selectedMode = await getSelectedMollieMode();
-  const detail = await getCustomerDetail(customerId, selectedMode);
+  const tenantId = currentTenant.id;
+  const detail = await getCustomerDetail(customerId, selectedMode, tenantId);
 
   if (!detail) {
     return Response.json(
@@ -59,6 +60,7 @@ export async function POST(
     mode: selectedMode,
     ownerId,
     ownerType,
+    tenantId,
   });
 
   if (result.status === "not_found") {

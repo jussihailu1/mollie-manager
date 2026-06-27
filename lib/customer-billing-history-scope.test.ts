@@ -10,8 +10,8 @@ describe("customer billing history surface", () => {
       "utf8",
     );
 
-    assert.match(source, /requireViewerSession/);
-    assert.match(source, /getCustomerDetail/);
+    assert.match(source, /getCurrentTenantSelectionForViewer/);
+    assert.match(source, /getCustomerDetail\(customerId, selectedMode, tenantId\)/);
     assert.match(source, /payments: detail\.payments/);
     assert.match(source, /mandates: detail\.mandates/);
     assert.match(source, /subscriptions: detail\.subscriptions/);

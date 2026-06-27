@@ -10,9 +10,9 @@ describe("customer notes api surface", () => {
       "utf8",
     );
 
-    assert.match(source, /requireViewerSession/);
+    assert.match(source, /getCurrentTenantSelectionForViewer/);
     assert.match(source, /getSelectedMollieMode/);
-    assert.match(source, /getCustomerDetail/);
+    assert.match(source, /getCustomerDetail\(customerId, selectedMode, tenantId\)/);
     assert.match(source, /listCustomerNotes/);
     assert.match(source, /createCustomerNote/);
     assert.match(source, /Response\.json\(\{ note \}, \{ status: 201 \}\)/);

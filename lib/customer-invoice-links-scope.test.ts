@@ -20,9 +20,9 @@ describe("customer invoice links surface", () => {
       "utf8",
     );
 
-    assert.match(source, /requireViewerSession/);
+    assert.match(source, /getCurrentTenantSelectionForViewer/);
     assert.match(source, /getSelectedMollieMode/);
-    assert.match(source, /getCustomerDetail/);
+    assert.match(source, /getCustomerDetail\(customerId, selectedMode, tenantId\)/);
     assert.match(source, /listCustomerInvoiceLinks/);
     assert.match(source, /Response\.json\(\{ invoices \}\)/);
   });

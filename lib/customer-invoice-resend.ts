@@ -10,6 +10,7 @@ import {
   resendCustomerInvoiceEmailWithDependencies,
   type CustomerInvoiceResendTargetInput,
 } from "@/lib/customer-invoice-resend-flow";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export { resendCustomerInvoiceEmailWithDependencies };
 
@@ -34,9 +35,14 @@ function toModeParam(mode?: DashboardModeFilter) {
   return !mode || mode === "all" ? null : mode;
 }
 
+async function resolveTenantId(tenantId?: string) {
+  return tenantId ?? (await getSingleTenantIdOrThrow());
+}
+
 export async function loadCustomerInvoiceResendTarget(
   input: CustomerInvoiceResendTargetInput,
 ): Promise<ResendTarget | null> {
+  const tenantId = await resolveTenantId(input.tenantId);
   const modeParam = toModeParam(input.mode);
   const result = await getDb().execute<ResendTargetRow>(sql`
     select *
@@ -56,10 +62,14 @@ export async function loadCustomerInvoiceResendTarget(
         'first_payment' as "invoiceType",
         null::text as "plannedCollectionDate"
       from payments p
-      inner join customers c on c.id = p.customer_id and c.mode = p.mode
+      inner join customers c
+        on c.id = p.customer_id
+        and c.mode = p.mode
+        and c.tenant_id = p.tenant_id
       where ${input.ownerType} = 'payment'
         and p.id = ${input.ownerId}
         and p.customer_id = ${input.customerId}
+        and p.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
         and p.invoice_state in ('invoice_created', 'invoice_sent')
         and (p.eboekhouden_invoice_id is not null or p.eboekhouden_invoice_number is not null)
@@ -81,11 +91,18 @@ export async function loadCustomerInvoiceResendTarget(
         'recurring' as "invoiceType",
         rbs.planned_collection_date::text as "plannedCollectionDate"
       from recurring_billing_schedules rbs
-      inner join subscriptions s on s.id = rbs.subscription_id and s.mode = rbs.mode
-      inner join customers c on c.id = s.customer_id and c.mode = rbs.mode
+      inner join subscriptions s
+        on s.id = rbs.subscription_id
+        and s.mode = rbs.mode
+        and s.tenant_id = rbs.tenant_id
+      inner join customers c
+        on c.id = s.customer_id
+        and c.mode = rbs.mode
+        and c.tenant_id = rbs.tenant_id
       where ${input.ownerType} = 'recurring_schedule'
         and rbs.id = ${input.ownerId}
         and s.customer_id = ${input.customerId}
+        and rbs.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or rbs.mode = ${modeParam})
         and rbs.invoice_state in ('invoice_created', 'invoice_sent')
         and (

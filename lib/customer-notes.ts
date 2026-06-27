@@ -28,13 +28,17 @@ function toModeParam(mode?: DashboardModeFilter) {
   return !mode || mode === "all" ? null : mode;
 }
 
+async function resolveTenantId(tenantId?: string) {
+  return tenantId ?? (await getSingleTenantIdOrThrow());
+}
+
 const listCustomerNotesByMode = cache(async (
   customerId: string,
   mode: DashboardModeFilter,
   limit: number,
+  tenantId: string,
 ) => {
   const modeParam = toModeParam(mode);
-  const tenantId = await getSingleTenantIdOrThrow();
   const normalizedLimit = Math.max(1, Math.min(Math.trunc(limit), 100));
   const result = await getDb().execute<CustomerNote>(sql`
     select
@@ -62,11 +66,14 @@ export async function listCustomerNotes(options: {
   customerId: string;
   limit?: number;
   mode?: DashboardModeFilter;
+  tenantId?: string;
 }) {
+  const tenantId = await resolveTenantId(options.tenantId);
   return listCustomerNotesByMode(
     options.customerId,
     options.mode ?? "all",
     options.limit ?? 20,
+    tenantId,
   );
 }
 
@@ -74,8 +81,9 @@ export async function createCustomerNote(input: {
   body: string;
   customerId: string;
   mode: "live" | "test";
+  tenantId?: string;
 }) {
-  const tenantId = await getSingleTenantIdOrThrow();
+  const tenantId = await resolveTenantId(input.tenantId);
   const body = normalizeCustomerNoteBody(input.body);
 
   if (!body) {

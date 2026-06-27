@@ -6,6 +6,7 @@ import { cache } from "react";
 import type { DashboardModeFilter } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
 import { normalizeTrustedInvoicePdfUrl } from "@/lib/invoice-pdf";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export type CustomerInvoiceLink = {
   createdAt: string | null;
@@ -26,6 +27,10 @@ function toModeParam(mode?: DashboardModeFilter) {
   return !mode || mode === "all" ? null : mode;
 }
 
+async function resolveTenantId(tenantId?: string) {
+  return tenantId ?? (await getSingleTenantIdOrThrow());
+}
+
 function sanitizeInvoiceLink(row: CustomerInvoiceLinkRow): CustomerInvoiceLink {
   return {
     createdAt: row.createdAt,
@@ -43,6 +48,7 @@ const listCustomerInvoiceLinksByMode = cache(async (
   customerId: string,
   mode: DashboardModeFilter,
   limit: number,
+  tenantId: string,
 ) => {
   const modeParam = toModeParam(mode);
   const normalizedLimit = Math.max(1, Math.min(Math.trunc(limit), 50));
@@ -63,6 +69,7 @@ const listCustomerInvoiceLinksByMode = cache(async (
         null::text as "plannedCollectionDate"
       from payments p
       where p.customer_id = ${customerId}
+        and p.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
         and p.invoice_state in ('invoice_created', 'invoice_sent')
         and (p.eboekhouden_invoice_id is not null or p.eboekhouden_invoice_number is not null)
@@ -82,8 +89,12 @@ const listCustomerInvoiceLinksByMode = cache(async (
         rbs.invoice_created_at as "createdAt",
         rbs.planned_collection_date::text as "plannedCollectionDate"
       from recurring_billing_schedules rbs
-      inner join subscriptions s on s.id = rbs.subscription_id and s.mode = rbs.mode
+      inner join subscriptions s
+        on s.id = rbs.subscription_id
+        and s.mode = rbs.mode
+        and s.tenant_id = rbs.tenant_id
       where s.customer_id = ${customerId}
+        and rbs.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or rbs.mode = ${modeParam})
         and rbs.invoice_state in ('invoice_created', 'invoice_sent')
         and (
@@ -102,10 +113,13 @@ export async function listCustomerInvoiceLinks(options: {
   customerId: string;
   limit?: number;
   mode?: DashboardModeFilter;
+  tenantId?: string;
 }) {
+  const tenantId = await resolveTenantId(options.tenantId);
   return listCustomerInvoiceLinksByMode(
     options.customerId,
     options.mode ?? "all",
     options.limit ?? 20,
+    tenantId,
   );
 }

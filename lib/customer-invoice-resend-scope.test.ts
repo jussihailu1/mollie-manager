@@ -19,8 +19,8 @@ describe("customer invoice resend surface", () => {
       "utf8",
     );
 
-    assert.match(source, /requireViewerSession/);
-    assert.match(source, /getCustomerDetail/);
+    assert.match(source, /getCurrentTenantSelectionForViewer/);
+    assert.match(source, /getCustomerDetail\(customerId, selectedMode, tenantId\)/);
     assert.match(source, /resendCustomerInvoiceEmail/);
     assert.match(source, /ownerType/);
     assert.match(source, /ownerId/);
