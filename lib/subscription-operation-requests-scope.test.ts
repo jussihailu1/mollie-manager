@@ -41,6 +41,7 @@ describe("cancellation request source boundaries", () => {
   it("authenticates, selects server-side mode, and uses a fixed customer redirect", () => {
     assert.match(actionSource, /export async function recordCancellationRequestAction/);
     assert.match(actionSource, /await requireViewerSession\(\)/);
+    assert.match(actionSource, /await getCurrentTenantSelectionForViewer\(\)/);
     assert.match(actionSource, /await getSelectedMollieMode\(\)/);
     assert.match(
       actionSource,
@@ -58,6 +59,15 @@ describe("cancellation request source boundaries", () => {
     assert.match(resourceStateSource, /service_end_at as "serviceEndAt"/);
     assert.match(resourceStateSource, /customer_id as "customerId"/);
     assert.match(resourceStateSource, /and mode = \$\{mode\}[\s\S]*for update/);
+  });
+
+  it("threads current tenant into subscription operation actions", () => {
+    assert.match(actionSource, /tenantId: tenantSelection\.currentTenant\.id/);
+    assert.match(actionSource, /and tenant_id = \$\{input\.tenantId\}/);
+    assert.match(actionSource, /lockCancellationRequestSubscription\([\s\S]*input\.tenantId/);
+    assert.match(actionSource, /lockManagedOperationRequest\([\s\S]*input\.tenantId/);
+    assert.match(actionSource, /getManagedSubscription\(\s*parsed\.data\.subscriptionId,\s*tenantSelection\.currentTenant\.id/);
+    assert.match(actionSource, /syncSubscriptionByLocalId\(subscription\.id,[\s\S]*tenantId: tenantSelection\.currentTenant\.id/);
   });
 
   it("records only pending intent and never applies or schedules it", () => {
@@ -86,7 +96,7 @@ describe("cancellation request source boundaries", () => {
     assert.match(actionSource, /update subscription_operation_requests/);
     assert.match(actionSource, /status = 'withdrawn'/);
     assert.match(actionSource, /withdrawn_at = now\(\)/);
-    assert.match(actionSource, /and tenant_id = \$\{tenantId\}/);
+    assert.match(actionSource, /and tenant_id = \$\{input\.tenantId\}/);
     assert.match(actionSource, /status in \('pending', 'scheduled', 'processing'\)/);
     assert.match(actionSource, /subscription\.operation_request\.withdraw/);
     assert.match(actionSource, /no provider change occurred/);
@@ -105,7 +115,7 @@ describe("cancellation request source boundaries", () => {
     assert.match(actionSource, /update subscription_operation_requests/);
     assert.match(actionSource, /processing_at = case/);
     assert.match(actionSource, /when \$\{nextStatus\} = 'processing'/);
-    assert.match(actionSource, /and tenant_id = \$\{tenantId\}/);
+    assert.match(actionSource, /and tenant_id = \$\{input\.tenantId\}/);
     assert.match(actionSource, /status = \$\{previousStatus\}/);
     assert.match(actionSource, /subscription\.operation_request\.transition/);
     assert.match(actionSource, /no provider change occurred/);

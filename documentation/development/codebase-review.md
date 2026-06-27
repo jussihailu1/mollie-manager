@@ -81,6 +81,8 @@ Implemented so far:
 - settings now also surfaces a targeted repair form for single customer, payment, or subscription resyncs
 - settings replay and targeted repair actions now resolve the current tenant
   before touching webhook or repair state
+- subscription operation request actions now resolve the current tenant before
+  recording, withdrawing, transitioning, or syncing subscription request state
 - invoice creation batch handling now has a shared helper and executable coverage for first-payment and recurring batch mapping
 - invoice delivery retry batch handling now has a shared helper and executable coverage for first-payment and recurring retry mapping
 - payment sync persistence now lives in a shared helper with executable boundary coverage for the sync orchestrator

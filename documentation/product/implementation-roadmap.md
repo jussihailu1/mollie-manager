@@ -150,6 +150,8 @@ Current bounded implementation slice:
 - tenant-selection shell plumbing now persists the active tenant in a cookie,
   resolves it from the operator's accessible tenant list, and exposes a manual
   switcher in the dashboard menu
+- subscription operation request actions now resolve the current tenant before
+  recording, withdrawing, transitioning, or syncing subscription request state
 - webhook intake now resolves managed local tenant context before syncing
   Mollie resources
 - replay and repair operator actions now require the current tenant when

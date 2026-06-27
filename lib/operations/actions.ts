@@ -25,7 +25,7 @@ import {
   redirectWithMessage,
   serializeError,
 } from "@/lib/operations/action-helpers";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
+import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
 const manageSubscriptionSchema = z.object({
   returnTo: z.string().trim().startsWith("/").default("/customers"),
@@ -76,6 +76,7 @@ async function recordCancellationRequest(input: {
   requestedByEmail: string;
   requestedEffectiveDate: string;
   subscriptionId: string;
+  tenantId: string;
 }) {
   return recordCancellationRequestWithDependencies(input, {
     createId: () => crypto.randomUUID(),
@@ -84,7 +85,6 @@ async function recordCancellationRequest(input: {
       transaction(async (client) =>
         callback({
           insertPendingRequest: async (request) => {
-            const tenantId = await getSingleTenantIdOrThrow();
             const result = await client.execute<{ id: string }>(sql`
               insert into subscription_operation_requests (
                 id,
@@ -102,7 +102,7 @@ async function recordCancellationRequest(input: {
                 requested_by_email
               ) values (
                 ${request.id},
-                ${tenantId},
+                ${input.tenantId},
                 ${request.mode},
                 ${request.subscriptionId},
                 'cancel',
@@ -124,7 +124,12 @@ async function recordCancellationRequest(input: {
             return Boolean(result.rows[0]?.id);
           },
           lockSubscription: ({ mode, subscriptionId }) =>
-            lockCancellationRequestSubscription(client, subscriptionId, mode),
+            lockCancellationRequestSubscription(
+              client,
+              subscriptionId,
+              mode,
+              input.tenantId,
+            ),
           writeAudit: (audit) =>
             writeAuditLog(
               {
@@ -149,15 +154,20 @@ async function withdrawOperationRequest(input: {
   mode: "live" | "test";
   operationRequestId: string;
   requestedByEmail: string;
+  tenantId: string;
 }) {
   return withdrawSubscriptionOperationRequestWithDependencies(input, {
     runInTransaction: (callback) =>
       transaction(async (client) =>
         callback({
           lockOperationRequest: ({ mode, operationRequestId }) =>
-            lockManagedOperationRequest(client, operationRequestId, mode),
+            lockManagedOperationRequest(
+              client,
+              operationRequestId,
+              mode,
+              input.tenantId,
+            ),
           markWithdrawn: async ({ operationRequestId }) => {
-            const tenantId = await getSingleTenantIdOrThrow();
             const result = await client.execute<{ id: string }>(sql`
               update subscription_operation_requests
               set
@@ -165,7 +175,7 @@ async function withdrawOperationRequest(input: {
                 withdrawn_at = now(),
                 updated_at = now()
               where id = ${operationRequestId}
-                and tenant_id = ${tenantId}
+                and tenant_id = ${input.tenantId}
                 and status in ('pending', 'scheduled', 'processing')
               returning id
             `);
@@ -197,19 +207,24 @@ async function transitionOperationRequest(input: {
   operationRequestId: string;
   requestedByEmail: string;
   targetStatus: "processing" | "scheduled";
+  tenantId: string;
 }) {
   return transitionSubscriptionOperationRequestWithDependencies(input, {
     runInTransaction: (callback) =>
       transaction(async (client) =>
         callback({
           lockOperationRequest: ({ mode, operationRequestId }) =>
-            lockManagedOperationRequest(client, operationRequestId, mode),
+            lockManagedOperationRequest(
+              client,
+              operationRequestId,
+              mode,
+              input.tenantId,
+            ),
           updateStatus: async ({
             nextStatus,
             operationRequestId,
             previousStatus,
           }) => {
-            const tenantId = await getSingleTenantIdOrThrow();
             const result = await client.execute<{ id: string }>(sql`
               update subscription_operation_requests
               set
@@ -218,10 +233,10 @@ async function transitionOperationRequest(input: {
                   when ${nextStatus} = 'processing'
                     then coalesce(processing_at, now())
                   else null
-                end,
+              end,
                 updated_at = now()
               where id = ${operationRequestId}
-                and tenant_id = ${tenantId}
+                and tenant_id = ${input.tenantId}
                 and status = ${previousStatus}
               returning id
             `);
@@ -260,6 +275,7 @@ export async function recordCancellationRequestAction(formData: FormData) {
   }
 
   const session = await requireViewerSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
 
   try {
@@ -270,6 +286,7 @@ export async function recordCancellationRequestAction(formData: FormData) {
       requestedByEmail: session.user.email!,
       requestedEffectiveDate: parsed.data.requestedEffectiveDate,
       subscriptionId: parsed.data.subscriptionId,
+      tenantId: tenantSelection.currentTenant.id,
     });
 
     if (result.status === "not_found") {
@@ -314,6 +331,7 @@ export async function withdrawOperationRequestAction(formData: FormData) {
   }
 
   const session = await requireViewerSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
 
   try {
@@ -321,6 +339,7 @@ export async function withdrawOperationRequestAction(formData: FormData) {
       mode: selectedMode,
       operationRequestId: parsed.data.operationRequestId,
       requestedByEmail: session.user.email!,
+      tenantId: tenantSelection.currentTenant.id,
     });
 
     if (result.status === "not_found") {
@@ -366,6 +385,7 @@ export async function transitionOperationRequestAction(formData: FormData) {
   }
 
   const session = await requireViewerSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
 
   try {
@@ -374,6 +394,7 @@ export async function transitionOperationRequestAction(formData: FormData) {
       operationRequestId: parsed.data.operationRequestId,
       requestedByEmail: session.user.email!,
       targetStatus: parsed.data.targetStatus,
+      tenantId: tenantSelection.currentTenant.id,
     });
 
     if (result.status === "not_found") {
@@ -420,8 +441,12 @@ export async function syncSubscriptionAction(formData: FormData) {
   }
 
   const session = await requireViewerSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
-  const subscription = await getManagedSubscription(parsed.data.subscriptionId);
+  const subscription = await getManagedSubscription(
+    parsed.data.subscriptionId,
+    tenantSelection.currentTenant.id,
+  );
 
   if (!subscription || subscription.mode !== selectedMode) {
     redirectWithMessage("/customers", {
@@ -436,6 +461,7 @@ export async function syncSubscriptionAction(formData: FormData) {
         kind: "user",
       },
       strictMode: true,
+      tenantId: tenantSelection.currentTenant.id,
     });
 
     revalidatePath("/customers");
