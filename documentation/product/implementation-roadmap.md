@@ -141,9 +141,10 @@ Current bounded implementation slice:
   billing history, payments, and settings surfaces now resolve the active
   tenant from the signed-in operator's selection cookie through the shared
   tenant-context helper
-- current slice also scopes the root customer/payment loaders and payment drawer
-  API to explicit tenant context, while preserving single-tenant fail-closed
-  behavior until membership/session tenant selection lands
+- current slice also scopes the root customer/payment loaders, payment drawer
+  API, and e-Boekhouden relation-search linked-record filtering to explicit
+  tenant context, while preserving single-tenant fail-closed behavior until
+  membership/session tenant selection lands
 - dashboard layout now blocks signed-in operators without tenant membership or
   bootstrap platform-operator access
 - tenant-selection shell plumbing now persists the active tenant in a cookie,

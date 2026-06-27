@@ -6,16 +6,17 @@ import {
   toPublicEboekhoudenError,
 } from "@/lib/eboekhouden/client";
 import { toRelationSearchResultItems } from "@/lib/eboekhouden/relation-search-results";
-import { requireViewerSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
+import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
-async function getLinkedRelationIds() {
+async function getLinkedRelationIds(tenantId: string) {
   const selectedMode = await getSelectedMollieMode();
   const result = await getDb().execute<{ relationId: number }>(sql`
       select eboekhouden_relation_id as "relationId"
       from customers
-      where mode = ${selectedMode}
+      where tenant_id = ${tenantId}
+        and mode = ${selectedMode}
         and eboekhouden_relation_id is not null
     `);
 
@@ -23,7 +24,7 @@ async function getLinkedRelationIds() {
 }
 
 export async function GET(request: NextRequest) {
-  await requireViewerSession();
+  const { currentTenant } = await getCurrentTenantSelectionForViewer();
 
   const searchParams = request.nextUrl.searchParams;
   const query = searchParams.get("q")?.trim() ?? "";
@@ -38,7 +39,9 @@ export async function GET(request: NextRequest) {
         offset: Number.isFinite(offset) ? offset : 0,
         query,
       }),
-      excludeLinked ? getLinkedRelationIds() : Promise.resolve(new Set<number>()),
+      excludeLinked
+        ? getLinkedRelationIds(currentTenant.id)
+        : Promise.resolve(new Set<number>()),
     ]);
     const items = toRelationSearchResultItems(
       relationsList.items ?? [],

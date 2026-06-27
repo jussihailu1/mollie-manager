@@ -2,14 +2,13 @@ import { sql } from "drizzle-orm";
 import { type NextRequest } from "next/server";
 import type Payment from "@mollie/api-client/dist/types/data/payments/Payment";
 
-import { requireViewerSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
 import { getEboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import { normalizeTrustedInvoicePdfUrl } from "@/lib/invoice-pdf";
 import type { PaymentDrawerData } from "@/lib/payment-details";
 import { getMollieClient } from "@/lib/mollie/client";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
+import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
 type LocalPaymentLookup = {
   customerId: string | null;
@@ -239,7 +238,7 @@ async function toPaymentDrawerData(
 }
 
 export async function GET(request: NextRequest) {
-  await requireViewerSession();
+  const { currentTenant } = await getCurrentTenantSelectionForViewer();
 
   const paymentId = request.nextUrl.searchParams.get("paymentId")?.trim() ?? "";
   const molliePaymentId =
@@ -255,7 +254,7 @@ export async function GET(request: NextRequest) {
   }
 
   const selectedMode = await getSelectedMollieMode();
-  const tenantId = await getSingleTenantIdOrThrow();
+  const tenantId = currentTenant.id;
   const result = await getDb().execute<LocalPaymentLookup>(sql`
       with invoice_context as (
         select
