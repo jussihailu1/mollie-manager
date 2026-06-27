@@ -3,6 +3,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 
 import { getDb, transaction } from "@/lib/db";
+import { resolveTenantSelectionId } from "@/lib/tenant-selection";
 
 export const LEGACY_DEFAULT_TENANT_ID = "legacy-default";
 export const LEGACY_DEFAULT_TENANT_SLUG = "legacy-default";
@@ -42,6 +43,34 @@ export async function listTenants() {
   `);
 
   return result.rows;
+}
+
+export async function getAccessibleTenantsForOperatorEmail(
+  operatorEmail: string | null | undefined,
+) {
+  const access = await getTenantAccessForOperatorEmail(operatorEmail);
+
+  if (access.isPlatformOperator) {
+    return listTenants();
+  }
+
+  if (access.tenantIds.length > 0) {
+    const result = await getDb().execute<TenantRow>(sql`
+      select
+        t.id,
+        t.name,
+        t.slug
+      from tenants t
+      inner join operator_tenant_memberships otm
+        on otm.tenant_id = t.id
+      where otm.operator_email = ${normalizeEmail(operatorEmail)}
+      order by otm.created_at asc, otm.id asc
+    `);
+
+    return result.rows;
+  }
+
+  return [];
 }
 
 export async function getTenantAccessForOperatorEmail(
@@ -87,6 +116,40 @@ export async function requireTenantAccessForOperatorEmail(
   }
 
   return access;
+}
+
+export async function resolveTenantSelectionForOperatorEmail(
+  operatorEmail: string | null | undefined,
+  preferredTenantId?: string | null,
+) {
+  const accessibleTenants = await getAccessibleTenantsForOperatorEmail(operatorEmail);
+
+  if (accessibleTenants.length === 0) {
+    throw new Error("Tenant membership is required for operator access.");
+  }
+
+  const currentTenantId = resolveTenantSelectionId({
+    accessibleTenantIds: accessibleTenants.map((tenant) => tenant.id),
+    preferredTenantId,
+  });
+
+  if (!currentTenantId) {
+    throw new Error("Tenant context could not be resolved for this session.");
+  }
+
+  const currentTenant = accessibleTenants.find((tenant) => tenant.id === currentTenantId);
+
+  if (!currentTenant) {
+    throw new Error("Tenant context could not be resolved for this session.");
+  }
+
+  return {
+    accessibleTenants,
+    currentTenant,
+  } satisfies {
+    accessibleTenants: TenantRow[];
+    currentTenant: TenantRow;
+  };
 }
 
 export async function getSingleTenantIdOrThrow() {

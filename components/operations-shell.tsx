@@ -32,6 +32,7 @@ import {
 import { setSelectedMollieModeAction } from "@/lib/dashboard-mode-actions";
 import { signOutUser } from "@/lib/auth/actions";
 import { markAllAlertsReadAction, openAlertAction } from "@/lib/reliability/actions";
+import { setSelectedTenantAction } from "@/lib/tenant-selection-actions";
 import { GlobalSearchDialog } from "@/components/global-search-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,6 +59,12 @@ type ShellAlert = {
   message: string;
   read: boolean;
   title: string;
+};
+
+type ShellTenant = {
+  id: string;
+  name: string;
+  slug: string;
 };
 
 const navigation = [
@@ -169,6 +176,8 @@ function getUserInitials(userName: string | null, userEmail: string) {
 
 export function OperationsShell({
   children,
+  accessibleTenants,
+  currentTenant,
   isLiveModeDisabled = false,
   recentAlerts,
   selectedMode,
@@ -176,6 +185,8 @@ export function OperationsShell({
   userName,
 }: Readonly<{
   children: ReactNode;
+  accessibleTenants: ShellTenant[];
+  currentTenant: ShellTenant;
   isLiveModeDisabled?: boolean;
   recentAlerts: ShellAlert[];
   selectedMode: "test" | "live";
@@ -324,6 +335,47 @@ export function OperationsShell({
                       {userEmail}
                     </p>
                   </div>
+                </div>
+                <DropdownMenuSeparator />
+                <div className="space-y-2 px-2 py-2">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Active tenant
+                    </p>
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {currentTenant.name}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {currentTenant.slug}
+                    </p>
+                  </div>
+                  {accessibleTenants.length > 1 ? (
+                    <div className="space-y-1.5">
+                      {accessibleTenants.map((tenant) => {
+                        const isActive = tenant.id === currentTenant.id;
+
+                        return (
+                          <form key={tenant.id} action={setSelectedTenantAction}>
+                            <input type="hidden" name="returnTo" value={returnTo} />
+                            <input type="hidden" name="tenantId" value={tenant.id} />
+                            <Button
+                              type="submit"
+                              variant={isActive ? "secondary" : "ghost"}
+                              className="w-full justify-start px-2 text-left"
+                              disabled={isActive}
+                            >
+                              <span className="truncate">{tenant.name}</span>
+                              {isActive ? (
+                                <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                                  Current
+                                </span>
+                              ) : null}
+                            </Button>
+                          </form>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>

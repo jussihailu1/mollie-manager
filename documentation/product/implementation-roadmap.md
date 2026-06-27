@@ -141,6 +141,9 @@ Current bounded implementation slice:
   behavior until membership/session tenant selection lands
 - dashboard layout now blocks signed-in operators without tenant membership or
   bootstrap platform-operator access
+- tenant-selection shell plumbing now persists the active tenant in a cookie,
+  resolves it from the operator's accessible tenant list, and exposes a manual
+  switcher in the dashboard menu
 - alerts, audit logs, webhook intake, replay/repair/cron follow-up, and
   tenant-owned provider credentials remain deferred follow-up inside Phase 0.5
 
@@ -155,6 +158,8 @@ Required behavior:
   accounting truth
 - cross-tenant data must not appear in normal or advanced operator surfaces
 - current money-flow safeguards must still hold after tenant scoping
+- normal operator shell state now remembers an active tenant, but business
+  query consumers still need to be threaded through that tenant explicitly
 
 Acceptance criteria:
 
