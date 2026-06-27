@@ -12,6 +12,11 @@ export type WebhookResourceSyncResult = {
   subscriptionId?: string | null;
 };
 
+export type WebhookResourceContext = {
+  mode: MollieMode;
+  tenantId: string;
+};
+
 export type WebhookEventInsertInput = {
   id: string;
   mode: MollieMode;
@@ -34,13 +39,16 @@ export type WebhookEventFailedInput = {
 
 export type MollieWebhookProcessorDependencies = {
   createWebhookEventId?: () => string;
-  findExistingResourceMode: (resourceId: string) => Promise<MollieMode | null>;
+  findExistingResourceContext: (
+    resourceId: string,
+  ) => Promise<WebhookResourceContext | null>;
   insertWebhookEvent: (input: WebhookEventInsertInput) => Promise<void>;
   markWebhookEventFailed: (input: WebhookEventFailedInput) => Promise<void>;
   markWebhookEventProcessed: (input: WebhookEventProcessedInput) => Promise<void>;
   syncResource: (
     resourceId: string,
     preferredMode: MollieMode | null,
+    tenantId: string | null,
   ) => Promise<WebhookResourceSyncResult>;
 };
 
@@ -121,11 +129,11 @@ export async function handleMollieWebhookRequest(
   }
 
   const webhookEventId = dependencies.createWebhookEventId?.() ?? crypto.randomUUID();
-  const existingModeResult = await dependencies.findExistingResourceMode(parsed.resourceId);
+  const existingResourceContext = await dependencies.findExistingResourceContext(parsed.resourceId);
 
   await dependencies.insertWebhookEvent({
     id: webhookEventId,
-    mode: existingModeResult ?? "test",
+    mode: existingResourceContext?.mode ?? "test",
     payload: parsed.payload,
     requestId: request.headers.get("x-request-id") ?? null,
     resourceId: parsed.resourceId,
@@ -134,7 +142,11 @@ export async function handleMollieWebhookRequest(
   });
 
   try {
-    const result = await dependencies.syncResource(parsed.resourceId, existingModeResult);
+    const result = await dependencies.syncResource(
+      parsed.resourceId,
+      existingResourceContext?.mode ?? null,
+      existingResourceContext?.tenantId ?? null,
+    );
 
     await dependencies.markWebhookEventProcessed({
       id: webhookEventId,

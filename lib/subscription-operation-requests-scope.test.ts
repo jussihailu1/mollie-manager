@@ -50,7 +50,7 @@ describe("cancellation request source boundaries", () => {
 
   it("locks and loads cancellation policy state in the selected mode", () => {
     assert.match(resourceStateSource, /export async function lockCancellationRequestSubscription/);
-    assert.match(resourceStateSource, /tenant_id = \$\{tenantId\}/);
+    assert.match(resourceStateSource, /tenant_id = \$\{resolvedTenantId\}/);
     assert.match(resourceStateSource, /local_status as "localStatus"/);
     assert.match(resourceStateSource, /mollie_status as "mollieStatus"/);
     assert.match(resourceStateSource, /subscription_term_mode as "termMode"/);

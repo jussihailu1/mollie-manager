@@ -55,6 +55,7 @@ export async function syncPaymentByMollieId(
     requireManagedResource?: boolean;
     strictMode?: boolean;
     syncPaymentLinks?: boolean;
+    tenantId?: string;
   },
 ) {
   const actor = options?.actor ?? {
@@ -66,10 +67,15 @@ export async function syncPaymentByMollieId(
     options?.preferredMode,
     options?.strictMode,
   );
-  const localCustomer = await getLocalCustomerByMollieId(mode, payment.customerId);
+  const localCustomer = await getLocalCustomerByMollieId(
+    mode,
+    payment.customerId,
+    options?.tenantId,
+  );
   const localSubscription = await getManagedSubscriptionByMollieId(
     mode,
     payment.subscriptionId,
+    options?.tenantId ?? localCustomer?.tenantId ?? undefined,
   );
   const resolvedCustomerId = localCustomer?.id ?? localSubscription?.customerId ?? null;
 
@@ -90,7 +96,12 @@ export async function syncPaymentByMollieId(
       : new Map<string, string>();
     const localMandateId =
       (payment.mandateId ? mandateIdMap.get(payment.mandateId) ?? null : null) ??
-      (await findLocalMandateId(mode, payment.mandateId, client)) ??
+      (await findLocalMandateId(
+        mode,
+        payment.mandateId,
+        client,
+        options?.tenantId ?? localCustomer?.tenantId ?? localSubscription?.tenantId ?? undefined,
+      )) ??
       localSubscription?.mandateId ??
       null;
     localPaymentId = await persistSyncedPayment(client, {
@@ -104,6 +115,7 @@ export async function syncPaymentByMollieId(
       paymentType,
       recurringCollectionState,
       tenantId:
+        options?.tenantId ??
         localCustomer?.tenantId ??
         localSubscription?.tenantId ??
         (await getSingleTenantIdOrThrow()),
@@ -130,6 +142,7 @@ export async function syncPaymentByMollieId(
           payment,
           resolvedCustomerId,
           actor,
+          options?.tenantId ?? localCustomer?.tenantId ?? localSubscription?.tenantId ?? undefined,
         );
 
   if (paymentType === "first") {
@@ -173,6 +186,7 @@ export async function syncPaymentLinkByMollieId(
     preferredMode?: MollieMode;
     requireManagedResource?: boolean;
     strictMode?: boolean;
+    tenantId?: string;
   },
 ) {
   const actor = options?.actor ?? {
@@ -184,13 +198,22 @@ export async function syncPaymentLinkByMollieId(
     options?.strictMode,
   );
   const payments = await collectPaymentLinkPayments(paymentLink);
-  const existingPaymentLink = await getLocalPaymentLinkByMollieId(mode, paymentLink.id);
+  const existingPaymentLink = await getLocalPaymentLinkByMollieId(
+    mode,
+    paymentLink.id,
+    undefined,
+    options?.tenantId,
+  );
 
   if (options?.requireManagedResource && !existingPaymentLink) {
     throw new Error("Payment-link webhook is not linked to a managed local resource.");
   }
 
-  const localCustomer = await getLocalCustomerByMollieId(mode, paymentLink.customerId);
+  const localCustomer = await getLocalCustomerByMollieId(
+    mode,
+    paymentLink.customerId,
+    options?.tenantId,
+  );
   const localPaymentLinkId = await upsertPaymentLinkFromMollie(
     mode,
     paymentLink,
@@ -198,6 +221,7 @@ export async function syncPaymentLinkByMollieId(
     {
       actor,
       customerId: localCustomer?.id ?? existingPaymentLink?.customerId ?? null,
+      tenantId: options?.tenantId ?? localCustomer?.tenantId ?? existingPaymentLink?.tenantId ?? undefined,
     },
   );
   let latestResult: WebhookProcessingResult = {
@@ -213,6 +237,7 @@ export async function syncPaymentLinkByMollieId(
       preferredMode: mode,
       strictMode: true,
       syncPaymentLinks: false,
+      tenantId: options?.tenantId ?? localCustomer?.tenantId ?? existingPaymentLink?.tenantId ?? undefined,
     });
   }
 

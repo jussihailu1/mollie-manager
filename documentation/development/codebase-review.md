@@ -115,8 +115,9 @@ Implemented so far:
 - unresolved subscription operation requests now have a dedicated sanitized query and surface read-only in Needs Attention and the customer drawer without exposing operator reason, requester email, or raw metadata
 - core customer-linked business tables are now being rekeyed around explicit
   `tenant_id` ownership, and the root customer/payment loaders plus payment
-  drawer path are being narrowed to tenant-scoped reads while tenant session
-  selection and tenant-owned provider credentials remain follow-up work
+  drawer path are being narrowed to tenant-scoped reads while webhook intake,
+  tenant session selection, and tenant-owned provider credentials remain
+  follow-up work
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as materially mitigated rather than still open.
 

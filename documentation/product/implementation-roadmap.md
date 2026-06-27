@@ -150,8 +150,10 @@ Current bounded implementation slice:
 - tenant-selection shell plumbing now persists the active tenant in a cookie,
   resolves it from the operator's accessible tenant list, and exposes a manual
   switcher in the dashboard menu
-- alerts, audit logs, webhook intake, replay/repair/cron follow-up, and
-  tenant-owned provider credentials remain deferred follow-up inside Phase 0.5
+- webhook intake now resolves managed local tenant context before syncing
+  Mollie resources
+- alerts, audit logs, replay/repair/cron follow-up, and tenant-owned provider
+  credentials remain deferred follow-up inside Phase 0.5
 
 Required behavior:
 

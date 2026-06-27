@@ -32,13 +32,17 @@ export async function syncSubscriptionByLocalId(
     actor?: SyncActor;
     reconciliationMode?: ReconciliationMode;
     strictMode?: boolean;
+    tenantId?: string;
   },
 ) {
   const actor = options?.actor ?? {
     kind: "system" as const,
   };
   const reconciliationMode = options?.reconciliationMode ?? "full";
-  const localSubscription = await getManagedSubscription(localSubscriptionId);
+  const localSubscription = await getManagedSubscription(
+    localSubscriptionId,
+    options?.tenantId,
+  );
 
   if (!localSubscription?.mollieSubscriptionId || !localSubscription.customerMollieId) {
     throw new Error("Subscription is not linked to Mollie.");
@@ -66,7 +70,12 @@ export async function syncSubscriptionByLocalId(
       (subscription.mandateId
         ? mandateIdMap.get(subscription.mandateId) ?? null
         : null) ??
-      (await findLocalMandateId(localSubscription.mode, subscription.mandateId, client));
+      (await findLocalMandateId(
+        localSubscription.mode,
+        subscription.mandateId,
+        client,
+        localSubscription.tenantId,
+      ));
     const persistedSubscription = await persistSyncedSubscriptionPayments(client, {
       actor,
       localMandateId,
@@ -78,6 +87,7 @@ export async function syncSubscriptionByLocalId(
           localSubscription.mode,
           paymentMandateId ?? undefined,
           client,
+          localSubscription.tenantId,
         )),
       subscription,
     });
@@ -126,6 +136,7 @@ export async function syncSubscriptionByMollieId(
     actor?: SyncActor;
     preferredMode?: MollieMode;
     strictMode?: boolean;
+    tenantId?: string;
   },
 ) {
   const localSubscription =
@@ -133,12 +144,21 @@ export async function syncSubscriptionByMollieId(
       ? await getManagedSubscriptionByMollieId(
           options.preferredMode,
           mollieSubscriptionId,
+          options?.tenantId,
         )
       : null) ??
     (options?.strictMode
       ? null
-      : ((await getManagedSubscriptionByMollieId("live", mollieSubscriptionId)) ??
-        (await getManagedSubscriptionByMollieId("test", mollieSubscriptionId))));
+      : ((await getManagedSubscriptionByMollieId(
+          "live",
+          mollieSubscriptionId,
+          options?.tenantId,
+        )) ??
+        (await getManagedSubscriptionByMollieId(
+          "test",
+          mollieSubscriptionId,
+          options?.tenantId,
+        ))));
 
   if (!localSubscription) {
     throw new Error("Subscription was not found locally.");
@@ -147,5 +167,6 @@ export async function syncSubscriptionByMollieId(
   return syncSubscriptionByLocalId(localSubscription.id, {
     actor: options?.actor,
     strictMode: options?.strictMode,
+    tenantId: options?.tenantId ?? localSubscription.tenantId,
   });
 }

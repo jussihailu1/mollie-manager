@@ -34,11 +34,18 @@ function createDependencies(overrides: Partial<MollieWebhookProcessorDependencie
   const inserted: WebhookEventInsertInput[] = [];
   const failed: WebhookEventFailedInput[] = [];
   const processed: WebhookEventProcessedInput[] = [];
-  const synced: Array<{ preferredMode: "live" | "test" | null; resourceId: string }> = [];
+  const synced: Array<{
+    preferredMode: "live" | "test" | null;
+    resourceId: string;
+    tenantId: string | null;
+  }> = [];
 
   const dependencies: MollieWebhookProcessorDependencies = {
     createWebhookEventId: () => "webhook_event_test",
-    findExistingResourceMode: async () => "live",
+    findExistingResourceContext: async () => ({
+      mode: "live",
+      tenantId: "tenant_test",
+    }),
     insertWebhookEvent: async (input) => {
       inserted.push(input);
     },
@@ -48,8 +55,9 @@ function createDependencies(overrides: Partial<MollieWebhookProcessorDependencie
     markWebhookEventProcessed: async (input) => {
       processed.push(input);
     },
-    syncResource: async (resourceId, preferredMode) => {
+    syncResource: async (resourceId, preferredMode, tenantId) => {
       synced.push({
+        tenantId,
         preferredMode,
         resourceId,
       });
@@ -141,6 +149,7 @@ describe("mollie webhook processing", () => {
       {
         preferredMode: "live",
         resourceId: "tr_success",
+        tenantId: "tenant_test",
       },
     ]);
     assert.deepEqual(inserted, [
@@ -169,7 +178,7 @@ describe("mollie webhook processing", () => {
 
   it("uses test mode for stored events when no existing managed resource is found", async () => {
     const { dependencies, inserted, synced } = createDependencies({
-      findExistingResourceMode: async () => null,
+      findExistingResourceContext: async () => null,
     });
 
     await handleMollieWebhookRequest(
@@ -182,6 +191,7 @@ describe("mollie webhook processing", () => {
 
     assert.equal(inserted[0]?.mode, "test");
     assert.equal(synced[0]?.preferredMode, null);
+    assert.equal(synced[0]?.tenantId, null);
   });
 
   it("marks event failed with serialized error when sync fails", async () => {
