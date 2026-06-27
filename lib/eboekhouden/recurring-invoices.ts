@@ -214,7 +214,8 @@ export async function createDueRecurringInvoicesBatch(input: {
         actor: input.actor,
         settings,
       }),
-    getRemainingSummary: getDueRecurringInvoiceQueueSummary,
+    getRemainingSummary: async (mode) =>
+      getDueRecurringInvoiceQueueSummary(mode, input.tenantId),
     loadCandidates: async (mode, limit) =>
       (await listDueRecurringInvoiceCandidates(mode, limit, input.tenantId)).map((row) => ({
         entityId: row.scheduleId,

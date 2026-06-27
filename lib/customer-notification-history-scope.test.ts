@@ -15,7 +15,7 @@ const uiSource = readFileSync(resolve("components/customer-flow-dialogs.tsx"), "
 
 describe("customer notification history scope", () => {
   it("loads typed history only for the authenticated customer and selected mode", () => {
-    assert.match(routeSource, /requireViewerSession/);
+    assert.match(routeSource, /getCurrentTenantSelectionForViewer/);
     assert.match(routeSource, /getCustomerDetail\(customerId, selectedMode, tenantId\)/);
     assert.match(routeSource, /listCustomerNotificationHistory/);
     assert.match(querySource, /where cpn\.mode = \$\{options\.mode\}/);

@@ -60,8 +60,9 @@ export async function createDueFirstPaymentInvoicesBatch(input: {
   actor: InvoiceActor;
   limit?: number;
   mode: MollieMode;
+  tenantId?: string;
 }): Promise<FirstPaymentInvoiceBatchResult> {
-  const settings = await getTenantBillingSettings();
+  const settings = await getTenantBillingSettings(input.tenantId);
 
   if (!billingSettingsAreComplete(settings)) {
     throw new Error(
@@ -71,6 +72,7 @@ export async function createDueFirstPaymentInvoicesBatch(input: {
 
   await normalizeFirstPaymentInvoiceStatesImpl({
     mode: input.mode,
+    tenantId: input.tenantId,
   });
 
   return createInvoiceBatchWithDependencies(input, {
@@ -79,9 +81,10 @@ export async function createDueFirstPaymentInvoicesBatch(input: {
         actor: input.actor,
         settings,
       }),
-    getRemainingSummary: getDueFirstPaymentInvoiceQueueSummaryImpl,
+    getRemainingSummary: async (mode) =>
+      getDueFirstPaymentInvoiceQueueSummaryImpl(mode, input.tenantId),
     loadCandidates: async (mode, limit) =>
-      (await listDueFirstPaymentInvoiceCandidatesImpl(mode, limit)).map((row) => ({
+      (await listDueFirstPaymentInvoiceCandidatesImpl(mode, limit, input.tenantId)).map((row) => ({
         entityId: row.paymentId,
       })),
   });

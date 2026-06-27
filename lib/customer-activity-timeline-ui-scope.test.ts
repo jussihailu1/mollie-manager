@@ -10,7 +10,7 @@ describe("customer activity timeline surface", () => {
       "utf8",
     );
 
-    assert.match(source, /requireViewerSession/);
+    assert.match(source, /getCurrentTenantSelectionForViewer/);
     assert.match(source, /getSelectedMollieMode/);
     assert.match(source, /getCustomerDetail/);
     assert.match(source, /listCustomerActivityTimeline/);

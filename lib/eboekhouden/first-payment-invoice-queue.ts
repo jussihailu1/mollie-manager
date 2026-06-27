@@ -67,16 +67,19 @@ export async function normalizeFirstPaymentInvoiceStates(input?: {
   client?: DbClient;
   mode?: MollieMode;
   paymentId?: string;
+  tenantId?: string;
 }) {
   const db = input?.client ?? getDb();
   const filters = buildFirstPaymentFilter({
     mode: input?.mode,
     paymentId: input?.paymentId,
   });
+  const resolvedTenantId = await resolveTenantId(input?.tenantId);
   const result = await db.execute<{ id: string }>(sql`
     ${buildDeterministicMatchCte({
       mode: input?.mode,
       paymentId: input?.paymentId,
+      tenantId: resolvedTenantId,
     })}
     , normalized_targets as (
       select
@@ -96,6 +99,7 @@ export async function normalizeFirstPaymentInvoiceStates(input?: {
       from payments p
       left join deterministic_matches dm on dm.payment_id = p.id
       where ${filters}
+        and p.tenant_id = ${resolvedTenantId}
     )
     update payments p
     set
