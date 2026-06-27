@@ -152,6 +152,8 @@ Current bounded implementation slice:
   switcher in the dashboard menu
 - webhook intake now resolves managed local tenant context before syncing
   Mollie resources
+- replay and repair operator actions now require the current tenant when
+  replaying failed webhooks or running targeted repair actions
 - alerts, audit logs, replay/repair/cron follow-up, and tenant-owned provider
   credentials remain deferred follow-up inside Phase 0.5
 

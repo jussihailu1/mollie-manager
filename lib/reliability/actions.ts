@@ -26,6 +26,7 @@ import {
   syncSubscriptionByMollieId,
 } from "@/lib/reliability/sync";
 import { repairReliabilityTarget } from "@/lib/reliability/repair";
+import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
 const redirectSchema = z.object({
   returnTo: z.string().trim().startsWith("/").default("/notifications"),
@@ -111,6 +112,7 @@ const alertModeExpression = sql<"live" | "test" | null>`
 async function processStoredWebhookResource(
   resourceId: string,
   mode: "live" | "test",
+  tenantId: string,
 ) {
   if (resourceId.startsWith("tr_")) {
     return syncPaymentByMollieId(resourceId, {
@@ -119,6 +121,7 @@ async function processStoredWebhookResource(
       },
       preferredMode: mode,
       strictMode: true,
+      tenantId,
     });
   }
 
@@ -129,6 +132,7 @@ async function processStoredWebhookResource(
       },
       preferredMode: mode,
       strictMode: true,
+      tenantId,
     });
   }
 
@@ -139,6 +143,7 @@ async function processStoredWebhookResource(
       },
       preferredMode: mode,
       strictMode: true,
+      tenantId,
     });
   }
 
@@ -190,6 +195,7 @@ export async function runReconciliationAction(formData: FormData) {
   }
 
   const session = await requireAdvancedOperationsSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
 
   try {
@@ -200,6 +206,7 @@ export async function runReconciliationAction(formData: FormData) {
       },
       mode: selectedMode,
       reconciliationMode: parsed.data.reconciliationMode,
+      tenantId: tenantSelection.currentTenant.id,
     });
 
     const reconciliationLabel = formatReconciliationMode(parsed.data.reconciliationMode);
@@ -238,6 +245,7 @@ export async function replayWebhookEventAction(formData: FormData) {
   }
 
   const session = await requireAdvancedOperationsSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
 
   const result = await getDb().execute<StoredWebhookEvent>(sql`
@@ -250,6 +258,26 @@ export async function replayWebhookEventAction(formData: FormData) {
       from webhook_events
       where id = ${parsed.data.webhookEventId}
         and mode = ${selectedMode}
+        and (
+          exists (
+            select 1
+            from payments p
+            where p.tenant_id = ${tenantSelection.currentTenant.id}
+              and p.mollie_payment_id = webhook_events.resource_id
+          )
+          or exists (
+            select 1
+            from subscriptions s
+            where s.tenant_id = ${tenantSelection.currentTenant.id}
+              and s.mollie_subscription_id = webhook_events.resource_id
+          )
+          or exists (
+            select 1
+            from payment_links pl
+            where pl.tenant_id = ${tenantSelection.currentTenant.id}
+              and pl.mollie_payment_link_id = webhook_events.resource_id
+          )
+        )
       limit 1
     `);
   const event = result.rows[0];
@@ -261,7 +289,11 @@ export async function replayWebhookEventAction(formData: FormData) {
   }
 
   try {
-    await processStoredWebhookResource(event.resourceId, event.mode);
+    await processStoredWebhookResource(
+      event.resourceId,
+      event.mode,
+      tenantSelection.currentTenant.id,
+    );
 
     await getDb().execute(sql`
         update webhook_events
@@ -359,6 +391,7 @@ export async function repairReliabilityTargetAction(formData: FormData) {
 
   const session = await requireAdvancedOperationsSession();
   const selectedMode = await getSelectedMollieMode();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
 
   try {
     const result = await repairReliabilityTarget({
@@ -369,6 +402,7 @@ export async function repairReliabilityTargetAction(formData: FormData) {
       id: parsed.data.repairTargetId,
       kind: parsed.data.repairTargetKind,
       mode: selectedMode,
+      tenantId: tenantSelection.currentTenant.id,
     });
 
     revalidatePath("/settings");

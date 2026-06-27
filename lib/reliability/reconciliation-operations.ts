@@ -41,8 +41,10 @@ export type ReconciliationDependencies = {
 
 async function getFirstPaymentInvoiceStateCounts(
   mode?: MollieMode | null,
+  tenantId?: string,
 ): Promise<InvoiceStateCountMap<FirstPaymentInvoiceState>> {
   const modeParam = mode ?? null;
+  const tenantParam = tenantId ?? null;
   const result = await getDb().execute<InvoiceStateCountRow<FirstPaymentInvoiceState>>(sql`
       select
         invoice_state as state,
@@ -50,6 +52,7 @@ async function getFirstPaymentInvoiceStateCounts(
       from payments
       where payment_type = 'first'
         and (${modeParam}::mollie_mode is null or mode = ${modeParam})
+        and (${tenantParam}::text is null or tenant_id = ${tenantParam})
       group by invoice_state
     `);
 
@@ -58,14 +61,17 @@ async function getFirstPaymentInvoiceStateCounts(
 
 async function getRecurringInvoiceStateCounts(
   mode?: MollieMode | null,
+  tenantId?: string,
 ): Promise<InvoiceStateCountMap<RecurringInvoiceState>> {
   const modeParam = mode ?? null;
+  const tenantParam = tenantId ?? null;
   const result = await getDb().execute<InvoiceStateCountRow<RecurringInvoiceState>>(sql`
       select
         invoice_state as state,
         count(*)::int as count
       from recurring_billing_schedules
       where (${modeParam}::mollie_mode is null or mode = ${modeParam})
+        and (${tenantParam}::text is null or tenant_id = ${tenantParam})
       group by invoice_state
     `);
 
@@ -77,12 +83,14 @@ export async function reconcileOperationalData(
     actor?: SyncActor;
     mode?: MollieMode;
     reconciliationMode?: ReconciliationMode;
+    tenantId?: string;
   } & ReconciliationDependencies,
 ): Promise<ReconciliationSummary> {
   const effectiveActor = input.actor ?? {
     kind: "system" as const,
   };
   const modeParam = input.mode ?? null;
+  const tenantParam = input.tenantId ?? null;
   const reconciliationMode = input.reconciliationMode ?? "full";
   const [
     beforeFirstPaymentInvoiceStates,
@@ -91,13 +99,14 @@ export async function reconcileOperationalData(
     firstPayments,
     paymentLinks,
   ] = await Promise.all([ 
-    getFirstPaymentInvoiceStateCounts(modeParam),
-    getRecurringInvoiceStateCounts(modeParam),
+    getFirstPaymentInvoiceStateCounts(modeParam, tenantParam ?? undefined),
+    getRecurringInvoiceStateCounts(modeParam, tenantParam ?? undefined),
     getDb().execute<{ id: string }>(sql`
       select id
       from subscriptions
       where (${modeParam}::mollie_mode is null or mode = ${modeParam})
-      order by created_at desc
+        and (${tenantParam}::text is null or tenant_id = ${tenantParam})
+        order by created_at desc
     `),
     getDb().execute<{ molliePaymentId: string }>(sql`
       select mollie_payment_id as "molliePaymentId"
@@ -105,6 +114,7 @@ export async function reconcileOperationalData(
       where payment_type = 'first'
         and mollie_payment_id is not null
         and (${modeParam}::mollie_mode is null or mode = ${modeParam})
+        and (${tenantParam}::text is null or tenant_id = ${tenantParam})
       order by created_at desc
     `),
     getDb().execute<{ molliePaymentLinkId: string }>(sql`
@@ -112,6 +122,7 @@ export async function reconcileOperationalData(
       from payment_links
       where mollie_payment_link_id is not null
         and (${modeParam}::mollie_mode is null or mode = ${modeParam})
+        and (${tenantParam}::text is null or tenant_id = ${tenantParam})
         and metadata ->> 'source' = 'subscription_onboarding'
         and metadata ->> 'paymentType' = 'first'
       order by created_at desc

@@ -8,11 +8,13 @@ describe("ops surface hardening", () => {
     const source = readFileSync(resolve("lib/reliability/actions.ts"), "utf8");
 
     assert.match(source, /processing_status as "processingStatus"/);
+    assert.match(source, /getCurrentTenantSelectionForViewer/);
     assert.match(
       source,
       /Only failed webhook events in the current mode can be replayed\./,
     );
     assert.match(source, /event\.processingStatus !== "failed"/);
+    assert.match(source, /p\.tenant_id = \$\{tenantSelection\.currentTenant\.id\}/);
   });
 
   it("surfaces first-class operator diagnostics and replay controls in settings", () => {
@@ -49,6 +51,7 @@ describe("ops surface hardening", () => {
     assert.match(settingsSource, /Billing and accounting configuration/);
     assert.match(settingsSource, /Recurring invoice accounting/);
     assert.match(reliabilityActionsSource, /requireAdvancedOperationsSession/);
+    assert.match(reliabilityActionsSource, /repairReliabilityTarget\(\{/);
     assert.match(billingActionsSource, /requireViewerSession/);
     assert.match(billingActionsSource, /requireAdvancedOperationsSession/);
     assert.match(authSource, /hasAdvancedOperationsAccess/);

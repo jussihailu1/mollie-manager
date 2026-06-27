@@ -24,8 +24,12 @@ describe("repair surface scope", () => {
 
     assert.match(actionSource, /repairReliabilityTargetAction/);
     assert.match(actionSource, /repairReliabilityTarget/);
+    assert.match(actionSource, /getCurrentTenantSelectionForViewer/);
     assert.match(routeSource, /repairReliabilityTarget/);
+    assert.match(routeSource, /getCurrentTenantSelectionForViewer/);
+    assert.match(routeSource, /tenantId: tenantSelection\.currentTenant\.id/);
     assert.match(helperSource, /export async function repairReliabilityTarget/);
+    assert.match(helperSource, /tenantId\?: string/);
   });
 
   it("requires advanced access for repair API calls", () => {
