@@ -152,6 +152,8 @@ Current bounded implementation slice:
   switcher in the dashboard menu
 - subscription operation request actions now resolve the current tenant before
   recording, withdrawing, transitioning, or syncing subscription request state
+- recurring-invoice cron fan-out now iterates accessible tenants explicitly so
+  invoice create/recovery/retry automation stays tenant-scoped
 - webhook intake now resolves managed local tenant context before syncing
   Mollie resources
 - replay and repair operator actions now require the current tenant when

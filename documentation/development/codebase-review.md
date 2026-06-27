@@ -83,6 +83,8 @@ Implemented so far:
   before touching webhook or repair state
 - subscription operation request actions now resolve the current tenant before
   recording, withdrawing, transitioning, or syncing subscription request state
+- recurring-invoice cron now fans out by tenant and threads tenant ids through
+  repair, recovery, retry, create, and delivery batches
 - invoice creation batch handling now has a shared helper and executable coverage for first-payment and recurring batch mapping
 - invoice delivery retry batch handling now has a shared helper and executable coverage for first-payment and recurring retry mapping
 - payment sync persistence now lives in a shared helper with executable boundary coverage for the sync orchestrator

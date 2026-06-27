@@ -511,6 +511,7 @@ export async function deliverCustomerInvoiceEmail(input: DeliveryInput) {
 async function listCreatedUnsentFirstPaymentInvoiceDeliveries(
   mode: MollieMode,
   limit: number,
+  tenantId: string,
 ) {
   const result = await getDb().execute<FirstPaymentDeliveryCandidate>(sql`
     select
@@ -523,8 +524,9 @@ async function listCreatedUnsentFirstPaymentInvoiceDeliveries(
       p.metadata,
       c.email as "customerEmail"
     from payments p
-    left join customers c on c.id = p.customer_id and c.mode = p.mode
+    left join customers c on c.id = p.customer_id and c.mode = p.mode and c.tenant_id = p.tenant_id
     where p.mode = ${mode}
+      and p.tenant_id = ${tenantId}
       and p.payment_type = 'first'
       and p.invoice_state = 'invoice_created'
       and p.invoice_sent_at is null
@@ -570,6 +572,7 @@ async function listCreatedUnsentFirstPaymentInvoiceDeliveries(
 async function listCreatedUnsentRecurringInvoiceDeliveries(
   mode: MollieMode,
   limit: number,
+  tenantId: string,
 ) {
   const result = await getDb().execute<RecurringDeliveryCandidate>(sql`
     select
@@ -583,9 +586,10 @@ async function listCreatedUnsentRecurringInvoiceDeliveries(
       s.customer_id as "customerId",
       c.email as "customerEmail"
     from recurring_billing_schedules rbs
-    inner join subscriptions s on s.id = rbs.subscription_id
-    inner join customers c on c.id = s.customer_id and c.mode = rbs.mode
+    inner join subscriptions s on s.id = rbs.subscription_id and s.tenant_id = rbs.tenant_id
+    inner join customers c on c.id = s.customer_id and c.mode = rbs.mode and c.tenant_id = rbs.tenant_id
     where rbs.mode = ${mode}
+      and rbs.tenant_id = ${tenantId}
       and rbs.invoice_state = 'invoice_created'
       and rbs.invoice_sent_at is null
       and (rbs.eboekhouden_invoice_id is not null or rbs.eboekhouden_invoice_number is not null)
@@ -631,6 +635,7 @@ export async function retryUnsentFirstPaymentInvoiceEmailsBatch(input: {
   actor: InvoiceActor;
   limit?: number;
   mode: MollieMode;
+  tenantId: string;
 }): Promise<InvoiceDeliveryBatchResult> {
   return retryInvoiceDeliveryEmailsBatchWithDependencies(input, {
     deliverCustomerInvoiceEmail,
@@ -642,6 +647,7 @@ export async function retryUnsentRecurringInvoiceEmailsBatch(input: {
   actor: InvoiceActor;
   limit?: number;
   mode: MollieMode;
+  tenantId: string;
 }): Promise<InvoiceDeliveryBatchResult> {
   return retryInvoiceDeliveryEmailsBatchWithDependencies(input, {
     deliverCustomerInvoiceEmail,

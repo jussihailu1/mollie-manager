@@ -133,10 +133,12 @@ export async function recoverFailedRecurringInvoicesBatch(input: {
   actor: InvoiceActor;
   limit?: number;
   mode: "live" | "test";
+  tenantId?: string;
 }): Promise<FailedRecurringRecoveryBatchResult> {
   const candidates = await listFailedRecurringRecoveryCandidates(
     input.mode,
     input.limit ?? DEFAULT_BATCH_SIZE,
+    input.tenantId,
   );
   let recoveredCount = 0;
   let ambiguousCount = 0;

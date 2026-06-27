@@ -6,6 +6,7 @@ import type { EboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import { buildRecurringFailedInvoiceFilter } from "@/lib/eboekhouden/recurring-invoice-query";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { deliverAlertEmail, openAlert } from "@/lib/reliability/alerts";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export type RecurringInvoiceActor = {
   email?: string | null;
@@ -26,7 +27,9 @@ export type RecurringInvoiceRecoveryCandidate = {
 export async function listFailedRecurringRecoveryCandidates(
   mode: "live" | "test",
   limit: number,
+  tenantId?: string,
 ) {
+  const resolvedTenantId = tenantId ?? (await getSingleTenantIdOrThrow());
   const result = await getDb().execute<RecurringInvoiceRecoveryCandidate>(sql`
     select
       rbs.id as "scheduleId",
@@ -38,9 +41,15 @@ export async function listFailedRecurringRecoveryCandidates(
       c.email as "customerEmail",
       c.eboekhouden_relation_id as "eboekhoudenRelationId"
     from recurring_billing_schedules rbs
-    inner join subscriptions s on s.id = rbs.subscription_id
-    inner join customers c on c.id = s.customer_id and c.mode = rbs.mode
-    where ${buildRecurringFailedInvoiceFilter(mode)}
+    inner join subscriptions s
+      on s.id = rbs.subscription_id
+      and s.tenant_id = rbs.tenant_id
+    inner join customers c
+      on c.id = s.customer_id
+      and c.mode = rbs.mode
+      and c.tenant_id = rbs.tenant_id
+    where rbs.tenant_id = ${resolvedTenantId}
+      and ${buildRecurringFailedInvoiceFilter(mode, resolvedTenantId)}
       and c.eboekhouden_relation_id is not null
     order by rbs.updated_at asc, rbs.created_at asc
     limit ${Math.max(1, limit)}

@@ -94,10 +94,12 @@ export async function recoverFailedFirstPaymentInvoicesBatch(input: {
   actor: InvoiceActor;
   limit?: number;
   mode: MollieMode;
+  tenantId?: string;
 }): Promise<FailedFirstPaymentRecoveryBatchResult> {
   const candidates = await listFailedFirstPaymentRecoveryCandidates(
     input.mode,
     input.limit ?? DEFAULT_BATCH_SIZE,
+    input.tenantId,
   );
   let recoveredCount = 0;
   let ambiguousCount = 0;

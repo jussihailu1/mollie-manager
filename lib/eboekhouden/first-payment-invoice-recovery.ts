@@ -5,6 +5,7 @@ import { getDb } from "@/lib/db";
 import type { EboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import { buildDeterministicMatchCte } from "@/lib/eboekhouden/first-payment-invoice-match-query";
 import type { FirstPaymentInvoiceActor } from "@/lib/eboekhouden/first-payment-invoice-persistence";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export type FirstPaymentInvoiceRecoveryCandidate = {
   customerEmail: string | null;
@@ -20,9 +21,11 @@ export type FirstPaymentInvoiceRecoveryCandidate = {
 export async function listFailedFirstPaymentRecoveryCandidates(
   mode: "live" | "test",
   limit: number,
+  tenantId?: string,
 ) {
+  const resolvedTenantId = tenantId ?? (await getSingleTenantIdOrThrow());
   const result = await getDb().execute<FirstPaymentInvoiceRecoveryCandidate>(sql`
-    ${buildDeterministicMatchCte({ mode })}
+    ${buildDeterministicMatchCte({ mode, tenantId: resolvedTenantId })}
     select
       p.id as "paymentId",
       p.mode,
@@ -34,8 +37,12 @@ export async function listFailedFirstPaymentRecoveryCandidates(
       c.eboekhouden_relation_id as "eboekhoudenRelationId"
     from payments p
     inner join deterministic_matches dm on dm.payment_id = p.id
-    inner join customers c on c.id = p.customer_id and c.mode = p.mode
+    inner join customers c
+      on c.id = p.customer_id
+      and c.mode = p.mode
+      and c.tenant_id = p.tenant_id
     where p.mode = ${mode}
+      and p.tenant_id = ${resolvedTenantId}
       and p.payment_type = 'first'
       and p.invoice_state = 'invoice_failed'
       and p.eboekhouden_invoice_id is null

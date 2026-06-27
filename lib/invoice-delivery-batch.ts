@@ -35,6 +35,7 @@ export type RetryInvoiceDeliveryBatchDependencies = {
   loadCandidates: (
     mode: MollieMode,
     limit: number,
+    tenantId: string,
   ) => Promise<RetryDeliveryCandidate[]>;
 };
 
@@ -43,12 +44,14 @@ export async function retryInvoiceDeliveryEmailsBatchWithDependencies(
     actor: InvoiceActor;
     limit?: number;
     mode: MollieMode;
+    tenantId: string;
   },
   dependencies: RetryInvoiceDeliveryBatchDependencies,
 ) {
   const candidates = await dependencies.loadCandidates(
     input.mode,
     input.limit ?? 25,
+    input.tenantId,
   );
   let sentCount = 0;
   let failedCount = 0;

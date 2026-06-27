@@ -18,6 +18,7 @@ describe("invoice delivery retry flow", () => {
         actor: { kind: "system" },
         limit: 10,
         mode: "test",
+        tenantId: "tenant_1",
       },
       {
         deliverCustomerInvoiceEmail: async (input) => {
@@ -37,7 +38,9 @@ describe("invoice delivery retry flow", () => {
 
           return { status: "skipped" as const };
         },
-        loadCandidates: async () => [
+        loadCandidates: async (_mode, _limit, tenantId) => {
+          assert.equal(tenantId, "tenant_1");
+          return [
           {
             customerEmail: "ops@example.com",
             customerId: "customer_1",
@@ -71,7 +74,7 @@ describe("invoice delivery retry flow", () => {
             plannedCollectionDate: null,
             subscriptionId: "subscription_1",
           },
-        ],
+        ]},
       },
     );
 
@@ -112,6 +115,7 @@ describe("invoice delivery retry flow", () => {
         actor: { kind: "user" },
         limit: 10,
         mode: "live",
+        tenantId: "tenant_2",
       },
       {
         deliverCustomerInvoiceEmail: async (input) => {
@@ -127,7 +131,9 @@ describe("invoice delivery retry flow", () => {
 
           return { status: "skipped" as const };
         },
-        loadCandidates: async () => [
+        loadCandidates: async (_mode, _limit, tenantId) => {
+          assert.equal(tenantId, "tenant_2");
+          return [
           {
             customerEmail: "ops@example.com",
             customerId: "customer_2",
@@ -150,7 +156,7 @@ describe("invoice delivery retry flow", () => {
             plannedCollectionDate: "2026-06-10",
             subscriptionId: "subscription_2",
           },
-        ],
+        ]},
       },
     );
 
