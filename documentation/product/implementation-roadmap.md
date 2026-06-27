@@ -139,6 +139,8 @@ Current bounded implementation slice:
 - current slice also scopes the root customer/payment loaders and payment drawer
   API to explicit tenant context, while preserving single-tenant fail-closed
   behavior until membership/session tenant selection lands
+- dashboard layout now blocks signed-in operators without tenant membership or
+  bootstrap platform-operator access
 - alerts, audit logs, webhook intake, replay/repair/cron follow-up, and
   tenant-owned provider credentials remain deferred follow-up inside Phase 0.5
 

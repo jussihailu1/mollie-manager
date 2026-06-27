@@ -6,6 +6,7 @@ import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { env } from "@/lib/env";
 import { listAlertInbox } from "@/lib/reliability/data";
 import { toUiNotificationRecord } from "@/lib/ui-data";
+import { requireTenantAccessForOperatorEmail } from "@/lib/tenants";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export default async function DashboardLayout({
   children: ReactNode;
 }>) {
   const session = await requireViewerSession();
+  await requireTenantAccessForOperatorEmail(session.user.email);
   const selectedMode = await getSelectedMollieMode();
   const recentAlerts = (await listAlertInbox({ mode: selectedMode }))
     .slice(0, 8)

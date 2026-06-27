@@ -14,6 +14,11 @@ export type TenantRow = {
   slug: string;
 };
 
+export type TenantAccessRecord = {
+  isPlatformOperator: boolean;
+  tenantIds: string[];
+};
+
 export type ProvisionTenantInput = {
   name: string;
   operatorEmail?: string | null;
@@ -37,6 +42,51 @@ export async function listTenants() {
   `);
 
   return result.rows;
+}
+
+export async function getTenantAccessForOperatorEmail(
+  operatorEmail: string | null | undefined,
+) {
+  const normalizedEmail = normalizeEmail(operatorEmail);
+
+  if (!normalizedEmail) {
+    return {
+      isPlatformOperator: false,
+      tenantIds: [],
+    } satisfies TenantAccessRecord;
+  }
+
+  const [tenantResult, platformOperatorResult] = await Promise.all([
+    getDb().execute<{ tenantId: string }>(sql`
+      select tenant_id as "tenantId"
+      from operator_tenant_memberships
+      where operator_email = ${normalizedEmail}
+      order by created_at asc, id asc
+    `),
+    getDb().execute<{ id: string }>(sql`
+      select id
+      from platform_operators
+      where operator_email = ${normalizedEmail}
+      limit 1
+    `),
+  ]);
+
+  return {
+    isPlatformOperator: Boolean(platformOperatorResult.rows[0]),
+    tenantIds: tenantResult.rows.map((row) => row.tenantId),
+  } satisfies TenantAccessRecord;
+}
+
+export async function requireTenantAccessForOperatorEmail(
+  operatorEmail: string | null | undefined,
+) {
+  const access = await getTenantAccessForOperatorEmail(operatorEmail);
+
+  if (!access.isPlatformOperator && access.tenantIds.length === 0) {
+    throw new Error("Tenant membership is required for operator access.");
+  }
+
+  return access;
 }
 
 export async function getSingleTenantIdOrThrow() {
