@@ -35,6 +35,7 @@ import {
 import {
   reconcileOperationalData as reconcileOperationalDataImpl,
 } from "@/lib/reliability/reconciliation-operations";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export { syncSubscriptionByLocalId, syncSubscriptionByMollieId };
 
@@ -102,6 +103,10 @@ export async function syncPaymentByMollieId(
       payment,
       paymentType,
       recurringCollectionState,
+      tenantId:
+        localCustomer?.tenantId ??
+        localSubscription?.tenantId ??
+        (await getSingleTenantIdOrThrow()),
     });
   });
 

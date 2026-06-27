@@ -6,6 +6,7 @@ import { cache } from "react";
 import { getDb } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import type { CancellationEffect } from "@/lib/subscription-policy";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export type PendingSubscriptionOperationRequest = {
   cancellationEffect: CancellationEffect;
@@ -31,6 +32,7 @@ const listPendingSubscriptionOperationRequestsCached = cache(async (
   limit: number,
 ) => {
   const normalizedLimit = Math.max(1, Math.min(Math.trunc(limit), 100));
+  const tenantId = await getSingleTenantIdOrThrow();
   const result = await getDb().execute<PendingSubscriptionOperationRequest>(sql`
     select
       sor.id,
@@ -69,11 +71,16 @@ const listPendingSubscriptionOperationRequestsCached = cache(async (
     from subscription_operation_requests sor
     inner join subscriptions s
       on s.id = sor.subscription_id
+      and s.tenant_id = sor.tenant_id
       and s.mode = sor.mode
     inner join customers c
       on c.id = s.customer_id
+      and c.tenant_id = s.tenant_id
       and c.mode = s.mode
-    where sor.mode = ${mode}
+    where sor.tenant_id = ${tenantId}
+      and s.tenant_id = ${tenantId}
+      and c.tenant_id = ${tenantId}
+      and sor.mode = ${mode}
       and sor.status in ('pending', 'scheduled', 'processing')
       and (${customerId}::text is null or c.id = ${customerId})
     order by sor.created_at desc, sor.id desc

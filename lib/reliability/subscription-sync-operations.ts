@@ -59,6 +59,7 @@ export async function syncSubscriptionByLocalId(
       id: localSubscription.customerId,
       mollieCustomerId: localSubscription.customerMollieId,
       mode: localSubscription.mode,
+      tenantId: localSubscription.tenantId,
     } satisfies SyncResourceCustomerLink;
     const mandateIdMap = await upsertMandatesForCustomer(client, localCustomer);
     const localMandateId =

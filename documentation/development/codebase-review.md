@@ -47,7 +47,9 @@ Current code still carries single-context assumptions such as:
 - single allowlisted-email access gating
 - app-wide env-backed Mollie credentials
 - app-wide env-backed e-Boekhouden credentials
-- app-wide default-row assumptions in tenant-named settings tables
+- partial tenantization of core customer-linked business tables and loaders
+  while alerts, audit logs, webhook intake, and background follow-up flows are
+  still being moved to explicit tenant scope
 
 Those assumptions are acceptable only as migration debt to be removed by the
 multi-tenant pilot foundation. They are not acceptable as the end-state release
@@ -111,6 +113,10 @@ Implemented so far:
 - customer drawer invoice downloads now come from an authenticated customer invoices API backed by a server-side trusted e-Boekhouden PDF URL normalizer, covering first-payment and recurring invoice rows without exposing untrusted document URLs
 - customer drawer manual invoice resend now targets an existing first-payment or recurring invoice and reuses the invoice delivery helper, with dependency-injected coverage proving the flow loads one existing target and does not create invoices
 - unresolved subscription operation requests now have a dedicated sanitized query and surface read-only in Needs Attention and the customer drawer without exposing operator reason, requester email, or raw metadata
+- core customer-linked business tables are now being rekeyed around explicit
+  `tenant_id` ownership, and the root customer/payment loaders plus payment
+  drawer path are being narrowed to tenant-scoped reads while tenant session
+  selection and tenant-owned provider credentials remain follow-up work
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as materially mitigated rather than still open.
 

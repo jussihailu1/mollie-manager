@@ -25,6 +25,7 @@ import {
   redirectWithMessage,
   serializeError,
 } from "@/lib/operations/action-helpers";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 const manageSubscriptionSchema = z.object({
   returnTo: z.string().trim().startsWith("/").default("/customers"),
@@ -83,9 +84,11 @@ async function recordCancellationRequest(input: {
       transaction(async (client) =>
         callback({
           insertPendingRequest: async (request) => {
+            const tenantId = await getSingleTenantIdOrThrow();
             const result = await client.execute<{ id: string }>(sql`
               insert into subscription_operation_requests (
                 id,
+                tenant_id,
                 mode,
                 subscription_id,
                 operation,
@@ -99,6 +102,7 @@ async function recordCancellationRequest(input: {
                 requested_by_email
               ) values (
                 ${request.id},
+                ${tenantId},
                 ${request.mode},
                 ${request.subscriptionId},
                 'cancel',
@@ -111,7 +115,7 @@ async function recordCancellationRequest(input: {
                 ${request.providerMutationRequirement},
                 ${request.requestedByEmail}
               )
-              on conflict (subscription_id, operation)
+              on conflict (tenant_id, subscription_id, operation)
                 where status in ('pending', 'scheduled', 'processing')
               do nothing
               returning id
@@ -153,6 +157,7 @@ async function withdrawOperationRequest(input: {
           lockOperationRequest: ({ mode, operationRequestId }) =>
             lockManagedOperationRequest(client, operationRequestId, mode),
           markWithdrawn: async ({ operationRequestId }) => {
+            const tenantId = await getSingleTenantIdOrThrow();
             const result = await client.execute<{ id: string }>(sql`
               update subscription_operation_requests
               set
@@ -160,6 +165,7 @@ async function withdrawOperationRequest(input: {
                 withdrawn_at = now(),
                 updated_at = now()
               where id = ${operationRequestId}
+                and tenant_id = ${tenantId}
                 and status in ('pending', 'scheduled', 'processing')
               returning id
             `);
@@ -203,6 +209,7 @@ async function transitionOperationRequest(input: {
             operationRequestId,
             previousStatus,
           }) => {
+            const tenantId = await getSingleTenantIdOrThrow();
             const result = await client.execute<{ id: string }>(sql`
               update subscription_operation_requests
               set
@@ -214,6 +221,7 @@ async function transitionOperationRequest(input: {
                 end,
                 updated_at = now()
               where id = ${operationRequestId}
+                and tenant_id = ${tenantId}
                 and status = ${previousStatus}
               returning id
             `);

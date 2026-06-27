@@ -235,6 +235,7 @@ export const customers = pgTable(
   "customers",
   {
     id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
     mode: mollieModeEnum("mode").notNull(),
     mollieCustomerId: text("mollie_customer_id"),
     eboekhoudenRelationId: integer("eboekhouden_relation_id"),
@@ -282,20 +283,36 @@ export const customers = pgTable(
     }),
   },
   (table) => [
+    foreignKey({
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+      name: "customers_tenant_id_fkey",
+    }).onDelete("cascade"),
     unique("customers_mode_mollie_customer_id_key").on(
+      table.tenantId,
       table.mode,
       table.mollieCustomerId,
     ),
     unique("customers_mode_eboekhouden_relation_id_key").on(
+      table.tenantId,
       table.mode,
       table.eboekhoudenRelationId,
     ),
-    index("customers_mode_email_idx").on(table.mode, table.email),
+    index("customers_tenant_mode_email_idx").on(
+      table.tenantId,
+      table.mode,
+      table.email,
+    ),
     index("customers_mode_eboekhouden_link_status_idx").on(
+      table.tenantId,
       table.mode,
       table.eboekhoudenLinkStatus,
     ),
-    index("customers_mode_archived_at_idx").on(table.mode, table.archivedAt),
+    index("customers_tenant_mode_archived_at_idx").on(
+      table.tenantId,
+      table.mode,
+      table.archivedAt,
+    ),
   ],
 );
 
@@ -303,6 +320,7 @@ export const mandates = pgTable(
   "mandates",
   {
     id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
     customerId: text("customer_id").notNull(),
     mode: mollieModeEnum("mode").notNull(),
     mollieMandateId: text("mollie_mandate_id").notNull(),
@@ -332,11 +350,17 @@ export const mandates = pgTable(
   },
   (table) => [
     foreignKey({
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+      name: "mandates_tenant_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
       columns: [table.customerId],
       foreignColumns: [customers.id],
       name: "mandates_customer_id_fkey",
     }).onDelete("cascade"),
     unique("mandates_mode_mollie_mandate_id_key").on(
+      table.tenantId,
       table.mode,
       table.mollieMandateId,
     ),
@@ -347,6 +371,7 @@ export const subscriptions = pgTable(
   "subscriptions",
   {
     id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
     customerId: text("customer_id").notNull(),
     mandateId: text("mandate_id"),
     mode: mollieModeEnum("mode").notNull(),
@@ -406,6 +431,11 @@ export const subscriptions = pgTable(
   },
   (table) => [
     foreignKey({
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+      name: "subscriptions_tenant_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
       columns: [table.customerId],
       foreignColumns: [customers.id],
       name: "subscriptions_customer_id_fkey",
@@ -416,6 +446,7 @@ export const subscriptions = pgTable(
       name: "subscriptions_mandate_id_fkey",
     }).onDelete("set null"),
     unique("subscriptions_mode_mollie_subscription_id_key").on(
+      table.tenantId,
       table.mode,
       table.mollieSubscriptionId,
     ),
@@ -432,7 +463,11 @@ export const subscriptions = pgTable(
         and ${table.totalPayments} is null
       )
     `),
-    index("subscriptions_customer_idx").on(table.customerId, table.localStatus),
+    index("subscriptions_tenant_customer_idx").on(
+      table.tenantId,
+      table.customerId,
+      table.localStatus,
+    ),
   ],
 );
 
@@ -440,6 +475,7 @@ export const subscriptionOperationRequests = pgTable(
   "subscription_operation_requests",
   {
     id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
     mode: mollieModeEnum("mode").notNull(),
     subscriptionId: text("subscription_id").notNull(),
     operation: subscriptionOperationEnum("operation").notNull(),
@@ -492,6 +528,11 @@ export const subscriptionOperationRequests = pgTable(
   },
   (table) => [
     foreignKey({
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+      name: "subscription_operation_requests_tenant_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
       columns: [table.subscriptionId],
       foreignColumns: [subscriptions.id],
       name: "subscription_operation_requests_subscription_id_fkey",
@@ -520,7 +561,7 @@ export const subscriptionOperationRequests = pgTable(
       `,
     ),
     uniqueIndex("subscription_operation_requests_unresolved_key")
-      .on(table.subscriptionId, table.operation)
+      .on(table.tenantId, table.subscriptionId, table.operation)
       .where(sql`${table.status} in ('pending', 'scheduled', 'processing')`),
   ],
 );
@@ -616,6 +657,7 @@ export const payments = pgTable(
   "payments",
   {
     id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
     customerId: text("customer_id"),
     subscriptionId: text("subscription_id"),
     mandateId: text("mandate_id"),
@@ -696,6 +738,11 @@ export const payments = pgTable(
   },
   (table) => [
     foreignKey({
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+      name: "payments_tenant_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
       columns: [table.customerId],
       foreignColumns: [customers.id],
       name: "payments_customer_id_fkey",
@@ -711,19 +758,23 @@ export const payments = pgTable(
       name: "payments_mandate_id_fkey",
     }).onDelete("set null"),
     unique("payments_mode_mollie_payment_id_key").on(
+      table.tenantId,
       table.mode,
       table.molliePaymentId,
     ),
     check("payments_amount_value_check", sql`${table.amountValue} >= 0`),
-    index("payments_subscription_idx").on(
+    index("payments_tenant_subscription_idx").on(
+      table.tenantId,
       table.subscriptionId,
       table.paymentType,
     ),
-    index("payments_recurring_collection_state_idx").on(
+    index("payments_tenant_recurring_collection_state_idx").on(
+      table.tenantId,
       table.paymentType,
       table.recurringCollectionState,
     ),
-    index("payments_invoice_state_idx").on(
+    index("payments_tenant_invoice_state_idx").on(
+      table.tenantId,
       table.mode,
       table.paymentType,
       table.invoiceState,
@@ -735,6 +786,7 @@ export const recurringBillingSchedules = pgTable(
   "recurring_billing_schedules",
   {
     id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
     subscriptionId: text("subscription_id").notNull(),
     mode: mollieModeEnum("mode").notNull(),
     plannedCollectionDate: date("planned_collection_date", {
@@ -798,6 +850,11 @@ export const recurringBillingSchedules = pgTable(
   },
   (table) => [
     foreignKey({
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+      name: "recurring_billing_schedules_tenant_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
       columns: [table.subscriptionId],
       foreignColumns: [subscriptions.id],
       name: "recurring_billing_schedules_subscription_id_fkey",
@@ -819,12 +876,14 @@ export const recurringBillingSchedules = pgTable(
       "recurring_billing_schedules_amount_value_check",
       sql`${table.amountValue} >= 0`,
     ),
-    index("recurring_billing_schedules_due_idx").on(
+    index("recurring_billing_schedules_tenant_due_idx").on(
+      table.tenantId,
       table.mode,
       table.invoiceState,
       table.invoiceSendDueDate,
     ),
-    index("recurring_billing_schedules_subscription_idx").on(
+    index("recurring_billing_schedules_tenant_subscription_idx").on(
+      table.tenantId,
       table.subscriptionId,
       table.plannedCollectionDate,
     ),
@@ -835,6 +894,7 @@ export const paymentLinks = pgTable(
   "payment_links",
   {
     id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
     customerId: text("customer_id"),
     mode: mollieModeEnum("mode").notNull(),
     molliePaymentLinkId: text("mollie_payment_link_id"),
@@ -873,16 +933,25 @@ export const paymentLinks = pgTable(
   },
   (table) => [
     foreignKey({
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+      name: "payment_links_tenant_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
       columns: [table.customerId],
       foreignColumns: [customers.id],
       name: "payment_links_customer_id_fkey",
     }).onDelete("set null"),
     unique("payment_links_mode_mollie_payment_link_id_key").on(
+      table.tenantId,
       table.mode,
       table.molliePaymentLinkId,
     ),
     check("payment_links_amount_value_check", sql`${table.amountValue} >= 0`),
-    index("payment_links_customer_idx").on(table.customerId),
+    index("payment_links_tenant_customer_idx").on(
+      table.tenantId,
+      table.customerId,
+    ),
   ],
 );
 
@@ -890,6 +959,7 @@ export const subscriptionOnboardingConsents = pgTable(
   "subscription_onboarding_consents",
   {
     id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
     mode: mollieModeEnum("mode").notNull(),
     customerId: text("customer_id").notNull(),
     paymentLinkId: text("payment_link_id").notNull(),
@@ -931,6 +1001,11 @@ export const subscriptionOnboardingConsents = pgTable(
   },
   (table) => [
     foreignKey({
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+      name: "subscription_onboarding_consents_tenant_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
       columns: [table.customerId],
       foreignColumns: [customers.id],
       name: "subscription_onboarding_consents_customer_id_fkey",
@@ -947,6 +1022,7 @@ export const subscriptionOnboardingConsents = pgTable(
       table.consentTokenHash,
     ),
     unique("subscription_onboarding_consents_mode_payment_link_id_key").on(
+      table.tenantId,
       table.mode,
       table.paymentLinkId,
     ),
@@ -957,7 +1033,8 @@ export const subscriptionOnboardingConsents = pgTable(
         or (${table.consentTokenHash} is not null and ${table.consentTokenCiphertext} is not null)
       )`,
     ),
-    index("subscription_onboarding_consents_customer_idx").on(
+    index("subscription_onboarding_consents_tenant_customer_idx").on(
+      table.tenantId,
       table.customerId,
       table.createdAt.desc(),
     ),
@@ -968,6 +1045,7 @@ export const customerNotes = pgTable(
   "customer_notes",
   {
     id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
     mode: mollieModeEnum("mode").notNull(),
     customerId: text("customer_id").notNull(),
     body: text("body").notNull(),
@@ -991,12 +1069,18 @@ export const customerNotes = pgTable(
   },
   (table) => [
     foreignKey({
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+      name: "customer_notes_tenant_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
       columns: [table.customerId],
       foreignColumns: [customers.id],
       name: "customer_notes_customer_id_fkey",
     }).onDelete("cascade"),
     check("customer_notes_body_not_blank_check", sql`length(btrim(${table.body})) > 0`),
-    index("customer_notes_customer_created_idx").on(
+    index("customer_notes_tenant_customer_created_idx").on(
+      table.tenantId,
       table.customerId,
       table.createdAt.desc(),
     ),

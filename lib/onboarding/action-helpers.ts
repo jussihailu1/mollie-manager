@@ -16,6 +16,7 @@ import { updateActionPath } from "@/lib/onboarding/action-path";
 import {
   shouldPatchEboekhoudenRelation,
 } from "@/lib/onboarding/customer-relation-fields";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export function redirectWithMessage(
   pathname: string,
@@ -75,12 +76,14 @@ export async function assertRelationIsAvailable(
   mode: "live" | "test",
   excludeCustomerId?: string,
 ) {
+  const tenantId = await getSingleTenantIdOrThrow();
   const existing = await transaction(async (client) => {
     const result = excludeCustomerId
       ? await client.execute<{ id: string }>(sql`
           select id
           from customers
-          where mode = ${mode}
+          where tenant_id = ${tenantId}
+            and mode = ${mode}
             and eboekhouden_relation_id = ${relationId}
             and id <> ${excludeCustomerId}
           limit 1
@@ -88,7 +91,8 @@ export async function assertRelationIsAvailable(
       : await client.execute<{ id: string }>(sql`
         select id
         from customers
-        where mode = ${mode}
+        where tenant_id = ${tenantId}
+          and mode = ${mode}
           and eboekhouden_relation_id = ${relationId}
         limit 1
       `);

@@ -7,6 +7,7 @@ import type { DashboardModeFilter } from "@/lib/dashboard-mode";
 import { normalizeCustomerNoteBody } from "@/lib/customer-note-policy";
 import { getDb } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export { normalizeCustomerNoteBody };
 
@@ -33,6 +34,7 @@ const listCustomerNotesByMode = cache(async (
   limit: number,
 ) => {
   const modeParam = toModeParam(mode);
+  const tenantId = await getSingleTenantIdOrThrow();
   const normalizedLimit = Math.max(1, Math.min(Math.trunc(limit), 100));
   const result = await getDb().execute<CustomerNote>(sql`
     select
@@ -46,6 +48,7 @@ const listCustomerNotesByMode = cache(async (
       cn.archived_at as "archivedAt"
     from customer_notes cn
     where cn.customer_id = ${customerId}
+      and cn.tenant_id = ${tenantId}
       and cn.archived_at is null
       and (${modeParam}::mollie_mode is null or cn.mode = ${modeParam})
     order by cn.created_at desc
@@ -72,6 +75,7 @@ export async function createCustomerNote(input: {
   customerId: string;
   mode: "live" | "test";
 }) {
+  const tenantId = await getSingleTenantIdOrThrow();
   const body = normalizeCustomerNoteBody(input.body);
 
   if (!body) {
@@ -82,12 +86,14 @@ export async function createCustomerNote(input: {
   const result = await getDb().execute<CustomerNote>(sql`
     insert into customer_notes (
       id,
+      tenant_id,
       mode,
       customer_id,
       body,
       source
     ) values (
       ${noteId},
+      ${tenantId},
       ${input.mode},
       ${input.customerId},
       ${body},

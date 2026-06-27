@@ -6,6 +6,7 @@ import { transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { assertRelationIsAvailable, getLocalCustomer, updateRelationFromLocalFields } from "@/lib/onboarding/action-helpers";
 import { toCustomerRelationFields } from "@/lib/onboarding/customer-relation-fields";
+import { requireCustomerTenantId } from "@/lib/tenant-ownership";
 
 type CustomerRelationLinkActor = {
   email?: string | null;
@@ -67,6 +68,7 @@ export async function linkCustomerToEboekhoudenRelation(
     relationFields,
   );
   const normalizedNote = normalizeCustomerNoteBody(input.fields.notes ?? "");
+  const tenantId = await requireCustomerTenantId(customer.id);
 
   await transaction(async (client) => {
     await client.execute(sql`
@@ -95,12 +97,14 @@ export async function linkCustomerToEboekhoudenRelation(
       await client.execute(sql`
         insert into customer_notes (
           id,
+          tenant_id,
           mode,
           customer_id,
           body,
           source
         ) values (
           ${crypto.randomUUID()},
+          ${tenantId},
           ${input.mode},
           ${customer.id},
           ${normalizedNote},

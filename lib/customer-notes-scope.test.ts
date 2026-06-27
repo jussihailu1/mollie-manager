@@ -23,6 +23,8 @@ describe("customer notes source", () => {
     const source = readFileSync(resolve("lib/customer-notes.ts"), "utf8");
 
     assert.match(source, /from customer_notes cn/);
+    assert.match(source, /cn\.tenant_id = \$\{tenantId\}/);
+    assert.match(source, /insert into customer_notes[\s\S]*tenant_id/);
     assert.doesNotMatch(source, /audit_logs/);
     assert.doesNotMatch(source, /customers\.notes|c\.notes/);
   });

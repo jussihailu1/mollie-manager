@@ -12,6 +12,10 @@ import {
   isCollectionReviewState,
   type RecurringCollectionState,
 } from "@/lib/recurring-billing-policy";
+import {
+  requirePaymentTenantId,
+  requireSubscriptionTenantId,
+} from "@/lib/tenant-ownership";
 
 type BillingScheduleActor = {
   email?: string | null;
@@ -126,12 +130,14 @@ export async function upsertRecurringBillingScheduleForSubscription(
     actor?: BillingScheduleActor;
   },
 ) {
+  const tenantId = await requireSubscriptionTenantId(input.subscriptionId, client);
   const entries = buildRecurringBillingScheduleEntries(input);
 
   for (const entry of entries) {
     await client.execute(sql`
       insert into recurring_billing_schedules (
         id,
+        tenant_id,
         subscription_id,
         mode,
         planned_collection_date,
@@ -147,6 +153,7 @@ export async function upsertRecurringBillingScheduleForSubscription(
         updated_at
       ) values (
         ${crypto.randomUUID()},
+        ${tenantId},
         ${input.subscriptionId},
         ${input.mode},
         ${entry.plannedCollectionDate}::date,
@@ -199,6 +206,8 @@ export async function upsertRecurringBillingScheduleForPayment(
   client: DbClient,
   input: SchedulePaymentInput,
 ) {
+  await requireSubscriptionTenantId(input.subscriptionId, client);
+  const paymentTenantId = await requirePaymentTenantId(input.paymentId, client);
   const plannedCollectionDate = toDateString(input.paymentCreatedAt);
   const invoiceSendDueDate = deriveInvoiceSendDueDate({
     plannedCollectionDate,
@@ -209,9 +218,10 @@ export async function upsertRecurringBillingScheduleForPayment(
       : null;
 
   await client.execute(sql`
-    insert into recurring_billing_schedules (
-      id,
-      subscription_id,
+      insert into recurring_billing_schedules (
+        id,
+        tenant_id,
+        subscription_id,
       mode,
       planned_collection_date,
       invoice_send_due_date,
@@ -225,9 +235,10 @@ export async function upsertRecurringBillingScheduleForPayment(
       collection_resolved_at,
       created_at,
       updated_at
-    ) values (
-      ${crypto.randomUUID()},
-      ${input.subscriptionId},
+      ) values (
+        ${crypto.randomUUID()},
+        ${paymentTenantId},
+        ${input.subscriptionId},
       ${input.mode},
       ${plannedCollectionDate}::date,
       ${invoiceSendDueDate}::date,

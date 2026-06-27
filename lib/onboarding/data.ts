@@ -11,6 +11,7 @@ import {
   buildConsentTokenStorage,
   resolveStoredConsentToken,
 } from "@/lib/onboarding/consent-token-storage";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export type CustomerOverview = {
   address: string | null;
@@ -206,6 +207,7 @@ const listCustomersByMode = cache(async (
   archived: boolean,
 ) => {
   const modeParam = toModeParam(mode);
+  const tenantId = await getSingleTenantIdOrThrow();
   const result = await getDb().execute<CustomerOverview>(sql`
       select
         c.id,
@@ -325,6 +327,8 @@ const listCustomersByMode = cache(async (
         where s.customer_id = c.id and s.mode = c.mode
       ) subscription_counts on true
       where
+        c.tenant_id = ${tenantId}
+        and
         (${modeParam}::mollie_mode is null or c.mode = ${modeParam})
         and (
           (${archived}::boolean = true and c.archived_at is not null)
@@ -348,6 +352,7 @@ export const getCustomerDetail = cache(async (
   mode: DashboardModeFilter = "all",
 ) => {
   const modeParam = toModeParam(mode);
+  const tenantId = await getSingleTenantIdOrThrow();
   const [
     customersResult,
     paymentsResult,
@@ -474,6 +479,7 @@ export const getCustomerDetail = cache(async (
             where s.customer_id = c.id and s.mode = c.mode
           ) subscription_counts on true
           where c.id = ${customerId}
+            and c.tenant_id = ${tenantId}
             and (${modeParam}::mollie_mode is null or c.mode = ${modeParam})
           limit 1
         `),
@@ -496,6 +502,7 @@ export const getCustomerDetail = cache(async (
             p.created_at as "createdAt"
           from payments p
           where p.customer_id = ${customerId}
+            and p.tenant_id = ${tenantId}
             and (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
           order by p.created_at desc
         `),
@@ -515,6 +522,7 @@ export const getCustomerDetail = cache(async (
           from payment_links pl
           where
             pl.customer_id = ${customerId}
+            and pl.tenant_id = ${tenantId}
             and (${modeParam}::mollie_mode is null or pl.mode = ${modeParam})
             and pl.metadata ->> 'source' = 'subscription_onboarding'
             and pl.metadata ->> 'paymentType' = 'first'
@@ -531,6 +539,7 @@ export const getCustomerDetail = cache(async (
             m.created_at as "createdAt"
           from mandates m
           where m.customer_id = ${customerId}
+            and m.tenant_id = ${tenantId}
             and (${modeParam}::mollie_mode is null or m.mode = ${modeParam})
           order by m.created_at desc
         `),
@@ -558,6 +567,7 @@ export const getCustomerDetail = cache(async (
             s.created_at as "createdAt"
           from subscriptions s
           where s.customer_id = ${customerId}
+            and s.tenant_id = ${tenantId}
             and (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
           order by s.created_at desc
         `),
@@ -595,6 +605,7 @@ export async function getLatestConsentLinkUrl(
   mode: DashboardModeFilter = "all",
 ) {
   const modeParam = toModeParam(mode);
+  const tenantId = await getSingleTenantIdOrThrow();
   const result = await getDb().execute<{
     consentId: string;
     consentToken: string | null;
@@ -608,6 +619,7 @@ export async function getLatestConsentLinkUrl(
         soc.consent_token_hash as "consentTokenHash"
       from subscription_onboarding_consents soc
       where soc.customer_id = ${customerId}
+        and soc.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or soc.mode = ${modeParam})
       order by soc.created_at desc
       limit 1
@@ -640,6 +652,7 @@ export async function getLatestConsentLinkUrl(
         consent_token_ciphertext = ${storage.consentTokenCiphertext},
         updated_at = now()
       where id = ${latestConsent.consentId}
+        and tenant_id = ${tenantId}
         and (
           consent_token is not null
           or consent_token_hash is null
@@ -653,6 +666,7 @@ export async function getLatestConsentLinkUrl(
 
 const listSubscriptionsByMode = cache(async (mode: DashboardModeFilter) => {
   const modeParam = toModeParam(mode);
+  const tenantId = await getSingleTenantIdOrThrow();
   const result = await getDb().execute<SubscriptionOverview>(sql`
       select
         s.id,
@@ -679,8 +693,13 @@ const listSubscriptionsByMode = cache(async (mode: DashboardModeFilter) => {
         coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail"
       from subscriptions s
-      inner join customers c on c.id = s.customer_id and c.mode = s.mode
-      where (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
+      inner join customers c
+        on c.id = s.customer_id
+        and c.tenant_id = s.tenant_id
+        and c.mode = s.mode
+      where s.tenant_id = ${tenantId}
+        and c.tenant_id = ${tenantId}
+        and (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
       order by s.created_at desc
     `);
 
@@ -695,6 +714,7 @@ export async function listSubscriptions(options?: {
 
 const listPaymentsByMode = cache(async (mode: DashboardModeFilter) => {
   const modeParam = toModeParam(mode);
+  const tenantId = await getSingleTenantIdOrThrow();
   const result = await getDb().execute<PaymentOverview>(sql`
       select
         p.id,
@@ -718,9 +738,16 @@ const listPaymentsByMode = cache(async (mode: DashboardModeFilter) => {
         s.id as "subscriptionId",
         s.description as "subscriptionDescription"
       from payments p
-      left join customers c on c.id = p.customer_id and c.mode = p.mode
-      left join subscriptions s on s.id = p.subscription_id and s.mode = p.mode
-      where (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
+      left join customers c
+        on c.id = p.customer_id
+        and c.tenant_id = p.tenant_id
+        and c.mode = p.mode
+      left join subscriptions s
+        on s.id = p.subscription_id
+        and s.tenant_id = p.tenant_id
+        and s.mode = p.mode
+      where p.tenant_id = ${tenantId}
+        and (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
       order by
         coalesce(p.paid_at, p.failed_at, p.created_at) desc,
         p.created_at desc

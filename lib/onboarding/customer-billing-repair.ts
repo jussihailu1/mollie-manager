@@ -10,6 +10,7 @@ import { getCustomerDetail } from "@/lib/onboarding/data";
 import { getMollieClient } from "@/lib/mollie/client";
 import { syncPaymentLinkByMollieId } from "@/lib/reliability/sync";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
+import { requireCustomerTenantId } from "@/lib/tenant-ownership";
 
 type LocalPaymentRecord = {
   id: string;
@@ -67,6 +68,7 @@ async function getLocalSubscriptions(customerId: string, client: DbTransaction) 
 async function upsertMandate(
   client: DbTransaction,
   customerId: string,
+  tenantId: string,
   mode: MollieMode,
   mandate: {
     createdAt?: string | null;
@@ -79,7 +81,9 @@ async function upsertMandate(
   const existing = await client.execute<{ id: string }>(sql`
       select id
       from mandates
-      where mode = ${mode} and mollie_mandate_id = ${mandate.id}
+      where tenant_id = ${tenantId}
+        and mode = ${mode}
+        and mollie_mandate_id = ${mandate.id}
       limit 1
     `);
 
@@ -88,6 +92,7 @@ async function upsertMandate(
   await client.execute(sql`
       insert into mandates (
         id,
+        tenant_id,
         customer_id,
         mode,
         mollie_mandate_id,
@@ -100,6 +105,7 @@ async function upsertMandate(
         last_synced_at
       ) values (
         ${localMandateId},
+        ${tenantId},
         ${customerId},
         ${mode},
         ${mandate.id},
@@ -115,7 +121,7 @@ async function upsertMandate(
         now(),
         now()
       )
-      on conflict (mode, mollie_mandate_id)
+      on conflict (tenant_id, mode, mollie_mandate_id)
       do update set
         customer_id = excluded.customer_id,
         method = excluded.method,
@@ -182,18 +188,25 @@ export async function repairCustomerBillingState(input: {
   const mandates = await mollie.customerMandates.page({
     customerId: mollieCustomerId,
   });
+  const tenantId = await requireCustomerTenantId(customer.id);
 
   await transaction(async (client) => {
     const mandateIdMap = new Map<string, string>();
 
     for (const mandate of mandates) {
-      const localMandateId = await upsertMandate(client, customer.id, customer.mode, {
-        createdAt: mandate.createdAt,
-        details: mandate.details,
-        id: mandate.id,
-        method: mandate.method,
-        status: mandate.status,
-      });
+      const localMandateId = await upsertMandate(
+        client,
+        customer.id,
+        tenantId,
+        customer.mode,
+        {
+          createdAt: mandate.createdAt,
+          details: mandate.details,
+          id: mandate.id,
+          method: mandate.method,
+          status: mandate.status,
+        },
+      );
 
       mandateIdMap.set(mandate.id, localMandateId);
     }

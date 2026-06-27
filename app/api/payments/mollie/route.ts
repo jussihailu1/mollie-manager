@@ -9,6 +9,7 @@ import { getEboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import { normalizeTrustedInvoicePdfUrl } from "@/lib/invoice-pdf";
 import type { PaymentDrawerData } from "@/lib/payment-details";
 import { getMollieClient } from "@/lib/mollie/client";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 type LocalPaymentLookup = {
   customerId: string | null;
@@ -254,6 +255,7 @@ export async function GET(request: NextRequest) {
   }
 
   const selectedMode = await getSelectedMollieMode();
+  const tenantId = await getSingleTenantIdOrThrow();
   const result = await getDb().execute<LocalPaymentLookup>(sql`
       with invoice_context as (
         select
@@ -321,7 +323,9 @@ export async function GET(request: NextRequest) {
         from payments p
         left join recurring_billing_schedules rbs
           on rbs.payment_id = p.id
-        where p.mode = ${selectedMode}
+          and rbs.tenant_id = p.tenant_id
+        where p.tenant_id = ${tenantId}
+          and p.mode = ${selectedMode}
           and (
             (${paymentId || null}::text is not null and p.id = ${paymentId || null})
             or (${molliePaymentId || null}::text is not null and p.mollie_payment_id = ${molliePaymentId || null})
@@ -355,7 +359,10 @@ export async function GET(request: NextRequest) {
         ) as "invoiceTriggerSource"
       from payments p
       inner join invoice_context ic on ic.payment_id = p.id
-      left join customers c on c.id = p.customer_id and c.mode = p.mode
+      left join customers c
+        on c.id = p.customer_id
+        and c.tenant_id = p.tenant_id
+        and c.mode = p.mode
       left join lateral (
         select
           al.action,
@@ -376,7 +383,8 @@ export async function GET(request: NextRequest) {
         order by al.created_at desc
         limit 1
       ) creation_audit on true
-      where p.mode = ${selectedMode}
+      where p.tenant_id = ${tenantId}
+        and p.mode = ${selectedMode}
         and (
           (${paymentId || null}::text is not null and p.id = ${paymentId || null})
           or (${molliePaymentId || null}::text is not null and p.mollie_payment_id = ${molliePaymentId || null})

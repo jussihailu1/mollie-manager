@@ -8,6 +8,7 @@ import type { MollieMode } from "@/lib/env";
 import { getMollieClient } from "@/lib/mollie/client";
 import { assertRelationIsAvailable, updateRelationFromLocalFields } from "@/lib/onboarding/action-helpers";
 import { toCustomerRelationFields } from "@/lib/onboarding/customer-relation-fields";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 type CreateCustomerFlowInput = {
   address?: string;
@@ -25,6 +26,7 @@ export async function createCustomerFlow(input: {
   input: CreateCustomerFlowInput;
   mode: MollieMode;
 }) {
+  const tenantId = await getSingleTenantIdOrThrow();
   const localCustomerId = crypto.randomUUID();
   const relationFields = toCustomerRelationFields(input.input);
   const relationIdToLink =
@@ -61,6 +63,7 @@ export async function createCustomerFlow(input: {
     await client.execute(sql`
       insert into customers (
         id,
+        tenant_id,
         mode,
         mollie_customer_id,
         eboekhouden_relation_id,
@@ -77,6 +80,7 @@ export async function createCustomerFlow(input: {
         last_synced_at
       ) values (
         ${localCustomerId},
+        ${tenantId},
         ${input.mode},
         ${createdCustomer.id},
         ${linkedRelation?.id ?? null},
@@ -104,12 +108,14 @@ export async function createCustomerFlow(input: {
       await client.execute(sql`
         insert into customer_notes (
           id,
+          tenant_id,
           mode,
           customer_id,
           body,
           source
         ) values (
           ${crypto.randomUUID()},
+          ${tenantId},
           ${input.mode},
           ${localCustomerId},
           ${normalizedNote},

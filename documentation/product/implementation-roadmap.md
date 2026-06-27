@@ -126,6 +126,22 @@ Scope:
 - tenant-aware webhook, replay, repair, reconciliation, cron, onboarding,
   invoice, and notification flows
 
+Current bounded implementation slice:
+
+- tenant, platform-operator, and operator-membership foundation is already in
+  place
+- tenant-owned subscription policy defaults and billing/accounting settings are
+  already persisted by `tenant_id`
+- current slice tenantizes `customers`, `mandates`, `subscriptions`,
+  `subscription_operation_requests`, `payments`,
+  `recurring_billing_schedules`, `payment_links`,
+  `subscription_onboarding_consents`, and `customer_notes`
+- current slice also scopes the root customer/payment loaders and payment drawer
+  API to explicit tenant context, while preserving single-tenant fail-closed
+  behavior until membership/session tenant selection lands
+- alerts, audit logs, webhook intake, replay/repair/cron follow-up, and
+  tenant-owned provider credentials remain deferred follow-up inside Phase 0.5
+
 Required behavior:
 
 - signing in alone does not grant product access

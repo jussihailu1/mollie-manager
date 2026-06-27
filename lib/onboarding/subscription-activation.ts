@@ -12,6 +12,7 @@ import { deliverAlertEmail, openAlert, resolveAlertsForEntity } from "@/lib/reli
 import { subscriptionConsentPlanSnapshotSchema } from "@/lib/subscription-consent";
 import { toMollieInterval } from "@/lib/subscription-policy";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
+import { requireCustomerTenantId } from "@/lib/tenant-ownership";
 
 type ActivationActor =
   | {
@@ -309,6 +310,7 @@ export async function attemptSubscriptionActivation(input: {
 
   const plan = parsedPlan.data;
   const localSubscriptionId = crypto.randomUUID();
+  const tenantId = await requireCustomerTenantId(customer.id);
 
   try {
     const subscription = await getMollieClient(input.mode).customerSubscriptions.create({
@@ -342,6 +344,7 @@ export async function attemptSubscriptionActivation(input: {
       await client.execute(sql`
         insert into subscriptions (
           id,
+          tenant_id,
           customer_id,
           mandate_id,
           mode,
@@ -366,6 +369,7 @@ export async function attemptSubscriptionActivation(input: {
           last_synced_at
         ) values (
           ${localSubscriptionId},
+          ${tenantId},
           ${customer.id},
           ${preferredMandate.id},
           ${input.mode},
