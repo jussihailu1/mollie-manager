@@ -35,6 +35,10 @@ test("needs attention query exposes stable typed sources without raw webhook pay
 
   assert.match(source, /recommendedAction/);
   assert.match(source, /listPendingSubscriptionOperationRequests/);
+  assert.match(source, /tenantId\?: string/);
+  assert.match(source, /p\.tenant_id = \$\{tenantId\}/);
+  assert.match(source, /s\.tenant_id = \$\{tenantId\}/);
+  assert.match(source, /c\.tenant_id = \$\{tenantId\}/);
   assert.match(source, /from payments p/);
   assert.match(source, /from subscriptions s/);
   assert.match(source, /from recurring_billing_schedules rbs/);

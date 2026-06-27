@@ -30,6 +30,7 @@ import {
 } from "@/lib/eboekhouden/recurring-invoice-recovery";
 import { createInvoiceBatchWithDependencies } from "@/lib/invoice-creation-batch";
 import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export { createEboekhoudenInvoiceForSchedule };
 export {
@@ -64,10 +65,16 @@ type FailedRecurringRecoveryBatchResult = {
   scannedCount: number;
 };
 
+async function resolveTenantId(tenantId?: string) {
+  return tenantId ?? (await getSingleTenantIdOrThrow());
+}
+
 async function listDueRecurringInvoiceCandidates(
   mode: "live" | "test",
   limit = DEFAULT_BATCH_SIZE,
+  tenantId?: string,
 ) {
+  const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await getDb().execute<ScheduledInvoiceCandidate>(sql`
     select
       rbs.id as "scheduleId",
@@ -81,9 +88,10 @@ async function listDueRecurringInvoiceCandidates(
       c.email as "customerEmail",
       c.eboekhouden_relation_id as "eboekhoudenRelationId"
     from recurring_billing_schedules rbs
-    inner join subscriptions s on s.id = rbs.subscription_id
-    inner join customers c on c.id = s.customer_id
-    where ${buildRecurringDueInvoiceFilter(mode)}
+    inner join subscriptions s on s.id = rbs.subscription_id and s.tenant_id = rbs.tenant_id
+    inner join customers c on c.id = s.customer_id and c.tenant_id = rbs.tenant_id
+    where rbs.tenant_id = ${resolvedTenantId}
+      and ${buildRecurringDueInvoiceFilter(mode, resolvedTenantId)}
       and c.eboekhouden_relation_id is not null
     order by rbs.invoice_send_due_date asc, rbs.planned_collection_date asc, rbs.created_at asc
     limit ${Math.max(1, limit)}
@@ -94,7 +102,9 @@ async function listDueRecurringInvoiceCandidates(
 
 export async function getDueRecurringInvoiceQueueSummary(
   mode: "live" | "test",
+  tenantId?: string,
 ): Promise<DueRecurringInvoiceQueueSummary> {
+  const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await getDb().execute<{
     actionableCount: number | string;
     blockedCount: number | string;
@@ -105,9 +115,10 @@ export async function getDueRecurringInvoiceQueueSummary(
       count(*) filter (where c.eboekhouden_relation_id is null) as "blockedCount",
       count(*) as "dueCount"
     from recurring_billing_schedules rbs
-    inner join subscriptions s on s.id = rbs.subscription_id
-    inner join customers c on c.id = s.customer_id
-    where ${buildRecurringDueInvoiceFilter(mode)}
+    inner join subscriptions s on s.id = rbs.subscription_id and s.tenant_id = rbs.tenant_id
+    inner join customers c on c.id = s.customer_id and c.tenant_id = rbs.tenant_id
+    where rbs.tenant_id = ${resolvedTenantId}
+      and ${buildRecurringDueInvoiceFilter(mode, resolvedTenantId)}
   `);
   const row = result.rows[0];
 
@@ -187,8 +198,9 @@ export async function createDueRecurringInvoicesBatch(input: {
   actor: InvoiceActor;
   limit?: number;
   mode: "live" | "test";
+  tenantId?: string;
 }): Promise<RecurringInvoiceBatchResult> {
-  const settings = await getTenantBillingSettings();
+  const settings = await getTenantBillingSettings(input.tenantId);
 
   if (!billingSettingsAreComplete(settings)) {
     throw new Error(
@@ -204,7 +216,7 @@ export async function createDueRecurringInvoicesBatch(input: {
       }),
     getRemainingSummary: getDueRecurringInvoiceQueueSummary,
     loadCandidates: async (mode, limit) =>
-      (await listDueRecurringInvoiceCandidates(mode, limit)).map((row) => ({
+      (await listDueRecurringInvoiceCandidates(mode, limit, input.tenantId)).map((row) => ({
         entityId: row.scheduleId,
       })),
   });

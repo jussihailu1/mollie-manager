@@ -11,6 +11,7 @@ import {
   getNeedsAttentionPriorityMeta,
 } from "@/lib/needs-attention-presentation";
 import { listCustomers, listPayments } from "@/lib/onboarding/data";
+import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 import { listRecentAuditActivity } from "@/lib/reliability/data";
 import { listNeedsAttentionItems } from "@/lib/reliability/needs-attention";
 import {
@@ -21,12 +22,14 @@ import {
 } from "@/lib/ui-data";
 
 export default async function OverviewPage() {
+  const { currentTenant } = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
+  const tenantId = currentTenant.id;
   const [customersResult, paymentsResult, activityResult, attentionResult] = await Promise.all([
-    listCustomers({ mode: selectedMode }),
-    listPayments({ mode: selectedMode }),
-    listRecentAuditActivity({ mode: selectedMode }),
-    listNeedsAttentionItems({ limit: 6, mode: selectedMode }),
+    listCustomers({ mode: selectedMode, tenantId }),
+    listPayments({ mode: selectedMode, tenantId }),
+    listRecentAuditActivity({ mode: selectedMode, tenantId }),
+    listNeedsAttentionItems({ limit: 6, mode: selectedMode, tenantId }),
   ]);
 
   const customers = customersResult.map(toUiCustomerRecord);

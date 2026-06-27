@@ -42,18 +42,19 @@ const EMPTY_INVOICE_DELIVERY_QUEUE_SUMMARY = {
 export async function getReliabilityOpsSnapshot(options: {
   billingSettingsComplete?: boolean;
   mode: MollieMode;
+  tenantId?: string;
 }): Promise<ReliabilityOpsSnapshot> {
   const billingSettingsComplete = options.billingSettingsComplete ?? true;
 
   const [reliability, invoiceAutomationCron, invoiceAutomation, invoiceDeliveryQueue] =
     await Promise.all([
-      getReliabilitySnapshot({ mode: options.mode }),
-      getInvoiceAutomationCronHeartbeat(options.mode),
+      getReliabilitySnapshot({ mode: options.mode, tenantId: options.tenantId }),
+      getInvoiceAutomationCronHeartbeat(options.mode, options.tenantId),
       billingSettingsComplete
-        ? getInvoiceAutomationSnapshot(options.mode)
+        ? getInvoiceAutomationSnapshot(options.mode, options.tenantId)
         : Promise.resolve(EMPTY_INVOICE_AUTOMATION_SNAPSHOT),
       billingSettingsComplete
-        ? getInvoiceDeliveryQueueSummary(options.mode)
+        ? getInvoiceDeliveryQueueSummary(options.mode, options.tenantId)
         : Promise.resolve(EMPTY_INVOICE_DELIVERY_QUEUE_SUMMARY),
     ]);
 

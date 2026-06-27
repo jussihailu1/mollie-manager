@@ -6,6 +6,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { getDb, transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { env } from "@/lib/env";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 import { getEboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import {
   getNextRetryAtIso,
@@ -54,6 +55,10 @@ export type InvoiceDeliveryQueueSummary = {
   permanentFailureFirstPaymentCount: number;
   permanentFailureRecurringCount: number;
 };
+
+async function resolveTenantId(tenantId?: string) {
+  return tenantId ?? (await getSingleTenantIdOrThrow());
+}
 
 type FirstPaymentDeliveryCandidate = {
   customerEmail: string | null;
@@ -646,7 +651,9 @@ export async function retryUnsentRecurringInvoiceEmailsBatch(input: {
 
 export async function getInvoiceDeliveryQueueSummary(
   mode: MollieMode,
+  tenantId?: string,
 ): Promise<InvoiceDeliveryQueueSummary> {
+  const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await getDb().execute<{
     dueRetryFirstPaymentCount: number | string;
     dueRetryRecurringCount: number | string;
@@ -695,6 +702,7 @@ export async function getInvoiceDeliveryQueueSummary(
         ) as due_first
       from payments p
       where p.mode = ${mode}
+        and p.tenant_id = ${resolvedTenantId}
     ),
     recurring_delivery as (
       select
@@ -736,6 +744,7 @@ export async function getInvoiceDeliveryQueueSummary(
         ) as due_recurring
       from recurring_billing_schedules rbs
       where rbs.mode = ${mode}
+        and rbs.tenant_id = ${resolvedTenantId}
     )
     select
       (select due_first from payment_delivery) as "dueRetryFirstPaymentCount",

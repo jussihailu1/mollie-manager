@@ -22,12 +22,12 @@ describe("customer overview consent scope", () => {
     const source = readFileSync(resolve("lib/onboarding/data.ts"), "utf8");
 
     assert.match(source, /getSingleTenantIdOrThrow/);
-    assert.match(source, /c\.tenant_id = \$\{tenantId\}/);
-    assert.match(source, /p\.tenant_id = \$\{tenantId\}/);
-    assert.match(source, /pl\.tenant_id = \$\{tenantId\}/);
-    assert.match(source, /m\.tenant_id = \$\{tenantId\}/);
-    assert.match(source, /s\.tenant_id = \$\{tenantId\}/);
-    assert.match(source, /soc\.tenant_id = \$\{tenantId\}/);
-    assert.match(source, /where id = \$\{latestConsent\.consentId\}\s+and tenant_id = \$\{tenantId\}/);
+    assert.match(source, /c\.tenant_id = \$\{resolvedTenantId\}/);
+    assert.match(source, /p\.tenant_id = \$\{resolvedTenantId\}/);
+    assert.match(source, /pl\.tenant_id = \$\{resolvedTenantId\}/);
+    assert.match(source, /m\.tenant_id = \$\{resolvedTenantId\}/);
+    assert.match(source, /s\.tenant_id = \$\{resolvedTenantId\}/);
+    assert.match(source, /soc\.tenant_id = \$\{resolvedTenantId\}/);
+    assert.match(source, /where id = \$\{latestConsent\.consentId\}\s+and tenant_id = \$\{resolvedTenantId\}/);
   });
 });

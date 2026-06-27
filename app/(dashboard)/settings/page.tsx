@@ -37,6 +37,7 @@ import {
   listRecentAuditActivity,
 } from "@/lib/reliability/data";
 import { getReliabilityOpsSnapshot } from "@/lib/reliability/ops-snapshot";
+import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 import { env } from "@/lib/env";
 import {
   parseReconciliationSummary,
@@ -44,10 +45,7 @@ import {
 } from "@/lib/reliability/reconciliation-summary";
 import { FormActionButton } from "@/components/form-action-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  hasAdvancedOperationsAccess,
-  requireViewerSession,
-} from "@/lib/auth/session";
+import { hasAdvancedOperationsAccess } from "@/lib/auth/session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -130,12 +128,14 @@ export default async function SettingsPage({
   const reconciliationSummary = parseReconciliationSummary(
     getSingleSearchParam(resolvedSearchParams.reconciliationSummary),
   );
-  const session = await requireViewerSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
+  const session = tenantSelection.session;
   const canManageAdvancedOperations = hasAdvancedOperationsAccess(session);
+  const tenantId = tenantSelection.currentTenant.id;
 
   const invoiceEmailOverrideTo = env.INVOICE_EMAIL_OVERRIDE_TO ?? null;
   const [billingSettings, selectedMode] = await Promise.all([
-    ensureTenantBillingSettings(),
+    ensureTenantBillingSettings(tenantId),
     getSelectedMollieMode(),
   ]);
   const billingDiscovery = await discoverEboekhoudenBillingSettings().catch(
@@ -254,10 +254,11 @@ export default async function SettingsPage({
   const [reliabilityOpsSnapshot, failedWebhookEvents, recentAuditActivity] = await Promise.all([
     getReliabilityOpsSnapshot({
       billingSettingsComplete,
+      tenantId,
       mode: selectedMode,
     }),
-    listFailedWebhookEvents({ limit: 8, mode: selectedMode }),
-    listRecentAuditActivity({ mode: selectedMode }),
+    listFailedWebhookEvents({ limit: 8, mode: selectedMode, tenantId }),
+    listRecentAuditActivity({ mode: selectedMode, tenantId }),
   ]);
   const {
     invoiceAutomation,
@@ -273,10 +274,10 @@ export default async function SettingsPage({
   ] =
     billingSettingsComplete
     ? await Promise.all([
-        getDueRecurringInvoiceQueueSummary(selectedMode),
-        getDueFirstPaymentInvoiceQueueSummary(selectedMode),
-        getFailedRecurringInvoiceRetrySummary(selectedMode),
-        getFailedFirstPaymentInvoiceRetrySummary(selectedMode),
+        getDueRecurringInvoiceQueueSummary(selectedMode, tenantId),
+        getDueFirstPaymentInvoiceQueueSummary(selectedMode, tenantId),
+        getFailedRecurringInvoiceRetrySummary(selectedMode, tenantId),
+        getFailedFirstPaymentInvoiceRetrySummary(selectedMode, tenantId),
       ])
     : [
         {
@@ -844,48 +845,6 @@ export default async function SettingsPage({
         </CardContent>
       </Card>
       </DeveloperSettingsToggle>
-
-      <Card className="order-1">
-        <CardHeader>
-          <div className="flex items-start justify-between gap-4">
-            <CardTitle className="text-lg">Recurring invoice accounting</CardTitle>
-            <form>
-              <Button
-                type="submit"
-                variant="ghost"
-                size="icon-sm"
-                title="Refresh invoice templates and ledger accounts from e-Boekhouden."
-              >
-                <RefreshCw className="size-4" />
-                <span className="sr-only">Refresh e-Boekhouden billing data</span>
-              </Button>
-            </form>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-            e-Boekhouden will be the invoice and bookkeeping source. This app will
-            not ask e-Boekhouden to email invoices; customer invoice delivery is
-            handled by the app SMTP flow.
-          </div>
-
-          {billingDiscovery && "error" in billingDiscovery ? (
-            <Alert variant="destructive">
-              <AlertTitle>Discovery failed</AlertTitle>
-              <AlertDescription>{billingDiscovery.error}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          <BillingSettingsForm
-            defaultInvoiceTemplateId={billingSettings?.invoiceTemplateId}
-            defaultRevenueLedgerId={billingSettings?.revenueLedgerId}
-            hasSavedLedgerOutsideDiscovery={hasSavedLedgerOutsideDiscovery}
-            hasSavedTemplateOutsideDiscovery={hasSavedTemplateOutsideDiscovery}
-            invoiceTemplates={invoiceTemplates}
-            ledgers={ledgers}
-          />
-        </CardContent>
-      </Card>
     </div>
   );
 }

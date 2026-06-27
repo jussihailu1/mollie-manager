@@ -11,6 +11,7 @@ import { type FirstPaymentInvoiceActor } from "@/lib/eboekhouden/first-payment-i
 import { buildInvoiceRetryQueuedMetadata } from "@/lib/eboekhouden/invoice-retry-metadata";
 import { filterSafeFailedInvoiceRetryIds } from "@/lib/eboekhouden/invoice-retry-candidates";
 import { countSafeInvoiceRetryFailures } from "@/lib/eboekhouden/invoice-retry-summary";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 const DEFAULT_BATCH_SIZE = 25;
 
@@ -24,9 +25,14 @@ type FailedFirstPaymentInvoiceRetrySummary = {
   totalFailedCount: number;
 };
 
-function buildFailedFirstPaymentRetryFilter(mode: MollieMode) {
+async function resolveTenantId(tenantId?: string) {
+  return tenantId ?? (await getSingleTenantIdOrThrow());
+}
+
+function buildFailedFirstPaymentRetryFilter(mode: MollieMode, tenantId?: string) {
   return sql`
     p.mode = ${mode}
+    and p.tenant_id = ${tenantId}
     and p.payment_type = 'first'
     and p.invoice_state = 'invoice_failed'
     and p.eboekhouden_invoice_id is null
@@ -38,7 +44,9 @@ export async function queueRetryForSafeFailedFirstPaymentInvoicesBatch(input: {
   actor: FirstPaymentInvoiceActor;
   limit?: number;
   mode: MollieMode;
+  tenantId?: string;
 }): Promise<FailedFirstPaymentRetryBatchResult> {
+  const resolvedTenantId = await resolveTenantId(input.tenantId);
   const failedRows = await getDb().execute<{
     errorMessage: string | null;
     id: string;
@@ -47,7 +55,7 @@ export async function queueRetryForSafeFailedFirstPaymentInvoicesBatch(input: {
       p.id as id,
       (p.metadata ->> 'invoiceCreationError') as "errorMessage"
     from payments p
-    where ${buildFailedFirstPaymentRetryFilter(input.mode)}
+    where ${buildFailedFirstPaymentRetryFilter(input.mode, resolvedTenantId)}
     order by p.updated_at asc, p.created_at asc
     limit ${Math.max(1, input.limit ?? DEFAULT_BATCH_SIZE)}
   `);
@@ -73,7 +81,7 @@ export async function queueRetryForSafeFailedFirstPaymentInvoicesBatch(input: {
       )}::jsonb,
       updated_at = now()
     where id = any(${safePaymentIds}::text[])
-      and ${buildFailedFirstPaymentRetryFilter(input.mode)}
+      and ${buildFailedFirstPaymentRetryFilter(input.mode, resolvedTenantId)}
     returning id
   `);
 
@@ -110,7 +118,9 @@ export async function queueRetryForSafeFailedFirstPaymentInvoicesBatch(input: {
 
 export async function getFailedFirstPaymentInvoiceRetrySummary(
   mode: MollieMode,
+  tenantId?: string,
 ): Promise<FailedFirstPaymentInvoiceRetrySummary> {
+  const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await getDb().execute<{
     errorMessage: string | null;
     paymentId: string;
@@ -119,7 +129,8 @@ export async function getFailedFirstPaymentInvoiceRetrySummary(
       p.id as "paymentId",
       (p.metadata ->> 'invoiceCreationError') as "errorMessage"
     from payments p
-    where ${buildFailedFirstPaymentRetryFilter(mode)}
+    where p.tenant_id = ${resolvedTenantId}
+      and ${buildFailedFirstPaymentRetryFilter(mode, resolvedTenantId)}
   `);
 
   return countSafeInvoiceRetryFailures(result.rows);
@@ -129,7 +140,9 @@ export async function queueRetryForFailedFirstPaymentInvoicesBatch(input: {
   actor: FirstPaymentInvoiceActor;
   mode: MollieMode;
   paymentIds: string[];
+  tenantId?: string;
 }): Promise<FailedFirstPaymentRetryBatchResult> {
+  const resolvedTenantId = await resolveTenantId(input.tenantId);
   let queuedCount = 0;
   let skippedCount = 0;
 
@@ -143,7 +156,7 @@ export async function queueRetryForFailedFirstPaymentInvoicesBatch(input: {
         (p.metadata ->> 'invoiceCreationError') as "errorMessage"
       from payments p
       where p.id = ${paymentId}
-        and ${buildFailedFirstPaymentRetryFilter(input.mode)}
+        and ${buildFailedFirstPaymentRetryFilter(input.mode, resolvedTenantId)}
       limit 1
     `);
     const candidate = row.rows[0];
@@ -163,10 +176,10 @@ export async function queueRetryForFailedFirstPaymentInvoicesBatch(input: {
             actorEmail: input.actor.email,
             includeAllowedFailureCodes: true,
           }),
-        )}::jsonb,
-        updated_at = now()
-      where id = ${paymentId}
-        and ${buildFailedFirstPaymentRetryFilter(input.mode)}
+      )}::jsonb,
+      updated_at = now()
+    where id = ${paymentId}
+      and ${buildFailedFirstPaymentRetryFilter(input.mode, resolvedTenantId)}
       returning id
     `);
 

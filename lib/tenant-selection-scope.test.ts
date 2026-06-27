@@ -6,6 +6,10 @@ import { describe, it } from "node:test";
 describe("tenant selection wiring", () => {
   it("threads active tenant selection through layout, shell, and server action", () => {
     const tenantsSource = readFileSync(resolve("lib/tenants.ts"), "utf8");
+    const tenantContextSource = readFileSync(
+      resolve("lib/tenant-context.ts"),
+      "utf8",
+    );
     const actionSource = readFileSync(
       resolve("lib/tenant-selection-actions.ts"),
       "utf8",
@@ -26,10 +30,11 @@ describe("tenant selection wiring", () => {
     assert.match(actionSource, /setSelectedTenantAction/);
     assert.match(actionSource, /revalidatePath/);
     assert.match(actionSource, /redirect/);
-    assert.match(layoutSource, /tenantSelectionCookieName/);
-    assert.match(layoutSource, /resolveTenantSelectionForOperatorEmail/);
-    assert.match(layoutSource, /accessibleTenants=\{tenantSelection\.accessibleTenants\}/);
-    assert.match(layoutSource, /currentTenant=\{tenantSelection\.currentTenant\}/);
+    assert.match(tenantContextSource, /tenantSelectionCookieName/);
+    assert.match(tenantContextSource, /resolveTenantSelectionForOperatorEmail/);
+    assert.match(layoutSource, /getCurrentTenantSelectionForViewer/);
+    assert.match(layoutSource, /accessibleTenants/);
+    assert.match(layoutSource, /currentTenant/);
     assert.match(shellSource, /accessibleTenants/);
     assert.match(shellSource, /currentTenant/);
     assert.match(shellSource, /setSelectedTenantAction/);

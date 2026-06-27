@@ -136,6 +136,9 @@ Current bounded implementation slice:
   `subscription_operation_requests`, `payments`,
   `recurring_billing_schedules`, `payment_links`,
   `subscription_onboarding_consents`, and `customer_notes`
+- normal dashboard, notifications, customer activity, customer, payments, and
+  settings surfaces now resolve the active tenant from the signed-in operator's
+  selection cookie through the shared tenant-context helper
 - current slice also scopes the root customer/payment loaders and payment drawer
   API to explicit tenant context, while preserving single-tenant fail-closed
   behavior until membership/session tenant selection lands

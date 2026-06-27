@@ -7,6 +7,7 @@ import {
   buildFirstPaymentFilter,
 } from "@/lib/eboekhouden/first-payment-invoice-match-query";
 import { toInvoiceCount } from "@/lib/eboekhouden/invoice-flow-helpers";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 const TERMINAL_OR_IN_PROGRESS_STATES = [
   "invoice_creating",
@@ -25,18 +26,28 @@ type DueFirstPaymentInvoiceCandidate = {
   paymentId: string;
 };
 
+async function resolveTenantId(tenantId?: string) {
+  return tenantId ?? (await getSingleTenantIdOrThrow());
+}
+
 export async function listDueFirstPaymentInvoiceCandidates(
   mode: MollieMode,
   limit = 25,
+  tenantId?: string,
 ) {
+  const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await getDb().execute<DueFirstPaymentInvoiceCandidate>(sql`
-    ${buildDeterministicMatchCte({ mode })}
+    ${buildDeterministicMatchCte({ mode, tenantId: resolvedTenantId })}
     select
       p.id as "paymentId"
     from payments p
     inner join deterministic_matches dm on dm.payment_id = p.id
-    left join customers c on c.id = p.customer_id and c.mode = p.mode
-    where p.mode = ${mode}
+    left join customers c
+      on c.id = p.customer_id
+      and c.tenant_id = p.tenant_id
+      and c.mode = p.mode
+    where p.tenant_id = ${resolvedTenantId}
+      and p.mode = ${mode}
       and p.payment_type = 'first'
       and p.mollie_status = 'paid'
       and dm.consent_accepted_at is not null
@@ -107,21 +118,27 @@ export async function normalizeFirstPaymentInvoiceStates(input?: {
 
 export async function getDueFirstPaymentInvoiceQueueSummary(
   mode: MollieMode,
+  tenantId?: string,
 ): Promise<DueFirstPaymentInvoiceQueueSummary> {
+  const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await getDb().execute<{
     actionableCount: number | string;
     blockedCount: number | string;
     dueCount: number | string;
   }>(sql`
-    ${buildDeterministicMatchCte({ mode })}
+    ${buildDeterministicMatchCte({ mode, tenantId: resolvedTenantId })}
     select
       count(*) filter (where c.eboekhouden_relation_id is not null) as "actionableCount",
       count(*) filter (where c.eboekhouden_relation_id is null) as "blockedCount",
       count(*) as "dueCount"
     from payments p
     inner join deterministic_matches dm on dm.payment_id = p.id
-    left join customers c on c.id = p.customer_id and c.mode = p.mode
-    where p.mode = ${mode}
+    left join customers c
+      on c.id = p.customer_id
+      and c.tenant_id = p.tenant_id
+      and c.mode = p.mode
+    where p.tenant_id = ${resolvedTenantId}
+      and p.mode = ${mode}
       and p.payment_type = 'first'
       and p.mollie_status = 'paid'
       and dm.consent_accepted_at is not null

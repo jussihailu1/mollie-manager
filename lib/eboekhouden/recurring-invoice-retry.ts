@@ -10,6 +10,7 @@ import { buildInvoiceRetryQueuedMetadata } from "@/lib/eboekhouden/invoice-retry
 import { filterSafeFailedInvoiceRetryIds } from "@/lib/eboekhouden/invoice-retry-candidates";
 import { countSafeInvoiceRetryFailures } from "@/lib/eboekhouden/invoice-retry-summary";
 import { buildRecurringFailedInvoiceFilter } from "@/lib/eboekhouden/recurring-invoice-query";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 const DEFAULT_BATCH_SIZE = 25;
 
@@ -28,11 +29,17 @@ type FailedRecurringInvoiceRetrySummary = {
   totalFailedCount: number;
 };
 
+async function resolveTenantId(tenantId?: string) {
+  return tenantId ?? (await getSingleTenantIdOrThrow());
+}
+
 async function queueRetryForFailedRecurringInvoice(input: {
   actor: RecurringInvoiceActor;
   mode: "live" | "test";
   scheduleId: string;
+  tenantId?: string;
 }): Promise<"queued" | "skipped"> {
+  const resolvedTenantId = await resolveTenantId(input.tenantId);
   const candidate = await getDb().execute<{
     errorMessage: string | null;
     scheduleId: string;
@@ -42,7 +49,7 @@ async function queueRetryForFailedRecurringInvoice(input: {
       (rbs.metadata ->> 'invoiceCreationError') as "errorMessage"
     from recurring_billing_schedules rbs
     where rbs.id = ${input.scheduleId}
-      and ${buildRecurringFailedInvoiceFilter(input.mode)}
+      and ${buildRecurringFailedInvoiceFilter(input.mode, resolvedTenantId)}
     limit 1
   `);
   const row = candidate.rows[0];
@@ -63,7 +70,7 @@ async function queueRetryForFailedRecurringInvoice(input: {
       )}::jsonb,
       updated_at = now()
     where rbs.id = ${input.scheduleId}
-      and ${buildRecurringFailedInvoiceFilter(input.mode)}
+      and ${buildRecurringFailedInvoiceFilter(input.mode, resolvedTenantId)}
     returning id
   `);
 
@@ -94,7 +101,9 @@ async function queueRetryForFailedRecurringInvoice(input: {
 
 export async function getFailedRecurringInvoiceRetrySummary(
   mode: "live" | "test",
+  tenantId?: string,
 ): Promise<FailedRecurringInvoiceRetrySummary> {
+  const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await getDb().execute<{
     errorMessage: string | null;
     scheduleId: string;
@@ -103,7 +112,8 @@ export async function getFailedRecurringInvoiceRetrySummary(
       rbs.id as "scheduleId",
       (rbs.metadata ->> 'invoiceCreationError') as "errorMessage"
     from recurring_billing_schedules rbs
-    where ${buildRecurringFailedInvoiceFilter(mode)}
+    where rbs.tenant_id = ${resolvedTenantId}
+      and ${buildRecurringFailedInvoiceFilter(mode, resolvedTenantId)}
   `);
 
   return countSafeInvoiceRetryFailures(result.rows);
@@ -113,6 +123,7 @@ export async function queueRetryForFailedRecurringInvoicesBatch(input: {
   actor: RecurringInvoiceActor;
   mode: "live" | "test";
   scheduleIds: string[];
+  tenantId?: string;
 }): Promise<FailedRecurringRetryBatchResult> {
   let queuedCount = 0;
   let skippedCount = 0;
@@ -122,6 +133,7 @@ export async function queueRetryForFailedRecurringInvoicesBatch(input: {
       actor: input.actor,
       mode: input.mode,
       scheduleId,
+      tenantId: input.tenantId,
     });
 
     if (status === "queued") {
@@ -142,7 +154,9 @@ export async function queueRetryForSafeFailedRecurringInvoicesBatch(input: {
   actor: RecurringInvoiceActor;
   limit?: number;
   mode: "live" | "test";
+  tenantId?: string;
 }) {
+  const resolvedTenantId = await resolveTenantId(input.tenantId);
   const failedRows = await getDb().execute<{
     errorMessage: string | null;
     id: string;
@@ -151,7 +165,7 @@ export async function queueRetryForSafeFailedRecurringInvoicesBatch(input: {
       rbs.id as id,
       (rbs.metadata ->> 'invoiceCreationError') as "errorMessage"
     from recurring_billing_schedules rbs
-    where ${buildRecurringFailedInvoiceFilter(input.mode)}
+    where ${buildRecurringFailedInvoiceFilter(input.mode, resolvedTenantId)}
     order by rbs.updated_at asc, rbs.created_at asc
     limit ${Math.max(1, input.limit ?? DEFAULT_BATCH_SIZE)}
   `);
@@ -168,5 +182,6 @@ export async function queueRetryForSafeFailedRecurringInvoicesBatch(input: {
     actor: input.actor,
     mode: input.mode,
     scheduleIds: safeScheduleIds,
+    tenantId: resolvedTenantId,
   });
 }

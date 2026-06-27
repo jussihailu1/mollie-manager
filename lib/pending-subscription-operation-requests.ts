@@ -26,13 +26,17 @@ export type PendingSubscriptionOperationRequest = {
   title: string;
 };
 
+async function resolveTenantId(tenantId?: string) {
+  return tenantId ?? (await getSingleTenantIdOrThrow());
+}
+
 const listPendingSubscriptionOperationRequestsCached = cache(async (
   mode: MollieMode,
+  tenantId: string,
   customerId: string | null,
   limit: number,
 ) => {
   const normalizedLimit = Math.max(1, Math.min(Math.trunc(limit), 100));
-  const tenantId = await getSingleTenantIdOrThrow();
   const result = await getDb().execute<PendingSubscriptionOperationRequest>(sql`
     select
       sor.id,
@@ -94,9 +98,12 @@ export async function listPendingSubscriptionOperationRequests(options: {
   customerId?: string;
   limit?: number;
   mode: MollieMode;
+  tenantId?: string;
 }) {
+  const tenantId = await resolveTenantId(options.tenantId);
   return listPendingSubscriptionOperationRequestsCached(
     options.mode,
+    tenantId,
     options.customerId ?? null,
     options.limit ?? 25,
   );

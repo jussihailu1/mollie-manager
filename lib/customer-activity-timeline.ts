@@ -5,6 +5,7 @@ import { cache } from "react";
 
 import type { DashboardModeFilter } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
+import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export type CustomerActivityTimelineItemType =
   | "alert_opened"
@@ -46,10 +47,15 @@ function toModeParam(mode?: DashboardModeFilter) {
   return !mode || mode === "all" ? null : mode;
 }
 
+async function resolveTenantId(tenantId?: string) {
+  return tenantId ?? (await getSingleTenantIdOrThrow());
+}
+
 const listCustomerActivityTimelineByMode = cache(async (
   customerId: string,
   mode: DashboardModeFilter,
   limit: number,
+  tenantId: string,
 ) => {
   const modeParam = toModeParam(mode);
   const normalizedLimit = Math.max(1, Math.min(Math.trunc(limit), 100));
@@ -69,6 +75,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         concat('/customers?focus=', c.id) as href
       from customers c
       where c.id = ${customerId}
+        and c.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or c.mode = ${modeParam})
 
       union all
@@ -92,6 +99,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         concat('/customers?focus=', soc.customer_id) as href
       from subscription_onboarding_consents soc
       where soc.customer_id = ${customerId}
+        and soc.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or soc.mode = ${modeParam})
 
       union all
@@ -129,6 +137,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         concat('/payments?focus=', p.id) as href
       from payments p
       where p.customer_id = ${customerId}
+        and p.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
 
       union all
@@ -158,6 +167,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         concat('/payments?focus=', p.id) as href
       from payments p
       where p.customer_id = ${customerId}
+        and p.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
         and p.payment_type = 'first'
         and p.invoice_state <> 'not_applicable'
@@ -184,8 +194,12 @@ const listCustomerActivityTimelineByMode = cache(async (
         s.customer_id as "customerId",
         concat('/customers?focus=', s.customer_id) as href
       from recurring_billing_schedules rbs
-      inner join subscriptions s on s.id = rbs.subscription_id and s.mode = rbs.mode
+      inner join subscriptions s
+        on s.id = rbs.subscription_id
+        and s.tenant_id = rbs.tenant_id
+        and s.mode = rbs.mode
       where s.customer_id = ${customerId}
+        and rbs.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or rbs.mode = ${modeParam})
         and rbs.invoice_state <> 'pending_invoice'
 
@@ -240,8 +254,12 @@ const listCustomerActivityTimelineByMode = cache(async (
         s.customer_id as "customerId",
         concat('/customers?focus=', s.customer_id) as href
       from subscription_operation_requests sor
-      inner join subscriptions s on s.id = sor.subscription_id and s.mode = sor.mode
+      inner join subscriptions s
+        on s.id = sor.subscription_id
+        and s.tenant_id = sor.tenant_id
+        and s.mode = sor.mode
       where s.customer_id = ${customerId}
+        and sor.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or sor.mode = ${modeParam})
 
       union all
@@ -263,6 +281,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         concat('/customers?focus=', s.customer_id) as href
       from subscriptions s
       where s.customer_id = ${customerId}
+        and s.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
 
       union all
@@ -282,9 +301,9 @@ const listCustomerActivityTimelineByMode = cache(async (
           else concat('/customers?focus=', coalesce(a.customer_id, p.customer_id, s.customer_id))
         end as href
       from alerts a
-      left join payments p on p.id = a.payment_id
-      left join subscriptions s on s.id = a.subscription_id
-      left join customers ac on ac.id = a.customer_id
+      left join payments p on p.id = a.payment_id and p.tenant_id = ${tenantId}
+      left join subscriptions s on s.id = a.subscription_id and s.tenant_id = ${tenantId}
+      left join customers ac on ac.id = a.customer_id and ac.tenant_id = ${tenantId}
       where coalesce(a.customer_id, p.customer_id, s.customer_id) = ${customerId}
         and (
           ${modeParam}::mollie_mode is null
@@ -313,7 +332,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         coalesce(cpn.customer_id, p.customer_id) as "customerId",
         concat('/payments?focus=', cpn.payment_id) as href
       from customer_payment_notifications cpn
-      inner join payments p on p.id = cpn.payment_id
+      inner join payments p on p.id = cpn.payment_id and p.tenant_id = ${tenantId}
       where coalesce(cpn.customer_id, p.customer_id) = ${customerId}
         and (${modeParam}::mollie_mode is null or cpn.mode = ${modeParam})
 
@@ -338,6 +357,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         concat('/customers?focus=', cn.customer_id) as href
       from customer_notes cn
       where cn.customer_id = ${customerId}
+        and cn.tenant_id = ${tenantId}
         and cn.archived_at is null
         and (${modeParam}::mollie_mode is null or cn.mode = ${modeParam})
 
@@ -355,8 +375,14 @@ const listCustomerActivityTimelineByMode = cache(async (
         ${customerId} as "customerId",
         concat('/customers?focus=', ${customerId}) as href
       from audit_logs al
-      left join payments p on al.entity_type = 'payment' and p.id = al.entity_id
-      left join subscriptions s on al.entity_type = 'subscription' and s.id = al.entity_id
+      left join payments p
+        on al.entity_type = 'payment'
+        and p.id = al.entity_id
+        and p.tenant_id = ${tenantId}
+      left join subscriptions s
+        on al.entity_type = 'subscription'
+        and s.id = al.entity_id
+        and s.tenant_id = ${tenantId}
       where (
           (al.entity_type = 'customer' and al.entity_id = ${customerId})
           or p.customer_id = ${customerId}
@@ -376,10 +402,13 @@ export async function listCustomerActivityTimeline(options: {
   customerId: string;
   limit?: number;
   mode?: DashboardModeFilter;
+  tenantId?: string;
 }) {
+  const tenantId = await resolveTenantId(options.tenantId);
   return listCustomerActivityTimelineByMode(
     options.customerId,
     options.mode ?? "all",
     options.limit ?? 50,
+    tenantId,
   );
 }
