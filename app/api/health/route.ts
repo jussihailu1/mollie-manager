@@ -5,6 +5,7 @@ import { isMollieConfigured } from "@/lib/mollie/client";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { getViewerSession, hasAdvancedOperationsAccess } from "@/lib/auth/session";
 import { getReliabilityOpsSnapshot } from "@/lib/reliability/ops-snapshot";
+import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
 function resolveMode(request: Request): MollieMode {
   const mode = new URL(request.url).searchParams.get("mode");
@@ -15,24 +16,39 @@ function resolveMode(request: Request): MollieMode {
   return env.MOLLIE_DEFAULT_MODE;
 }
 
-async function isDiagnosticsAuthorized(request: Request) {
+async function resolveDiagnosticsContext(request: Request) {
   const secrets = getAcceptedCronSecrets({
     cronSecret: process.env.CRON_SECRET ?? null,
     invoiceCronSharedSecret: env.INVOICE_CRON_SHARED_SECRET,
   });
 
   if (isBearerAuthorized(request.headers.get("authorization"), secrets)) {
-    return true;
+    return {
+      authorized: true,
+      tenantId: null,
+    };
   }
 
   const session = await getViewerSession();
-  return hasAdvancedOperationsAccess(session);
+  if (!hasAdvancedOperationsAccess(session)) {
+    return {
+      authorized: false,
+      tenantId: null,
+    };
+  }
+
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
+
+  return {
+    authorized: true,
+    tenantId: tenantSelection.currentTenant.id,
+  };
 }
 
 export async function GET(request: Request) {
-  const diagnosticsAuthorized = await isDiagnosticsAuthorized(request);
+  const diagnosticsContext = await resolveDiagnosticsContext(request);
 
-  if (!diagnosticsAuthorized) {
+  if (!diagnosticsContext.authorized) {
     return Response.json({
       app: "Kify",
       status: "ok",
@@ -44,7 +60,7 @@ export async function GET(request: Request) {
   const setupStatus = getSetupStatus();
   const [database, opsSnapshot] = await Promise.all([
     checkDatabaseConnection(),
-    getReliabilityOpsSnapshot({ mode }),
+    getReliabilityOpsSnapshot({ mode, tenantId: diagnosticsContext.tenantId ?? undefined }),
   ]);
 
   return Response.json({

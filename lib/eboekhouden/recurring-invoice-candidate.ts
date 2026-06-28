@@ -13,6 +13,7 @@ export type ScheduledInvoiceCandidate = {
   scheduleId: string;
   subscriptionDescription: string;
   subscriptionId: string;
+  tenantId: string;
 };
 
 export async function getScheduledInvoiceCandidate(scheduleId: string) {
@@ -21,6 +22,7 @@ export async function getScheduledInvoiceCandidate(scheduleId: string) {
       rbs.id as "scheduleId",
       rbs.subscription_id as "subscriptionId",
       rbs.mode,
+      rbs.tenant_id as "tenantId",
       rbs.invoice_send_due_date::text as "invoiceSendDueDate",
       rbs.planned_collection_date::text as "plannedCollectionDate",
       rbs.amount_value::text as "amountValue",

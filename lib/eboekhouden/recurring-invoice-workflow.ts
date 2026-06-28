@@ -130,6 +130,7 @@ export async function createEboekhoudenInvoiceForSchedule(
         mode: candidate.mode,
         plannedCollectionDate: candidate.plannedCollectionDate,
         subscriptionId: candidate.subscriptionId,
+        tenantId: candidate.tenantId,
       });
 
       return {
@@ -178,6 +179,7 @@ export async function createEboekhoudenInvoiceForSchedule(
       mode: candidate.mode,
       plannedCollectionDate: candidate.plannedCollectionDate,
       subscriptionId: candidate.subscriptionId,
+      tenantId: candidate.tenantId,
     });
 
     return {
@@ -213,6 +215,7 @@ export async function createEboekhoudenInvoiceForSchedule(
           mode: candidate.mode,
           plannedCollectionDate: candidate.plannedCollectionDate,
           subscriptionId: candidate.subscriptionId,
+          tenantId: candidate.tenantId,
         });
 
         return {

@@ -25,6 +25,7 @@ export type RecurringInvoicePersistenceCandidate = {
   plannedCollectionDate: string;
   scheduleId: string;
   subscriptionId: string;
+  tenantId: string;
 };
 
 type AlertResult = {
@@ -228,6 +229,7 @@ export async function storeRecurringInvoiceCreationFailure(input: {
         `Planned collection date: ${input.candidate.plannedCollectionDate}`,
         `Error: ${errorMessage}`,
       ].join("\n"),
+      tenantId: input.candidate.tenantId,
       title: "Recurring invoice creation failed",
     });
   }

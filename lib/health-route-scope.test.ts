@@ -7,11 +7,12 @@ describe("health route scope", () => {
   it("keeps diagnostics behind advanced operator or bearer authorization", () => {
     const source = readFileSync(resolve("app/api/health/route.ts"), "utf8");
 
-    assert.match(source, /isDiagnosticsAuthorized/);
+    assert.match(source, /resolveDiagnosticsContext/);
     assert.match(source, /getViewerSession/);
     assert.match(source, /hasAdvancedOperationsAccess/);
-    assert.match(source, /const diagnosticsAuthorized = await isDiagnosticsAuthorized\(request\)/);
-    assert.match(source, /if \(!diagnosticsAuthorized\)/);
+    assert.match(source, /getCurrentTenantSelectionForViewer/);
+    assert.match(source, /const diagnosticsContext = await resolveDiagnosticsContext\(request\)/);
+    assert.match(source, /if \(!diagnosticsContext\.authorized\)/);
   });
 
   it("keeps the public response minimal", () => {
@@ -19,7 +20,7 @@ describe("health route scope", () => {
 
     assert.match(
       source,
-      /if \(!diagnosticsAuthorized\) \{\s*return Response\.json\(\{\s*app: "Kify",\s*status: "ok",\s*timestamp:/,
+      /if \(!diagnosticsContext\.authorized\) \{\s*return Response\.json\(\{\s*app: "Kify",\s*status: "ok",\s*timestamp:/,
     );
   });
 });

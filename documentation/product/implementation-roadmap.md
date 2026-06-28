@@ -171,6 +171,12 @@ Current bounded implementation slice:
   alert delivery paths
 - invoice delivery retry and recurring recovery alert emails now carry tenant
   ids from tenant-scoped candidate rows
+- recurring invoice schedule candidates now carry tenant ids into invoice
+  creation and recovery alert delivery
+- recurring invoice creation failure alert delivery now carries tenant ids
+  from tenant-scoped schedule candidates
+- session-authenticated `/api/health` diagnostics now resolve the active tenant
+  before reading the shared reliability ops snapshot
 - webhook intake now resolves managed local tenant context before syncing
   Mollie resources
 - replay and repair operator actions now require the current tenant when

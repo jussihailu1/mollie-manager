@@ -109,6 +109,8 @@ describe("ops surface hardening", () => {
 
     assert.match(settingsSource, /getReliabilityOpsSnapshot/);
     assert.match(healthSource, /getReliabilityOpsSnapshot/);
+    assert.match(healthSource, /getCurrentTenantSelectionForViewer/);
+    assert.match(healthSource, /tenantId: diagnosticsContext\.tenantId/);
     assert.match(healthSource, /opsSnapshot/);
   });
 
