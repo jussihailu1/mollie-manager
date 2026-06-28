@@ -24,4 +24,12 @@ describe("reliability data tenant scope", () => {
     assert.match(source, /or s\.id is not null/);
     assert.match(source, /await resolveTenantId\(options\?\.tenantId\)/);
   });
+
+  it("keeps recent audit activity tied to tenant-linked alert, webhook, and cron rows", () => {
+    assert.match(source, /entity_type = 'alert'/);
+    assert.match(source, /entity_type = 'webhook_event'/);
+    assert.match(source, /entity_type = 'tenant_recurring_billing_cron'/);
+    assert.match(source, /webhook_events w/);
+    assert.match(source, /alerts a/);
+  });
 });

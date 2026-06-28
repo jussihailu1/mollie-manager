@@ -161,6 +161,8 @@ Current bounded implementation slice:
   invoice create/recovery/retry automation stays tenant-scoped
 - recurring-invoice cron heartbeat metrics now read the tenant cron audit
   entity so settings snapshots stay aligned with tenant-local runs
+- recent reliability audit activity now includes tenant-linked alert,
+  webhook-event, and tenant cron rows
 - webhook intake now resolves managed local tenant context before syncing
   Mollie resources
 - replay and repair operator actions now require the current tenant when

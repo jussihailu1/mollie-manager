@@ -434,6 +434,63 @@ const listRecentAuditActivityByMode = cache(async (
               and cn.id = audit_logs.entity_id
               and cn.tenant_id = ${tenantId}
           )
+          or exists (
+            select 1
+            from alerts a
+            left join payments p
+              on p.id = a.payment_id
+              and p.tenant_id = ${tenantId}
+            left join subscriptions s
+              on s.id = a.subscription_id
+              and s.tenant_id = ${tenantId}
+            left join customers customer
+              on customer.id = a.customer_id
+              and customer.tenant_id = ${tenantId}
+            left join customers fallback_customer
+              on fallback_customer.id = coalesce(p.customer_id, s.customer_id)
+              and fallback_customer.tenant_id = ${tenantId}
+            where audit_logs.entity_type = 'alert'
+              and a.id = audit_logs.entity_id
+              and (
+                customer.id is not null
+                or fallback_customer.id is not null
+                or p.id is not null
+                or s.id is not null
+              )
+          )
+          or exists (
+            select 1
+            from webhook_events w
+            where audit_logs.entity_type = 'webhook_event'
+              and w.id = audit_logs.entity_id
+              and (
+                exists (
+                  select 1
+                  from payments p
+                  where w.resource_id = p.mollie_payment_id
+                    and p.tenant_id = ${tenantId}
+                )
+                or exists (
+                  select 1
+                  from subscriptions s
+                  where w.resource_id = s.mollie_subscription_id
+                    and s.tenant_id = ${tenantId}
+                )
+                or exists (
+                  select 1
+                  from payment_links pl
+                  where w.resource_id = pl.mollie_payment_link_id
+                    and pl.tenant_id = ${tenantId}
+                )
+              )
+          )
+          or exists (
+            select 1
+            from tenants t
+            where audit_logs.entity_type = 'tenant_recurring_billing_cron'
+              and t.id = audit_logs.entity_id
+              and t.id = ${tenantId}
+          )
         )
       order by created_at desc
       limit 8
