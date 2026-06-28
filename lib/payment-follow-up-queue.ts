@@ -79,6 +79,12 @@ export async function listPaymentFollowUpQueue(options: {
             select 1
             from alerts candidate_alert
             where candidate_alert.payment_id = p.id
+              and exists (
+                select 1
+                from payments p2
+                where p2.id = candidate_alert.payment_id
+                  and p2.tenant_id = ${tenantId}
+              )
               and candidate_alert.payload ->> 'notificationPolicy'
                 = 'failed_payment_customer_notification'
           )
@@ -109,7 +115,13 @@ export async function listPaymentFollowUpQueue(options: {
         ) as position
       from candidate_payments candidate
       inner join alerts a on a.payment_id = candidate.id
-      where a.payload ->> 'notificationPolicy'
+      where exists (
+        select 1
+        from payments p2
+        where p2.id = a.payment_id
+          and p2.tenant_id = ${tenantId}
+      )
+        and a.payload ->> 'notificationPolicy'
         = 'failed_payment_customer_notification'
     )
     select

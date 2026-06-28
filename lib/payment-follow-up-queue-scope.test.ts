@@ -21,6 +21,7 @@ describe("payment follow-up queue scope", () => {
     assert.match(querySource, /cpn\.mode = p\.mode/);
     assert.match(querySource, /row_number\(\) over/);
     assert.match(querySource, /follow_up_alert\.position = 1/);
+    assert.match(querySource, /p2\.tenant_id = \$\{tenantId\}/);
     assert.match(querySource, /failed_payment_customer_notification/g);
   });
 

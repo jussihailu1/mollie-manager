@@ -165,6 +165,8 @@ Current bounded implementation slice:
   webhook-event, and tenant cron rows
 - Needs Attention webhook items now require tenant-linked resources before
   surfacing failed webhook rows
+- payment follow-up queue alert joins now verify tenant-owned payments before
+  showing queued alert evidence
 - webhook intake now resolves managed local tenant context before syncing
   Mollie resources
 - replay and repair operator actions now require the current tenant when
