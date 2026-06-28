@@ -394,8 +394,8 @@ export async function repairReliabilityTargetAction(formData: FormData) {
   }
 
   const session = await requireAdvancedOperationsSession();
-  const selectedMode = await getSelectedMollieMode();
   const tenantSelection = await getCurrentTenantSelectionForViewer();
+  const selectedMode = await getSelectedMollieMode();
 
   try {
     const result = await repairReliabilityTarget({
@@ -442,6 +442,7 @@ export async function sendTestAlertAction(formData: FormData) {
   }
 
   const session = await requireAdvancedOperationsSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
 
   if (!notificationsAreConfigured()) {
@@ -489,6 +490,7 @@ export async function sendTestAlertAction(formData: FormData) {
   const delivery = await deliverAlertEmail({
     alertId,
     message,
+    tenantId: tenantSelection.currentTenant.id,
     title,
   });
   const delivered = delivery.delivered;

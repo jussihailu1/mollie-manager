@@ -127,6 +127,7 @@ export async function syncPaymentByMollieId(
     localPaymentId,
     payment,
     subscriptionId: localSubscription?.id ?? null,
+    tenantId: options?.tenantId ?? localCustomer?.tenantId ?? localSubscription?.tenantId ?? undefined,
   });
   await runFailedPaymentCustomerNotificationForSyncedPayment({
     localPaymentId,

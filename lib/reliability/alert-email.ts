@@ -37,6 +37,7 @@ const customerBusinessNameExpression = sql<string | null>`
 
 export async function getAlertEmailContext(
   alertId: string,
+  tenantId?: string,
   client?: DbClient,
 ): Promise<AlertEmailContext | null> {
   const db = client ?? getDb();
@@ -61,11 +62,26 @@ export async function getAlertEmailContext(
       coalesce(customer.email, fallback_customer.email) as "customerEmail",
       ${alertModeExpression} as "mode"
     from alerts a
-    left join payments p on p.id = a.payment_id
-    left join subscriptions s on s.id = a.subscription_id
-    left join customers customer on customer.id = a.customer_id
-    left join customers fallback_customer on fallback_customer.id = coalesce(p.customer_id, s.customer_id)
+    left join payments p
+      on p.id = a.payment_id
+      and (${tenantId ?? null}::text is null or p.tenant_id = ${tenantId ?? null})
+    left join subscriptions s
+      on s.id = a.subscription_id
+      and (${tenantId ?? null}::text is null or s.tenant_id = ${tenantId ?? null})
+    left join customers customer
+      on customer.id = a.customer_id
+      and (${tenantId ?? null}::text is null or customer.tenant_id = ${tenantId ?? null})
+    left join customers fallback_customer
+      on fallback_customer.id = coalesce(p.customer_id, s.customer_id)
+      and (${tenantId ?? null}::text is null or fallback_customer.tenant_id = ${tenantId ?? null})
     where a.id = ${alertId}
+      and (
+        ${tenantId ?? null}::text is null
+        or customer.id is not null
+        or fallback_customer.id is not null
+        or p.id is not null
+        or s.id is not null
+      )
     limit 1
   `);
 
@@ -75,9 +91,10 @@ export async function getAlertEmailContext(
 export async function composeAlertEmail(input: {
   alertId: string;
   message: string;
+  tenantId?: string;
   title: string;
 }) {
-  const context = await getAlertEmailContext(input.alertId);
+  const context = await getAlertEmailContext(input.alertId, input.tenantId);
 
   if (!context) {
     return buildFallbackAlertEmailContent({

@@ -167,6 +167,8 @@ Current bounded implementation slice:
   surfacing failed webhook rows
 - payment follow-up queue alert joins now verify tenant-owned payments before
   showing queued alert evidence
+- alert email lookups now verify tenant-owned linked entities for tenant-backed
+  alert delivery paths
 - webhook intake now resolves managed local tenant context before syncing
   Mollie resources
 - replay and repair operator actions now require the current tenant when

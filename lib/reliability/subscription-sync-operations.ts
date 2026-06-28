@@ -101,6 +101,7 @@ export async function syncSubscriptionByLocalId(
       localPaymentId: persistedPayment.localPaymentId,
       payment: persistedPayment.payment,
       subscriptionId: localSubscription.id,
+      tenantId: localSubscription.tenantId,
     });
   }
 
@@ -120,6 +121,7 @@ export async function syncSubscriptionByLocalId(
     customerId: localSubscription.customerId,
     localStatus: mapSubscriptionLifecycle(subscription.status),
     localSubscriptionId: resolvedSubscriptionId,
+    tenantId: localSubscription.tenantId,
   });
 
   return {

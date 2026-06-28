@@ -494,6 +494,7 @@ export async function attemptSubscriptionActivation(input: {
         alertId: alert.id,
         message:
           "A paid onboarding flow could not be promoted into a subscription. Open Mollie Manager to inspect the customer and retry activation.",
+        tenantId,
         title: "Subscription activation failed",
       });
     }
