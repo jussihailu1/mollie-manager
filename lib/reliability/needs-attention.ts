@@ -504,6 +504,26 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
       where
         (${modeParam}::mollie_mode is null or w.mode = ${modeParam})
         and w.processing_status = 'failed'
+        and (
+          exists (
+            select 1
+            from payments p
+            where w.resource_id = p.mollie_payment_id
+              and p.tenant_id = ${tenantId}
+          )
+          or exists (
+            select 1
+            from subscriptions s
+            where w.resource_id = s.mollie_subscription_id
+              and s.tenant_id = ${tenantId}
+          )
+          or exists (
+            select 1
+            from payment_links pl
+            where w.resource_id = pl.mollie_payment_link_id
+              and pl.tenant_id = ${tenantId}
+          )
+        )
     ) items
     order by
       case severity

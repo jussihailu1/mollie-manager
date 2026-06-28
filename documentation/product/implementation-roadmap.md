@@ -163,6 +163,8 @@ Current bounded implementation slice:
   entity so settings snapshots stay aligned with tenant-local runs
 - recent reliability audit activity now includes tenant-linked alert,
   webhook-event, and tenant cron rows
+- Needs Attention webhook items now require tenant-linked resources before
+  surfacing failed webhook rows
 - webhook intake now resolves managed local tenant context before syncing
   Mollie resources
 - replay and repair operator actions now require the current tenant when

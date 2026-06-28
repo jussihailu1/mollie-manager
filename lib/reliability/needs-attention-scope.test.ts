@@ -48,6 +48,9 @@ test("needs attention query exposes stable typed sources without raw webhook pay
   assert.match(source, /invoiceDeliveryStatus/);
   assert.match(source, /last_synced_at/);
   assert.match(source, /eboekhouden_link_status/);
+  assert.match(source, /w\.resource_id = p\.mollie_payment_id/);
+  assert.match(source, /w\.resource_id = s\.mollie_subscription_id/);
+  assert.match(source, /w\.resource_id = pl\.mollie_payment_link_id/);
   assert.doesNotMatch(source, /\bw\.payload\b/);
   assert.doesNotMatch(source, /secret|token|authorization/i);
 });
