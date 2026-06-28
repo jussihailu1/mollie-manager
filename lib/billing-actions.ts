@@ -19,6 +19,7 @@ import {
   createDueRecurringInvoicesBatch,
   queueRetryForFailedRecurringInvoicesBatch,
 } from "@/lib/eboekhouden/recurring-invoices";
+import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
 const billingSettingsSchema = z.object({
   invoiceEmailDeliveryMode: z
@@ -111,13 +112,14 @@ export async function updateBillingSettingsAction(formData: FormData) {
   }
 
   const session = await requireViewerSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
 
   try {
     const settings = await updateTenantBillingSettings({
       invoiceEmailDeliveryMode: parsed.data.invoiceEmailDeliveryMode,
       invoiceTemplateId: parsed.data.invoiceTemplateId,
       revenueLedgerId: parsed.data.revenueLedgerId,
-    });
+    }, tenantSelection.currentTenant.id);
 
     await writeAuditLog(
       {
@@ -128,7 +130,7 @@ export async function updateBillingSettingsAction(formData: FormData) {
           revenueLedgerId: settings?.revenueLedgerId ?? null,
           vatCode: settings?.vatCode ?? null,
         },
-        entityId: "default",
+        entityId: tenantSelection.currentTenant.id,
         entityType: "tenant_billing_settings",
         outcome: "success",
         summary: "Updated tenant billing settings for recurring invoices.",
@@ -164,6 +166,7 @@ export async function createDueRecurringInvoicesAction(formData: FormData) {
   }
 
   const session = await requireAdvancedOperationsSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
 
   try {
@@ -173,6 +176,7 @@ export async function createDueRecurringInvoicesAction(formData: FormData) {
         kind: "user",
       },
       mode: selectedMode,
+      tenantId: tenantSelection.currentTenant.id,
     });
 
     await writeAuditLog(
@@ -247,6 +251,7 @@ export async function createDueFirstPaymentInvoicesAction(formData: FormData) {
   }
 
   const session = await requireAdvancedOperationsSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
 
   try {
@@ -256,6 +261,7 @@ export async function createDueFirstPaymentInvoicesAction(formData: FormData) {
         kind: "user",
       },
       mode: selectedMode,
+      tenantId: tenantSelection.currentTenant.id,
     });
 
     await writeAuditLog(
@@ -328,6 +334,7 @@ export async function queueFailedRecurringInvoiceRetriesAction(formData: FormDat
   }
 
   const session = await requireAdvancedOperationsSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
 
   try {
@@ -338,6 +345,7 @@ export async function queueFailedRecurringInvoiceRetriesAction(formData: FormDat
       },
       mode: selectedMode,
       scheduleIds: parsed.data.scheduleIds,
+      tenantId: tenantSelection.currentTenant.id,
     });
 
     await writeAuditLog(
@@ -402,6 +410,7 @@ export async function queueFailedFirstPaymentInvoiceRetriesAction(formData: Form
   }
 
   const session = await requireAdvancedOperationsSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
 
   try {
@@ -412,6 +421,7 @@ export async function queueFailedFirstPaymentInvoiceRetriesAction(formData: Form
       },
       mode: selectedMode,
       paymentIds: parsed.data.paymentIds,
+      tenantId: tenantSelection.currentTenant.id,
     });
 
     await writeAuditLog(

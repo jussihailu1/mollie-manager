@@ -150,6 +150,9 @@ Current bounded implementation slice:
 - tenant-selection shell plumbing now persists the active tenant in a cookie,
   resolves it from the operator's accessible tenant list, and exposes a manual
   switcher in the dashboard menu
+- billing settings and advanced invoice automation actions now resolve the
+  current tenant before mutating tenant-owned billing state or running batch
+  invoice actions
 - subscription operation request actions now resolve the current tenant before
   recording, withdrawing, transitioning, or syncing subscription request state
 - recurring-invoice cron fan-out now iterates accessible tenants explicitly so

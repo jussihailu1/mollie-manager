@@ -81,6 +81,9 @@ Implemented so far:
 - settings now also surfaces a targeted repair form for single customer, payment, or subscription resyncs
 - settings replay and targeted repair actions now resolve the current tenant
   before touching webhook or repair state
+- billing settings and advanced invoice automation actions now resolve the
+  current tenant before mutating tenant-owned billing state or running batch
+  invoice actions
 - subscription operation request actions now resolve the current tenant before
   recording, withdrawing, transitioning, or syncing subscription request state
 - recurring-invoice cron now fans out by tenant and threads tenant ids through
