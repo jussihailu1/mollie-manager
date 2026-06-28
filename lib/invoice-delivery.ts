@@ -38,6 +38,7 @@ type DeliveryInput = {
   mode: MollieMode;
   plannedCollectionDate?: string | null;
   subscriptionId: string | null;
+  tenantId?: string;
 };
 
 type RetryDeliveryCandidate = Omit<DeliveryInput, "actor">;
@@ -69,6 +70,7 @@ type FirstPaymentDeliveryCandidate = {
   mode: MollieMode;
   paymentId: string;
   subscriptionId: string | null;
+  tenantId: string;
 };
 
 type RecurringDeliveryCandidate = {
@@ -81,6 +83,7 @@ type RecurringDeliveryCandidate = {
   plannedCollectionDate: string;
   scheduleId: string;
   subscriptionId: string | null;
+  tenantId: string;
 };
 
 function serializeErrorMessage(error: unknown) {
@@ -363,10 +366,11 @@ async function storeDeliveryFailure(input: DeliveryInput & { errorMessage: strin
         "Invoice email delivery failed after invoice creation.",
         "",
         `Entity: ${input.entityId}`,
-        `Original recipient: ${input.customerEmail ?? "unknown"}`,
-        `Override recipient: ${env.INVOICE_EMAIL_OVERRIDE_TO ?? "none"}`,
-        `Error: ${input.errorMessage}`,
-      ].join("\n"),
+          `Original recipient: ${input.customerEmail ?? "unknown"}`,
+          `Override recipient: ${env.INVOICE_EMAIL_OVERRIDE_TO ?? "none"}`,
+          `Error: ${input.errorMessage}`,
+        ].join("\n"),
+      tenantId: input.tenantId,
       title: deliveryFailureAlertTitle({
         entityId: input.entityId,
         invoiceType: input.invoiceType,
@@ -416,6 +420,7 @@ async function storeDeliveryFailure(input: DeliveryInput & { errorMessage: strin
         `Override recipient: ${env.INVOICE_EMAIL_OVERRIDE_TO ?? "none"}`,
         `Error: ${input.errorMessage}`,
       ].join("\n"),
+        tenantId: input.tenantId,
         title: deliveryFailureAlertTitle({
           entityId: input.entityId,
           invoiceType: input.invoiceType,
@@ -517,6 +522,7 @@ async function listCreatedUnsentFirstPaymentInvoiceDeliveries(
     select
       p.id as "paymentId",
       p.mode,
+      p.tenant_id as "tenantId",
       p.customer_id as "customerId",
       p.subscription_id as "subscriptionId",
       p.eboekhouden_invoice_id as "eboekhoudenInvoiceId",
@@ -566,6 +572,7 @@ async function listCreatedUnsentFirstPaymentInvoiceDeliveries(
     entityId: row.paymentId,
     invoiceType: "first_payment",
     subscriptionId: row.subscriptionId,
+    tenantId: row.tenantId,
   }));
 }
 
@@ -578,6 +585,7 @@ async function listCreatedUnsentRecurringInvoiceDeliveries(
     select
       rbs.id as "scheduleId",
       rbs.mode,
+      rbs.tenant_id as "tenantId",
       rbs.subscription_id as "subscriptionId",
       rbs.planned_collection_date::text as "plannedCollectionDate",
       rbs.eboekhouden_invoice_id as "eboekhoudenInvoiceId",
@@ -628,6 +636,7 @@ async function listCreatedUnsentRecurringInvoiceDeliveries(
     entityId: row.scheduleId,
     invoiceType: "recurring",
     subscriptionId: row.subscriptionId,
+    tenantId: row.tenantId,
   }));
 }
 

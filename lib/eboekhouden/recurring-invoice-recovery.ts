@@ -22,6 +22,7 @@ export type RecurringInvoiceRecoveryCandidate = {
   plannedCollectionDate: string;
   scheduleId: string;
   subscriptionId: string;
+  tenantId: string;
 };
 
 export async function listFailedRecurringRecoveryCandidates(
@@ -34,6 +35,7 @@ export async function listFailedRecurringRecoveryCandidates(
     select
       rbs.id as "scheduleId",
       rbs.mode,
+      rbs.tenant_id as "tenantId",
       rbs.invoice_send_due_date::text as "invoiceSendDueDate",
       rbs.planned_collection_date::text as "plannedCollectionDate",
       rbs.subscription_id as "subscriptionId",
@@ -141,6 +143,7 @@ export async function storeRecoveredFailedInvoiceSuccess(input: {
         `Subscription: ${input.candidate.subscriptionId}`,
         `Error: reconciled existing invoice`,
       ].join("\n"),
+      tenantId: input.candidate.tenantId,
       title: "Recurring invoice recovered",
     });
   }

@@ -186,6 +186,7 @@ export async function recoverFailedRecurringInvoicesBatch(input: {
       mode: candidate.mode,
       plannedCollectionDate: candidate.plannedCollectionDate,
       subscriptionId: candidate.subscriptionId,
+      tenantId: candidate.tenantId,
     });
   }
 

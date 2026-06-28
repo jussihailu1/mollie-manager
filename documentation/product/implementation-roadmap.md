@@ -169,6 +169,8 @@ Current bounded implementation slice:
   showing queued alert evidence
 - alert email lookups now verify tenant-owned linked entities for tenant-backed
   alert delivery paths
+- invoice delivery retry and recurring recovery alert emails now carry tenant
+  ids from tenant-scoped candidate rows
 - webhook intake now resolves managed local tenant context before syncing
   Mollie resources
 - replay and repair operator actions now require the current tenant when
