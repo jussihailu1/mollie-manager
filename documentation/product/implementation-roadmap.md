@@ -171,6 +171,8 @@ Current bounded implementation slice:
   Mollie resources
 - replay and repair operator actions now require the current tenant when
   replaying failed webhooks or running targeted repair actions
+- repair candidate alert lookups now verify tenant-owned payments,
+  subscriptions, and customers before surfacing repair priority
 - alerts, audit logs, replay/repair/cron follow-up, and tenant-owned provider
   credentials remain deferred follow-up inside Phase 0.5
 

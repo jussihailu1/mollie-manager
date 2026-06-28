@@ -223,10 +223,14 @@ async function listCustomerCandidates(
             select 1
             from alerts a
             left join payments p on p.id = a.payment_id
+              and p.tenant_id = ${tenantId}
             left join subscriptions s on s.id = a.subscription_id
+              and s.tenant_id = ${tenantId}
+            left join customers alert_customer on alert_customer.id = a.customer_id
+              and alert_customer.tenant_id = ${tenantId}
             where a.status = 'open'
               and (
-                a.customer_id = c.id
+                alert_customer.id = c.id
                 or p.customer_id = c.id
                 or s.customer_id = c.id
               )
@@ -246,10 +250,14 @@ async function listCustomerCandidates(
             select 1
             from alerts a
             left join payments p on p.id = a.payment_id
+              and p.tenant_id = ${tenantId}
             left join subscriptions s on s.id = a.subscription_id
+              and s.tenant_id = ${tenantId}
+            left join customers alert_customer on alert_customer.id = a.customer_id
+              and alert_customer.tenant_id = ${tenantId}
             where a.status = 'open'
               and (
-                a.customer_id = c.id
+                alert_customer.id = c.id
                 or p.customer_id = c.id
                 or s.customer_id = c.id
               )
@@ -288,7 +296,11 @@ async function listPaymentCandidates(
           when exists (
             select 1
             from alerts a
-            where a.payment_id = p.id and a.status = 'open'
+            left join payments alert_payment on alert_payment.id = a.payment_id
+              and alert_payment.tenant_id = ${tenantId}
+            where a.payment_id = p.id
+              and a.status = 'open'
+              and alert_payment.id is not null
           ) then 0
           else 2
         end as priority
@@ -308,7 +320,11 @@ async function listPaymentCandidates(
           or exists (
             select 1
             from alerts a
-            where a.payment_id = p.id and a.status = 'open'
+            left join payments alert_payment on alert_payment.id = a.payment_id
+              and alert_payment.tenant_id = ${tenantId}
+            where a.payment_id = p.id
+              and a.status = 'open'
+              and alert_payment.id is not null
           )
         )
       order by
@@ -340,7 +356,11 @@ async function listSubscriptionCandidates(
           when exists (
             select 1
             from alerts a
-            where a.subscription_id = s.id and a.status = 'open'
+            left join subscriptions alert_subscription on alert_subscription.id = a.subscription_id
+              and alert_subscription.tenant_id = ${tenantId}
+            where a.subscription_id = s.id
+              and a.status = 'open'
+              and alert_subscription.id is not null
           ) then 0
           else 2
         end as priority
@@ -355,7 +375,11 @@ async function listSubscriptionCandidates(
           or exists (
             select 1
             from alerts a
-            where a.subscription_id = s.id and a.status = 'open'
+            left join subscriptions alert_subscription on alert_subscription.id = a.subscription_id
+              and alert_subscription.tenant_id = ${tenantId}
+            where a.subscription_id = s.id
+              and a.status = 'open'
+              and alert_subscription.id is not null
           )
         )
       order by
