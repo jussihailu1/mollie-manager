@@ -177,6 +177,7 @@ Current bounded implementation slice:
   from tenant-scoped schedule candidates
 - session-authenticated `/api/health` diagnostics now resolve the active tenant
   before reading the shared reliability ops snapshot
+- e-Boekhouden relation detail lookups now require active tenant context
 - webhook intake now resolves managed local tenant context before syncing
   Mollie resources
 - replay and repair operator actions now require the current tenant when
