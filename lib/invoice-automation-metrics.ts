@@ -125,19 +125,23 @@ export async function getInvoiceAutomationCronHeartbeat(
     select
       max(al.created_at) filter (
         where al.action = 'recurring_invoice.cron_batch_create'
+          and al.entity_type = 'tenant_recurring_billing_cron'
       ) as "lastCronRunAt",
       max(al.created_at) filter (
         where al.action = 'recurring_invoice.cron_batch_create'
+          and al.entity_type = 'tenant_recurring_billing_cron'
           and al.outcome = 'success'
       ) as "lastCronSuccessAt",
       max(al.created_at) filter (
         where al.action = 'recurring_invoice.cron_batch_create'
+          and al.entity_type = 'tenant_recurring_billing_cron'
           and al.outcome = 'failure'
       ) as "lastCronFailureAt",
       (
       select al2.outcome
       from audit_logs al2
       where al2.mode = ${mode}
+        and al2.entity_type = 'tenant_recurring_billing_cron'
         and (
           exists (
             select 1
@@ -160,6 +164,7 @@ export async function getInvoiceAutomationCronHeartbeat(
       ) as "lastCronRunOutcome"
     from audit_logs al
     where al.mode = ${mode}
+      and al.entity_type = 'tenant_recurring_billing_cron'
       and (
         exists (
           select 1
