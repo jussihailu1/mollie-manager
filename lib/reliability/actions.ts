@@ -154,6 +154,7 @@ async function updateAlertStatus(
   alertId: string,
   status: "open" | "acknowledged" | "resolved",
   mode: "live" | "test",
+  tenantId: string,
 ) {
   await getDb().execute(sql`
       update alerts
@@ -175,8 +176,11 @@ async function updateAlertStatus(
           select a.id
           from alerts a
           left join payments p on p.id = a.payment_id
+            and p.tenant_id = ${tenantId}
           left join subscriptions s on s.id = a.subscription_id
+            and s.tenant_id = ${tenantId}
           left join customers c on c.id = coalesce(a.customer_id, p.customer_id, s.customer_id)
+            and c.tenant_id = ${tenantId}
           where ${alertModeExpression} = ${mode}
         )
     `);
@@ -543,7 +547,13 @@ export async function setAlertStatusAction(formData: FormData) {
 
   await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
-  await updateAlertStatus(parsed.data.alertId, parsed.data.status, selectedMode);
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
+  await updateAlertStatus(
+    parsed.data.alertId,
+    parsed.data.status,
+    selectedMode,
+    tenantSelection.currentTenant.id,
+  );
 
   revalidatePath("/");
   revalidatePath("/notifications");
@@ -563,6 +573,7 @@ export async function markAllAlertsReadAction(formData: FormData) {
 
   await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
 
   await getDb().execute(sql`
       update alerts
@@ -574,9 +585,15 @@ export async function markAllAlertsReadAction(formData: FormData) {
         and id in (
           select a.id
           from alerts a
-          left join payments p on p.id = a.payment_id
-          left join subscriptions s on s.id = a.subscription_id
-          left join customers c on c.id = coalesce(a.customer_id, p.customer_id, s.customer_id)
+          left join payments p
+            on p.id = a.payment_id
+            and p.tenant_id = ${tenantSelection.currentTenant.id}
+          left join subscriptions s
+            on s.id = a.subscription_id
+            and s.tenant_id = ${tenantSelection.currentTenant.id}
+          left join customers c
+            on c.id = coalesce(a.customer_id, p.customer_id, s.customer_id)
+            and c.tenant_id = ${tenantSelection.currentTenant.id}
           where ${alertModeExpression} = ${selectedMode}
         )
     `);
@@ -604,8 +621,14 @@ export async function openAlertAction(formData: FormData) {
   }
 
   await requireViewerSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
-  await updateAlertStatus(parsed.data.alertId, "acknowledged", selectedMode);
+  await updateAlertStatus(
+    parsed.data.alertId,
+    "acknowledged",
+    selectedMode,
+    tenantSelection.currentTenant.id,
+  );
 
   revalidatePath("/");
   revalidatePath("/notifications");

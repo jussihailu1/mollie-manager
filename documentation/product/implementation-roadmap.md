@@ -153,6 +153,8 @@ Current bounded implementation slice:
 - billing settings and advanced invoice automation actions now resolve the
   current tenant before mutating tenant-owned billing state or running batch
   invoice actions
+- alert status actions on the operator notifications surface now resolve the
+  current tenant before acknowledging or reopening tenant-linked alerts
 - subscription operation request actions now resolve the current tenant before
   recording, withdrawing, transitioning, or syncing subscription request state
 - recurring-invoice cron fan-out now iterates accessible tenants explicitly so

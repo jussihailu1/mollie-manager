@@ -56,6 +56,11 @@ describe("ops surface hardening", () => {
     assert.match(billingActionsSource, /requireAdvancedOperationsSession/);
     assert.match(billingActionsSource, /getCurrentTenantSelectionForViewer/);
     assert.match(billingActionsSource, /tenantId: tenantSelection\.currentTenant\.id/);
+    assert.match(reliabilityActionsSource, /getCurrentTenantSelectionForViewer/);
+    assert.match(
+      reliabilityActionsSource,
+      /tenantSelection\.currentTenant\.id/,
+    );
     assert.match(authSource, /hasAdvancedOperationsAccess/);
   });
 
