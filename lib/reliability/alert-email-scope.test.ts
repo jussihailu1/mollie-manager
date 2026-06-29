@@ -3,17 +3,15 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 describe("alert email scope", () => {
-  it("fences alert email lookup to tenant-owned linked entities when tenant id is provided", () => {
+  it("requires tenant context for alert email lookup and fences linked entities", () => {
     const source = readFileSync("lib/reliability/alert-email.ts", "utf8");
 
-    assert.match(source, /tenantId\?: string/);
-    assert.match(source, /p\.tenant_id = \$\{tenantId \?\? null\}/);
-    assert.match(source, /s\.tenant_id = \$\{tenantId \?\? null\}/);
-    assert.match(source, /customer\.tenant_id = \$\{tenantId \?\? null\}/);
-    assert.match(source, /fallback_customer\.tenant_id = \$\{tenantId \?\? null\}/);
-    assert.match(source, /or customer\.id is not null/);
-    assert.match(source, /or fallback_customer\.id is not null/);
-    assert.match(source, /or p\.id is not null/);
-    assert.match(source, /or s\.id is not null/);
+    assert.match(source, /tenantId: string/);
+    assert.match(source, /p\.tenant_id = \$\{tenantId\}/);
+    assert.match(source, /s\.tenant_id = \$\{tenantId\}/);
+    assert.match(source, /customer\.tenant_id = \$\{tenantId\}/);
+    assert.match(source, /fallback_customer\.tenant_id = \$\{tenantId\}/);
+    assert.doesNotMatch(source, /tenantId\?: string/);
+    assert.doesNotMatch(source, /getSingleTenantIdOrThrow/);
   });
 });

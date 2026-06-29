@@ -7,7 +7,6 @@ import type { DashboardModeFilter } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
 import { REPAIR_STALE_AFTER_MS } from "@/lib/freshness";
 import { listPendingSubscriptionOperationRequests } from "@/lib/pending-subscription-operation-requests";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export type NeedsAttentionItemType =
   | "customer_sync_stale"
@@ -45,10 +44,6 @@ export type NeedsAttentionItem = {
 
 function toModeParam(mode?: DashboardModeFilter) {
   return !mode || mode === "all" ? null : mode;
-}
-
-async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
 }
 
 const listBaseNeedsAttentionItemsByMode = cache(async (
@@ -559,19 +554,18 @@ function toPendingOperationAttentionItem(
   };
 }
 
-export async function listNeedsAttentionItems(options?: {
+export async function listNeedsAttentionItems(options: {
   limit?: number;
   mode?: DashboardModeFilter;
-  tenantId?: string;
+  tenantId: string;
 }) {
   const mode = options?.mode ?? "all";
   const limit = options?.limit ?? 20;
-  const tenantId = await resolveTenantId(options?.tenantId);
-  const baseItems = await listBaseNeedsAttentionItemsByMode(mode, limit, tenantId);
+  const baseItems = await listBaseNeedsAttentionItemsByMode(mode, limit, options.tenantId);
   const pendingOperationItems =
     mode === "all"
       ? []
-      : await listPendingSubscriptionOperationRequests({ limit, mode, tenantId });
+      : await listPendingSubscriptionOperationRequests({ limit, mode, tenantId: options.tenantId });
 
   return [...baseItems, ...pendingOperationItems.map(toPendingOperationAttentionItem)]
     .sort((left, right) => {

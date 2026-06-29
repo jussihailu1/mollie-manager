@@ -19,7 +19,7 @@ export async function handlePaymentAlerts(input: {
   localPaymentId: string;
   payment: Payment;
   subscriptionId: string | null;
-  tenantId?: string;
+  tenantId: string;
 }) {
   const paymentType = resolvePaymentSyncType(input.payment);
   const recurringCollectionState = derivePaymentRecurringCollectionState(input.payment);
@@ -137,13 +137,13 @@ export async function handlePaymentAlerts(input: {
     });
 
     if (alert.isNew) {
-        await deliverAlertEmail({
-          alertId: alert.id,
-          message:
-            "A payment was marked as charged back or disputed during synchronization. Open Mollie Manager and review the payment immediately.",
-          tenantId: input.tenantId,
-          title: "Disputed payment",
-        });
+      await deliverAlertEmail({
+        alertId: alert.id,
+        message:
+          "A payment was marked as charged back or disputed during synchronization. Open Mollie Manager and review the payment immediately.",
+        tenantId: input.tenantId,
+        title: "Disputed payment",
+      });
     }
 
     return;
@@ -165,15 +165,15 @@ export async function handlePaymentAlerts(input: {
     });
 
     if (alert.isNew) {
-        await deliverAlertEmail({
-          alertId: alert.id,
-          message:
-            input.payment.status === "failed"
-              ? "A payment failed during synchronization. Open Mollie Manager to review the payment and the affected customer."
-              : "A Mollie checkout expired before completion. Open Mollie Manager to decide whether to issue a new payment.",
-          tenantId: input.tenantId,
-          title: alertTitle,
-        });
+      await deliverAlertEmail({
+        alertId: alert.id,
+        message:
+          input.payment.status === "failed"
+            ? "A payment failed during synchronization. Open Mollie Manager to review the payment and the affected customer."
+            : "A Mollie checkout expired before completion. Open Mollie Manager to decide whether to issue a new payment.",
+        tenantId: input.tenantId,
+        title: alertTitle,
+      });
     }
 
     return;
@@ -188,7 +188,7 @@ export async function handleSubscriptionAlerts(input: {
   customerId: string;
   localSubscriptionId: string;
   localStatus: string;
-  tenantId?: string;
+  tenantId: string;
 }) {
   if (input.localStatus === "payment_action_required") {
     const alert = await openAlert({
@@ -201,13 +201,13 @@ export async function handleSubscriptionAlerts(input: {
     });
 
     if (alert.isNew) {
-        await deliverAlertEmail({
-          alertId: alert.id,
-          message:
-            "A subscription entered a payment-action-required state. Open Mollie Manager to inspect the latest payment and subscription details.",
-          tenantId: input.tenantId,
-          title: "Subscription needs payment action",
-        });
+      await deliverAlertEmail({
+        alertId: alert.id,
+        message:
+          "A subscription entered a payment-action-required state. Open Mollie Manager to inspect the latest payment and subscription details.",
+        tenantId: input.tenantId,
+        title: "Subscription needs payment action",
+      });
     }
 
     return;
@@ -224,13 +224,13 @@ export async function handleSubscriptionAlerts(input: {
     });
 
     if (alert.isNew) {
-        await deliverAlertEmail({
-          alertId: alert.id,
-          message:
-            "A subscription appears out of sync with Mollie. Open Mollie Manager and run a sync or reconciliation pass.",
-          tenantId: input.tenantId,
-          title: "Subscription out of sync",
-        });
+      await deliverAlertEmail({
+        alertId: alert.id,
+        message:
+          "A subscription appears out of sync with Mollie. Open Mollie Manager and run a sync or reconciliation pass.",
+        tenantId: input.tenantId,
+        title: "Subscription out of sync",
+      });
     }
 
     return;

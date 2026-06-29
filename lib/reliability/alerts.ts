@@ -110,7 +110,7 @@ export async function openAlert(
 export async function deliverAlertEmail(input: {
   alertId: string;
   message: string;
-  tenantId?: string;
+  tenantId: string;
   title: string;
 }) {
   return deliverAlertEmailWithDependencies(input, {

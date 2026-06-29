@@ -35,7 +35,7 @@ test("needs attention query exposes stable typed sources without raw webhook pay
 
   assert.match(source, /recommendedAction/);
   assert.match(source, /listPendingSubscriptionOperationRequests/);
-  assert.match(source, /tenantId\?: string/);
+  assert.match(source, /tenantId: string/);
   assert.match(source, /p\.tenant_id = \$\{tenantId\}/);
   assert.match(source, /s\.tenant_id = \$\{tenantId\}/);
   assert.match(source, /c\.tenant_id = \$\{tenantId\}/);
@@ -53,6 +53,7 @@ test("needs attention query exposes stable typed sources without raw webhook pay
   assert.match(source, /w\.resource_id = pl\.mollie_payment_link_id/);
   assert.doesNotMatch(source, /\bw\.payload\b/);
   assert.doesNotMatch(source, /secret|token|authorization/i);
+  assert.doesNotMatch(source, /getSingleTenantIdOrThrow/);
 });
 
 test("normal dashboard and notifications use the shared needs attention query", async () => {

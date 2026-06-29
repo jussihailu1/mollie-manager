@@ -124,6 +124,7 @@ Implemented so far:
 - customer drawer invoice downloads now come from an authenticated customer invoices API backed by a server-side trusted e-Boekhouden PDF URL normalizer, covering first-payment and recurring invoice rows without exposing untrusted document URLs
 - customer drawer manual invoice resend now targets an existing first-payment or recurring invoice and reuses the invoice delivery helper, with dependency-injected coverage proving the flow loads one existing target and does not create invoices
 - unresolved subscription operation requests now have a dedicated sanitized query and surface read-only in Needs Attention and the customer drawer without exposing operator reason, requester email, or raw metadata
+- alert-email lookup and the shared Needs Attention query now require explicit tenant context instead of falling back to a single implicit tenant
 - core customer-linked business tables are now being rekeyed around explicit
   `tenant_id` ownership, and the root customer/payment loaders plus payment
   drawer path are being narrowed to tenant-scoped reads while webhook intake,

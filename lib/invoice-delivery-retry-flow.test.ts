@@ -51,6 +51,7 @@ describe("invoice delivery retry flow", () => {
             mode: "test",
             plannedCollectionDate: null,
             subscriptionId: "subscription_1",
+            tenantId: "tenant_1",
           },
           {
             customerEmail: "ops@example.com",
@@ -62,6 +63,7 @@ describe("invoice delivery retry flow", () => {
             mode: "test",
             plannedCollectionDate: null,
             subscriptionId: "subscription_1",
+            tenantId: "tenant_1",
           },
           {
             customerEmail: null,
@@ -73,6 +75,7 @@ describe("invoice delivery retry flow", () => {
             mode: "test",
             plannedCollectionDate: null,
             subscriptionId: "subscription_1",
+            tenantId: "tenant_1",
           },
         ]},
       },
@@ -144,6 +147,7 @@ describe("invoice delivery retry flow", () => {
             mode: "live",
             plannedCollectionDate: "2026-06-09",
             subscriptionId: "subscription_2",
+            tenantId: "tenant_2",
           },
           {
             customerEmail: "ops@example.com",
@@ -155,6 +159,7 @@ describe("invoice delivery retry flow", () => {
             mode: "live",
             plannedCollectionDate: "2026-06-10",
             subscriptionId: "subscription_2",
+            tenantId: "tenant_2",
           },
         ]},
       },

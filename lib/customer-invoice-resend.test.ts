@@ -13,6 +13,7 @@ describe("customer invoice resend flow", () => {
         mode: "test",
         ownerId: "payment_1",
         ownerType: "payment",
+        tenantId: "tenant_1",
       },
       {
         async loadTarget(input) {
@@ -27,6 +28,7 @@ describe("customer invoice resend flow", () => {
             mode: "test",
             plannedCollectionDate: null,
             subscriptionId: null,
+            tenantId: input.tenantId,
           };
         },
         async deliverCustomerInvoiceEmail(input) {
@@ -49,6 +51,7 @@ describe("customer invoice resend flow", () => {
         mode: "test",
         ownerId: "missing",
         ownerType: "recurring_schedule",
+        tenantId: "tenant_1",
       },
       {
         async loadTarget() {
