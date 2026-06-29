@@ -143,12 +143,11 @@ const listAlertInboxByMode = cache(async (mode: DashboardModeFilter, tenantId: s
   return result.rows;
 });
 
-export async function listAlertInbox(options?: {
+export async function listAlertInbox(options: {
   mode?: DashboardModeFilter;
-  tenantId?: string;
+  tenantId: string;
 }) {
-  const tenantId = await resolveTenantId(options?.tenantId);
-  return listAlertInboxByMode(options?.mode ?? "all", tenantId);
+  return listAlertInboxByMode(options.mode ?? "all", options.tenantId);
 }
 
 const listRecentWebhookEventsByMode = cache(async (
@@ -196,21 +195,19 @@ const listRecentWebhookEventsByMode = cache(async (
   return result.rows;
 });
 
-export async function listRecentWebhookEvents(options?: {
+export async function listRecentWebhookEvents(options: {
   mode?: DashboardModeFilter;
-  tenantId?: string;
+  tenantId: string;
 }) {
-  const tenantId = await resolveTenantId(options?.tenantId);
-  return listRecentWebhookEventsByMode(options?.mode ?? "all", tenantId);
+  return listRecentWebhookEventsByMode(options.mode ?? "all", options.tenantId);
 }
 
-export async function listFailedWebhookEvents(options?: {
+export async function listFailedWebhookEvents(options: {
   limit?: number;
   mode?: DashboardModeFilter;
-  tenantId?: string;
+  tenantId: string;
 }) {
-  const tenantId = await resolveTenantId(options?.tenantId);
-  const events = await listRecentWebhookEventsByMode(options?.mode ?? "all", tenantId);
+  const events = await listRecentWebhookEventsByMode(options.mode ?? "all", options.tenantId);
   const limit = Math.max(1, Math.min(options?.limit ?? 8, 20));
 
   return events
@@ -499,10 +496,9 @@ const listRecentAuditActivityByMode = cache(async (
   return result.rows;
 });
 
-export async function listRecentAuditActivity(options?: {
+export async function listRecentAuditActivity(options: {
   mode?: DashboardModeFilter;
-  tenantId?: string;
+  tenantId: string;
 }) {
-  const tenantId = await resolveTenantId(options?.tenantId);
-  return listRecentAuditActivityByMode(options?.mode ?? "all", tenantId);
+  return listRecentAuditActivityByMode(options.mode ?? "all", options.tenantId);
 }
