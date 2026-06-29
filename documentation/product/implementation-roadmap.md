@@ -183,6 +183,8 @@ Current bounded implementation slice:
 - onboarding customer actions now thread the active tenant through customer
   creation, linking, archival, restoration, first-payment creation, and billing
   repair flows
+- reconciliation fan-out now carries the active tenant into payment and
+  payment-link sync dependencies
 - webhook intake now resolves managed local tenant context before syncing
   Mollie resources
 - replay and repair operator actions now require the current tenant when

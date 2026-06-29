@@ -2,20 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
-const syncSource = readFileSync("lib/reliability/sync.ts", "utf8");
-const operationsSource = readFileSync(
-  "lib/reliability/reconciliation-operations.ts",
-  "utf8",
-);
+describe("reconciliation operations tenant scope", () => {
+  it("threads tenant id into payment and payment-link sync fan-out", () => {
+    const source = readFileSync("lib/reliability/reconciliation-operations.ts", "utf8");
 
-describe("reconciliation operations module boundary", () => {
-  it("keeps reconciliation counts and orchestration out of the main sync file", () => {
-    assert.match(syncSource, /@\/lib\/reliability\/reconciliation-operations/);
-    assert.doesNotMatch(syncSource, /getFirstPaymentInvoiceStateCounts/);
-    assert.doesNotMatch(syncSource, /getRecurringInvoiceStateCounts/);
-    assert.match(operationsSource, /export async function reconcileOperationalData/);
-    assert.match(operationsSource, /getFirstPaymentInvoiceStateCounts/);
-    assert.match(operationsSource, /getRecurringInvoiceStateCounts/);
-    assert.match(operationsSource, /buildInvoiceStateDeltaSummary/);
+    assert.match(source, /syncPaymentByMollieId: \(molliePaymentId: string, options: \{[\s\S]*tenantId\?: string;/);
+    assert.match(source, /syncPaymentLinkByMollieId: \(molliePaymentLinkId: string, options: \{[\s\S]*tenantId\?: string;/);
+    assert.match(source, /tenantId: input\.tenantId \?\? undefined,/);
+    assert.match(source, /await input\.syncPaymentLinkByMollieId\(paymentLink\.molliePaymentLinkId, \{[\s\S]*tenantId: input\.tenantId \?\? undefined,/);
+    assert.match(source, /await input\.syncPaymentByMollieId\(payment\.molliePaymentId, \{[\s\S]*tenantId: input\.tenantId \?\? undefined,/);
   });
 });

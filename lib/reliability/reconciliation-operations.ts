@@ -26,11 +26,13 @@ export type ReconciliationDependencies = {
     preferredMode?: MollieMode;
     reconciliationMode: ReconciliationMode;
     strictMode?: boolean;
+    tenantId?: string;
   }) => Promise<unknown>;
   syncPaymentLinkByMollieId: (molliePaymentLinkId: string, options: {
     actor: SyncActor;
     preferredMode?: MollieMode;
     strictMode?: boolean;
+    tenantId?: string;
   }) => Promise<unknown>;
   syncSubscriptionByLocalId: (localSubscriptionId: string, options: {
     actor: SyncActor;
@@ -142,6 +144,7 @@ export async function reconcileOperationalData(
       actor: effectiveActor,
       preferredMode: input.mode,
       strictMode: Boolean(input.mode),
+      tenantId: input.tenantId ?? undefined,
     });
   }
 
@@ -151,6 +154,7 @@ export async function reconcileOperationalData(
       preferredMode: input.mode,
       reconciliationMode,
       strictMode: Boolean(input.mode),
+      tenantId: input.tenantId ?? undefined,
     });
   }
 
