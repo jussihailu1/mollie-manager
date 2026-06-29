@@ -40,7 +40,7 @@ export async function createFirstPaymentActionFlow(input: {
   customerId: string;
   mode: MollieMode;
   planInput: FirstPaymentActionPlanInput;
-  tenantId?: string;
+  tenantId: string;
 }): Promise<CreateFirstPaymentActionFlowResult> {
   const customer = await getLocalCustomer(input.customerId, input.mode, input.tenantId);
 

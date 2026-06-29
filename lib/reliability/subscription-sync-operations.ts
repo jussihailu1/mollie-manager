@@ -114,6 +114,7 @@ export async function syncSubscriptionByLocalId(
       mode: localSubscription.mode,
       paymentId: firstPayment.id,
       reconciliationMode,
+      tenantId: localSubscription.tenantId,
     });
   }
 

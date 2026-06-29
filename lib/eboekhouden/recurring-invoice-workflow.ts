@@ -50,16 +50,19 @@ function buildReference(candidate: ScheduledInvoiceCandidate) {
 
 export async function createEboekhoudenInvoiceForSchedule(
   scheduleId: string,
-  options?: {
+  options: {
     actor?: RecurringInvoiceActor;
+    tenantId: string;
     settings?: TenantBillingSettings | null;
   },
 ): Promise<CreateScheduleInvoiceResult> {
-  const actor = options?.actor ?? {
+  const actor = options.actor ?? {
     kind: "system",
   };
   const [settings, candidate] = await Promise.all([
-    options?.settings ? Promise.resolve(options.settings) : getTenantBillingSettings(),
+    options.settings
+      ? Promise.resolve(options.settings)
+      : getTenantBillingSettings(options.tenantId),
     getScheduledInvoiceCandidate(scheduleId),
   ]);
 

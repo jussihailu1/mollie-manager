@@ -131,7 +131,8 @@ Current bounded implementation slice:
 - tenant, platform-operator, and operator-membership foundation is already in
   place
 - tenant-owned subscription policy defaults and billing/accounting settings are
-  already persisted by `tenant_id`
+  already persisted by `tenant_id`, and helper lookups now require explicit
+  tenant context instead of a single-tenant fallback
 - current slice tenantizes `customers`, `mandates`, `subscriptions`,
   `subscription_operation_requests`, `payments`,
   `recurring_billing_schedules`, `payment_links`,
@@ -174,6 +175,11 @@ Current bounded implementation slice:
 - recurring invoice schedule candidates now carry tenant ids into invoice
   creation and recovery alert delivery
 - recurring invoice creation failure alert delivery now carries tenant ids
+- first-payment invoice follow-up now carries explicit tenant context into
+  billing settings lookup
+- first-payment onboarding and subscription-sync follow-up now carry explicit
+  tenant context into tenant-owned subscription policy defaults and invoice
+  creation lookup
   from tenant-scoped schedule candidates
 - session-authenticated `/api/health` diagnostics now resolve the active tenant
   before reading the shared reliability ops snapshot

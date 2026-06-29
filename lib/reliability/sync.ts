@@ -155,6 +155,7 @@ export async function syncPaymentByMollieId(
       mode,
       paymentId: localPaymentId,
       reconciliationMode,
+      tenantId: resolvedTenantId,
     });
   }
 

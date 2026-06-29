@@ -17,7 +17,7 @@ export type FirstPaymentOnboardingFlowInput = {
   };
   planInput: Omit<FirstPaymentPlanInput, "tenantPolicy">;
   selectedMode: MollieMode;
-  tenantId?: string;
+  tenantId: string;
 };
 
 export async function createFirstPaymentOnboardingFlow(

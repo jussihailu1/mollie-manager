@@ -8,10 +8,12 @@ export async function runFirstPaymentInvoiceCreationFollowUp(input: {
   failureSummary: string;
   mode: MollieMode;
   paymentId: string;
+  tenantId: string;
 }) {
   try {
     await createEboekhoudenInvoiceForFirstPayment(input.paymentId, {
       actor: input.actor,
+      tenantId: input.tenantId,
     });
   } catch (error) {
     await writeAuditLog(

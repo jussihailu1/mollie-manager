@@ -9,7 +9,6 @@ import {
   type EboekhoudenInvoiceTemplate,
   type EboekhoudenLedger,
 } from "@/lib/eboekhouden/client";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export const DEFAULT_SUBSCRIPTION_VAT_CODE = "HOOG_VERK_21";
 export const DEFAULT_SUBSCRIPTION_VAT_PERCENTAGE = "21.00";
@@ -45,11 +44,11 @@ function ledgerLabel(ledger: EboekhoudenLedger) {
     .toLowerCase();
 }
 
-async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
+async function resolveTenantId(tenantId: string) {
+  return tenantId;
 }
 
-export async function ensureTenantBillingSettings(tenantId?: string) {
+export async function ensureTenantBillingSettings(tenantId: string) {
   const resolvedTenantId = await resolveTenantId(tenantId);
 
   await transaction(async (tx) => {
@@ -80,7 +79,7 @@ export async function ensureTenantBillingSettings(tenantId?: string) {
   return getTenantBillingSettings(resolvedTenantId);
 }
 
-export async function getTenantBillingSettings(tenantId?: string) {
+export async function getTenantBillingSettings(tenantId: string) {
   const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await getDb().execute<TenantBillingSettings>(sql`
     select
@@ -106,7 +105,7 @@ export async function updateTenantBillingSettings(
     invoiceTemplateId: number | null;
     revenueLedgerId: number | null;
   },
-  tenantId?: string,
+  tenantId: string,
 ) {
   const resolvedTenantId = await resolveTenantId(tenantId);
 

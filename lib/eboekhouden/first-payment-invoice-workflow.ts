@@ -53,16 +53,19 @@ function buildReference(candidate: FirstPaymentInvoiceCandidate) {
 
 export async function createEboekhoudenInvoiceForFirstPayment(
   paymentId: string,
-  options?: {
+  options: {
     actor?: FirstPaymentInvoiceActor;
+    tenantId: string;
     settings?: TenantBillingSettings | null;
   },
 ): Promise<CreateFirstPaymentInvoiceResult> {
-  const actor = options?.actor ?? {
+  const actor = options.actor ?? {
     kind: "system",
   };
   const [settings, candidate] = await Promise.all([
-    options?.settings ? Promise.resolve(options.settings) : getTenantBillingSettings(),
+    options.settings
+      ? Promise.resolve(options.settings)
+      : getTenantBillingSettings(options.tenantId),
     getFirstPaymentInvoiceCandidate(paymentId),
   ]);
 

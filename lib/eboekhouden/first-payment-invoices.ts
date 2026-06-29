@@ -60,7 +60,7 @@ export async function createDueFirstPaymentInvoicesBatch(input: {
   actor: InvoiceActor;
   limit?: number;
   mode: MollieMode;
-  tenantId?: string;
+  tenantId: string;
 }): Promise<FirstPaymentInvoiceBatchResult> {
   const settings = await getTenantBillingSettings(input.tenantId);
 
@@ -79,6 +79,7 @@ export async function createDueFirstPaymentInvoicesBatch(input: {
     createInvoice: async (entityId) =>
       createEboekhoudenInvoiceForFirstPayment(entityId, {
         actor: input.actor,
+        tenantId: input.tenantId,
         settings,
       }),
     getRemainingSummary: async (mode) =>
@@ -94,7 +95,7 @@ export async function recoverFailedFirstPaymentInvoicesBatch(input: {
   actor: InvoiceActor;
   limit?: number;
   mode: MollieMode;
-  tenantId?: string;
+  tenantId: string;
 }): Promise<FailedFirstPaymentRecoveryBatchResult> {
   const candidates = await listFailedFirstPaymentRecoveryCandidates(
     input.mode,

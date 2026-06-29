@@ -5,7 +5,6 @@ import { sql } from "drizzle-orm";
 import { getDb, transaction } from "@/lib/db";
 import { getSubscriptionPolicyConfig } from "@/lib/env";
 import type { CancellationEffect } from "@/lib/subscription-policy";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export type TenantSubscriptionPolicyRow = {
   cancellationEmail: string;
@@ -17,11 +16,11 @@ export type TenantSubscriptionPolicyRow = {
   termsVersion: string;
 };
 
-async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
+async function resolveTenantId(tenantId: string) {
+  return tenantId;
 }
 
-async function readTenantSubscriptionPolicyDefaults(tenantId?: string) {
+async function readTenantSubscriptionPolicyDefaults(tenantId: string) {
   const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await getDb().execute<TenantSubscriptionPolicyRow>(sql`
     select
@@ -40,7 +39,7 @@ async function readTenantSubscriptionPolicyDefaults(tenantId?: string) {
   return result.rows[0] ?? null;
 }
 
-export async function ensureTenantSubscriptionPolicyDefaults(tenantId?: string) {
+export async function ensureTenantSubscriptionPolicyDefaults(tenantId: string) {
   const resolvedTenantId = await resolveTenantId(tenantId);
   const existing = await readTenantSubscriptionPolicyDefaults(resolvedTenantId);
 
@@ -86,7 +85,7 @@ export async function ensureTenantSubscriptionPolicyDefaults(tenantId?: string) 
   return inserted;
 }
 
-export async function getTenantSubscriptionPolicyDefaults(tenantId?: string) {
+export async function getTenantSubscriptionPolicyDefaults(tenantId: string) {
   const defaults = await readTenantSubscriptionPolicyDefaults(tenantId);
 
   if (!defaults) {

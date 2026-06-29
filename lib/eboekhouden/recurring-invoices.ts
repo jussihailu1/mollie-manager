@@ -201,7 +201,7 @@ export async function createDueRecurringInvoicesBatch(input: {
   actor: InvoiceActor;
   limit?: number;
   mode: "live" | "test";
-  tenantId?: string;
+  tenantId: string;
 }): Promise<RecurringInvoiceBatchResult> {
   const settings = await getTenantBillingSettings(input.tenantId);
 
@@ -215,6 +215,7 @@ export async function createDueRecurringInvoicesBatch(input: {
     createInvoice: async (entityId) =>
       createEboekhoudenInvoiceForSchedule(entityId, {
         actor: input.actor,
+        tenantId: input.tenantId,
         settings,
       }),
     getRemainingSummary: async (mode) =>
