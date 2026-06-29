@@ -6,7 +6,6 @@ import { writeAuditLog } from "@/lib/audit";
 import { getDb, transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { env } from "@/lib/env";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 import { getEboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import {
   getNextRetryAtIso,
@@ -38,7 +37,7 @@ type DeliveryInput = {
   mode: MollieMode;
   plannedCollectionDate?: string | null;
   subscriptionId: string | null;
-  tenantId?: string;
+  tenantId: string;
 };
 
 type RetryDeliveryCandidate = Omit<DeliveryInput, "actor">;
@@ -58,7 +57,11 @@ export type InvoiceDeliveryQueueSummary = {
 };
 
 async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
+  if (!tenantId) {
+    throw new Error("Invoice delivery tenant context is missing.");
+  }
+
+  return tenantId;
 }
 
 type FirstPaymentDeliveryCandidate = {

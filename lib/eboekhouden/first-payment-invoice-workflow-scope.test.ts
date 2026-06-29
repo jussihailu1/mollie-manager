@@ -16,6 +16,7 @@ describe("first-payment invoice workflow module boundary", () => {
     assert.match(firstPaymentSource, /@\/lib\/eboekhouden\/first-payment-invoice-workflow/);
     assert.match(workflowSource, /export async function createEboekhoudenInvoiceForFirstPayment/);
     assert.match(workflowSource, /subscriptionConsentPlanSnapshotSchema/);
+    assert.match(workflowSource, /tenantId: candidate\.tenantId/);
     assert.doesNotMatch(firstPaymentSource, /export async function createEboekhoudenInvoiceForFirstPayment/);
     assert.doesNotMatch(firstPaymentSource, /subscriptionConsentPlanSnapshotSchema/);
   });

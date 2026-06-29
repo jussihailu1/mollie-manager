@@ -12,7 +12,7 @@ export type CustomerInvoiceResendTargetInput = {
   mode: DashboardModeFilter;
   ownerId: string;
   ownerType: CustomerInvoiceOwnerType;
-  tenantId?: string;
+  tenantId: string;
 };
 
 type ResendTarget = RetryDeliveryCandidate;

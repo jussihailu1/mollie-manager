@@ -153,6 +153,7 @@ export async function recoverFailedFirstPaymentInvoicesBatch(input: {
         entityId: candidate.paymentId,
         mode: candidate.mode,
         subscriptionId: candidate.subscriptionId,
+        tenantId: candidate.tenantId,
       }),
     );
   }

@@ -155,6 +155,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
           entityId: candidate.paymentId,
           mode: candidate.mode,
           subscriptionId: candidate.subscriptionId,
+          tenantId: candidate.tenantId,
         }),
       );
 
@@ -208,6 +209,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
         entityId: candidate.paymentId,
         mode: candidate.mode,
         subscriptionId: candidate.subscriptionId,
+        tenantId: candidate.tenantId,
       }),
     );
 
@@ -243,6 +245,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
             entityId: candidate.paymentId,
             mode: candidate.mode,
             subscriptionId: candidate.subscriptionId,
+            tenantId: candidate.tenantId,
           }),
         );
 

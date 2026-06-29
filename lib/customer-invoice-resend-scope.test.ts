@@ -9,6 +9,7 @@ describe("customer invoice resend surface", () => {
 
     assert.match(source, /deliverCustomerInvoiceEmail/);
     assert.match(source, /loadCustomerInvoiceResendTarget/);
+    assert.doesNotMatch(source, /getSingleTenantIdOrThrow/);
     assert.doesNotMatch(source, /createFirstPaymentInvoice|createRecurringInvoice/);
     assert.doesNotMatch(source, /invoice\.create|batch_create/);
   });

@@ -17,6 +17,7 @@ export type DeliveryInput = {
   mode: MollieMode;
   plannedCollectionDate?: string | null;
   subscriptionId: string | null;
+  tenantId: string;
 };
 
 export type RetryDeliveryCandidate = Omit<DeliveryInput, "actor">;

@@ -11,6 +11,7 @@ export type FirstPaymentInvoiceDeliveryInput = {
   entityId: string;
   mode: MollieMode;
   subscriptionId: string | null;
+  tenantId: string;
 };
 
 export function buildFirstPaymentInvoiceDelivery(input: FirstPaymentInvoiceDeliveryInput) {
@@ -25,5 +26,6 @@ export function buildFirstPaymentInvoiceDelivery(input: FirstPaymentInvoiceDeliv
     invoiceType: "first_payment" as const,
     mode: input.mode,
     subscriptionId: input.subscriptionId,
+    tenantId: input.tenantId,
   };
 }

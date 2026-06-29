@@ -187,6 +187,8 @@ Current bounded implementation slice:
   payment-link sync dependencies
 - payment-link sync now requires explicit tenant context instead of a
   single-tenant fallback
+- invoice email delivery now carries tenant context through first-payment and
+  resend flows instead of global fallback
 - webhook intake now resolves managed local tenant context before syncing
   Mollie resources
 - replay and repair operator actions now require the current tenant when

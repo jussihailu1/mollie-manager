@@ -16,6 +16,7 @@ describe("first-payment invoice candidate module boundary", () => {
     assert.match(workflowSource, /@\/lib\/eboekhouden\/first-payment-invoice-candidate/);
     assert.match(candidateSource, /buildDeterministicMatchCte/);
     assert.match(candidateSource, /from payments p/);
+    assert.match(candidateSource, /p\.tenant_id as "tenantId"/);
     assert.doesNotMatch(workflowSource, /async function getFirstPaymentInvoiceCandidate/);
   });
 });

@@ -16,6 +16,7 @@ describe("first-payment invoice delivery", () => {
         entityId: "pay_123",
         mode: "live",
         subscriptionId: "sub_123",
+        tenantId: "tenant_123",
       }),
       {
         actor: { email: "ops@example.com", kind: "user" },
@@ -28,6 +29,7 @@ describe("first-payment invoice delivery", () => {
         invoiceType: "first_payment",
         mode: "live",
         subscriptionId: "sub_123",
+        tenantId: "tenant_123",
       },
     );
   });

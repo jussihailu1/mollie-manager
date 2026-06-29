@@ -5,7 +5,6 @@ import { getDb } from "@/lib/db";
 import type { EboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import { buildDeterministicMatchCte } from "@/lib/eboekhouden/first-payment-invoice-match-query";
 import type { FirstPaymentInvoiceActor } from "@/lib/eboekhouden/first-payment-invoice-persistence";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export type FirstPaymentInvoiceRecoveryCandidate = {
   customerEmail: string | null;
@@ -16,6 +15,7 @@ export type FirstPaymentInvoiceRecoveryCandidate = {
   paymentCreatedAt: string;
   paymentId: string;
   subscriptionId: string | null;
+  tenantId: string;
 };
 
 export async function listFailedFirstPaymentRecoveryCandidates(
@@ -23,12 +23,16 @@ export async function listFailedFirstPaymentRecoveryCandidates(
   limit: number,
   tenantId?: string,
 ) {
-  const resolvedTenantId = tenantId ?? (await getSingleTenantIdOrThrow());
+  if (!tenantId) {
+    throw new Error("First-payment invoice recovery tenant context is missing.");
+  }
+
   const result = await getDb().execute<FirstPaymentInvoiceRecoveryCandidate>(sql`
-    ${buildDeterministicMatchCte({ mode, tenantId: resolvedTenantId })}
+    ${buildDeterministicMatchCte({ mode, tenantId })}
     select
       p.id as "paymentId",
       p.mode,
+      p.tenant_id as "tenantId",
       p.customer_id as "customerId",
       p.subscription_id as "subscriptionId",
       p.paid_at as "paidAt",
@@ -42,7 +46,7 @@ export async function listFailedFirstPaymentRecoveryCandidates(
       and c.mode = p.mode
       and c.tenant_id = p.tenant_id
     where p.mode = ${mode}
-      and p.tenant_id = ${resolvedTenantId}
+      and p.tenant_id = ${tenantId}
       and p.payment_type = 'first'
       and p.invoice_state = 'invoice_failed'
       and p.eboekhouden_invoice_id is null

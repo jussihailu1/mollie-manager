@@ -10,7 +10,6 @@ import {
   resendCustomerInvoiceEmailWithDependencies,
   type CustomerInvoiceResendTargetInput,
 } from "@/lib/customer-invoice-resend-flow";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export { resendCustomerInvoiceEmailWithDependencies };
 
@@ -27,6 +26,7 @@ type ResendTargetRow = {
   mode: "live" | "test";
   plannedCollectionDate: string | null;
   subscriptionId: string | null;
+  tenantId: string;
 };
 
 type ResendTarget = RetryDeliveryCandidate;
@@ -35,14 +35,10 @@ function toModeParam(mode?: DashboardModeFilter) {
   return !mode || mode === "all" ? null : mode;
 }
 
-async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
-}
-
 export async function loadCustomerInvoiceResendTarget(
   input: CustomerInvoiceResendTargetInput,
 ): Promise<ResendTarget | null> {
-  const tenantId = await resolveTenantId(input.tenantId);
+  const tenantId = input.tenantId;
   const modeParam = toModeParam(input.mode);
   const result = await getDb().execute<ResendTargetRow>(sql`
     select *
@@ -50,6 +46,7 @@ export async function loadCustomerInvoiceResendTarget(
       select
         p.id as "entityId",
         p.mode,
+        p.tenant_id as "tenantId",
         p.customer_id as "customerId",
         p.subscription_id as "subscriptionId",
         c.email as "customerEmail",
@@ -79,6 +76,7 @@ export async function loadCustomerInvoiceResendTarget(
       select
         rbs.id as "entityId",
         rbs.mode,
+        rbs.tenant_id as "tenantId",
         s.customer_id as "customerId",
         rbs.subscription_id as "subscriptionId",
         c.email as "customerEmail",
@@ -130,6 +128,7 @@ export async function loadCustomerInvoiceResendTarget(
     mode: row.mode,
     plannedCollectionDate: row.plannedCollectionDate,
     subscriptionId: row.subscriptionId,
+    tenantId: row.tenantId,
   };
 }
 

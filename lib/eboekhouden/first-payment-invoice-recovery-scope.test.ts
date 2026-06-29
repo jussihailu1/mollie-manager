@@ -19,6 +19,8 @@ describe("first-payment invoice recovery module boundary", () => {
       recoverySource,
       /export async function storeRecoveredFailedFirstPaymentSuccess/,
     );
+    assert.match(recoverySource, /p\.tenant_id as "tenantId"/);
+    assert.doesNotMatch(recoverySource, /getSingleTenantIdOrThrow/);
     assert.doesNotMatch(
       invoiceSource,
       /async function listFailedFirstPaymentRecoveryCandidates/,

@@ -6,7 +6,8 @@ describe("invoice delivery scope", () => {
   it("threads tenant ids through delivery candidates and alert emails", () => {
     const source = readFileSync("lib/invoice-delivery.ts", "utf8");
 
-    assert.match(source, /tenantId\?: string/);
+    assert.match(source, /tenantId: string/);
+    assert.doesNotMatch(source, /getSingleTenantIdOrThrow/);
     assert.match(source, /p\.tenant_id as "tenantId"/);
     assert.match(source, /rbs\.tenant_id as "tenantId"/);
     assert.match(source, /tenantId: row\.tenantId/);

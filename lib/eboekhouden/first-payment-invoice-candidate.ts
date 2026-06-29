@@ -19,6 +19,7 @@ export type FirstPaymentInvoiceCandidate = {
   paymentLinkId: string;
   planSnapshot: unknown;
   subscriptionId: string | null;
+  tenantId: string;
 };
 
 export async function getFirstPaymentInvoiceCandidate(paymentId: string) {
@@ -27,6 +28,7 @@ export async function getFirstPaymentInvoiceCandidate(paymentId: string) {
     select
       p.id as "paymentId",
       p.mode,
+      p.tenant_id as "tenantId",
       p.customer_id as "customerId",
       p.subscription_id as "subscriptionId",
       p.mollie_payment_id as "molliePaymentId",
