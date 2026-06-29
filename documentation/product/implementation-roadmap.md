@@ -185,6 +185,8 @@ Current bounded implementation slice:
   repair flows
 - reconciliation fan-out now carries the active tenant into payment and
   payment-link sync dependencies
+- payment-link sync now requires explicit tenant context instead of a
+  single-tenant fallback
 - webhook intake now resolves managed local tenant context before syncing
   Mollie resources
 - replay and repair operator actions now require the current tenant when

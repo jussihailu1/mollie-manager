@@ -22,7 +22,6 @@ import {
   requireCustomerTenantId,
   requirePaymentLinkTenantId,
 } from "@/lib/tenant-ownership";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 type MolliePaymentLink = {
   createdAt?: string;
@@ -62,23 +61,15 @@ export async function upsertPaymentLinkFromMollie(
   options: {
     actor: SyncActor;
     customerId?: string | null;
-    tenantId?: string;
+    tenantId: string;
   },
 ) {
   const linkedCustomer =
     options.customerId ??
-    (await getLocalCustomerByMollieId(
-      mode,
-      paymentLink.customerId,
-      options.tenantId,
-    ))?.id ??
+    (await getLocalCustomerByMollieId(mode, paymentLink.customerId, options.tenantId))?.id ??
     null;
   const localCustomer = linkedCustomer
-    ? await getLocalCustomerByMollieId(
-        mode,
-        paymentLink.customerId,
-        options.tenantId,
-      )
+    ? await getLocalCustomerByMollieId(mode, paymentLink.customerId, options.tenantId)
     : null;
   const paymentLinkAmount = derivePaymentLinkSyncAmount(paymentLink, payments);
   const paymentLinkStatus = derivePaymentLinkSyncStatus(paymentLink, payments);
@@ -97,7 +88,7 @@ export async function upsertPaymentLinkFromMollie(
       (existingPaymentLink
         ? await requirePaymentLinkTenantId(existingPaymentLink.id, client)
         : null) ??
-      (options.tenantId ?? (await getSingleTenantIdOrThrow()));
+      options.tenantId;
     localPaymentLinkId = existingPaymentLink?.id ?? localPaymentLinkId;
 
     await client.execute(sql`
@@ -182,17 +173,12 @@ export async function syncMatchingPaymentLinkForPayment(
   payment: Payment,
   customerId: string | null,
   actor: SyncActor,
-  tenantId?: string,
+  tenantId: string,
 ) {
   if (!customerId && !payment.customerId) {
     return null;
   }
 
-  const resolvedTenantId = tenantId
-    ? tenantId
-    : customerId
-      ? await requireCustomerTenantId(customerId)
-      : await getSingleTenantIdOrThrow();
   const candidates = await getDb().execute<LocalStoredPaymentLink>(sql`
       select
         id,
@@ -200,7 +186,7 @@ export async function syncMatchingPaymentLinkForPayment(
         mollie_payment_link_id as "molliePaymentLinkId"
       from payment_links
       where
-        tenant_id = ${resolvedTenantId}
+        tenant_id = ${tenantId}
         mode = ${mode}
         and mollie_payment_link_id is not null
         and metadata ->> 'source' = 'subscription_onboarding'
@@ -230,7 +216,7 @@ export async function syncMatchingPaymentLinkForPayment(
     return upsertPaymentLinkFromMollie(mode, paymentLink, payments, {
       actor,
       customerId: candidate.customerId ?? customerId,
-      tenantId: resolvedTenantId,
+      tenantId,
     });
   }
 

@@ -11,6 +11,9 @@ const paymentLinkSyncSource = readFileSync(
 describe("payment link sync module boundary", () => {
   it("keeps payment-link sync helpers out of the main sync file", () => {
     assert.match(syncSource, /@\/lib\/reliability\/payment-link-sync/);
+    assert.match(syncSource, /Payment tenant context is missing\./);
+    assert.match(syncSource, /Payment-link tenant context is missing\./);
+    assert.doesNotMatch(syncSource, /getSingleTenantIdOrThrow/);
     assert.match(paymentLinkSyncSource, /export async function collectPaymentLinkPayments/);
     assert.match(
       paymentLinkSyncSource,
@@ -26,5 +29,6 @@ describe("payment link sync module boundary", () => {
       syncSource,
       /async function syncMatchingPaymentLinkForPayment/,
     );
+    assert.doesNotMatch(paymentLinkSyncSource, /getSingleTenantIdOrThrow/);
   });
 });

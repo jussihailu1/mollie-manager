@@ -35,7 +35,6 @@ import {
 import {
   reconcileOperationalData as reconcileOperationalDataImpl,
 } from "@/lib/reliability/reconciliation-operations";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export { syncSubscriptionByLocalId, syncSubscriptionByMollieId };
 
@@ -77,6 +76,11 @@ export async function syncPaymentByMollieId(
     payment.subscriptionId,
     options?.tenantId ?? localCustomer?.tenantId ?? undefined,
   );
+  const resolvedTenantId =
+    options?.tenantId ?? localCustomer?.tenantId ?? localSubscription?.tenantId;
+  if (!resolvedTenantId) {
+    throw new Error("Payment tenant context is missing.");
+  }
   const resolvedCustomerId = localCustomer?.id ?? localSubscription?.customerId ?? null;
 
   if (options?.requireManagedResource && !resolvedCustomerId) {
@@ -114,11 +118,7 @@ export async function syncPaymentByMollieId(
       payment,
       paymentType,
       recurringCollectionState,
-      tenantId:
-        options?.tenantId ??
-        localCustomer?.tenantId ??
-        localSubscription?.tenantId ??
-        (await getSingleTenantIdOrThrow()),
+      tenantId: resolvedTenantId,
     });
   });
 
@@ -127,7 +127,7 @@ export async function syncPaymentByMollieId(
     localPaymentId,
     payment,
     subscriptionId: localSubscription?.id ?? null,
-    tenantId: options?.tenantId ?? localCustomer?.tenantId ?? localSubscription?.tenantId ?? undefined,
+    tenantId: resolvedTenantId,
   });
   await runFailedPaymentCustomerNotificationForSyncedPayment({
     localPaymentId,
@@ -143,7 +143,7 @@ export async function syncPaymentByMollieId(
           payment,
           resolvedCustomerId,
           actor,
-          options?.tenantId ?? localCustomer?.tenantId ?? localSubscription?.tenantId ?? undefined,
+          resolvedTenantId,
         );
 
   if (paymentType === "first") {
@@ -205,16 +205,22 @@ export async function syncPaymentLinkByMollieId(
     undefined,
     options?.tenantId,
   );
-
-  if (options?.requireManagedResource && !existingPaymentLink) {
-    throw new Error("Payment-link webhook is not linked to a managed local resource.");
-  }
-
   const localCustomer = await getLocalCustomerByMollieId(
     mode,
     paymentLink.customerId,
     options?.tenantId,
   );
+  const resolvedTenantId =
+    options?.tenantId ?? localCustomer?.tenantId ?? existingPaymentLink?.tenantId;
+
+  if (!resolvedTenantId) {
+    throw new Error("Payment-link tenant context is missing.");
+  }
+
+  if (options?.requireManagedResource && !existingPaymentLink) {
+    throw new Error("Payment-link webhook is not linked to a managed local resource.");
+  }
+
   const localPaymentLinkId = await upsertPaymentLinkFromMollie(
     mode,
     paymentLink,
@@ -222,7 +228,7 @@ export async function syncPaymentLinkByMollieId(
     {
       actor,
       customerId: localCustomer?.id ?? existingPaymentLink?.customerId ?? null,
-      tenantId: options?.tenantId ?? localCustomer?.tenantId ?? existingPaymentLink?.tenantId ?? undefined,
+      tenantId: resolvedTenantId,
     },
   );
   let latestResult: WebhookProcessingResult = {
@@ -238,7 +244,7 @@ export async function syncPaymentLinkByMollieId(
       preferredMode: mode,
       strictMode: true,
       syncPaymentLinks: false,
-      tenantId: options?.tenantId ?? localCustomer?.tenantId ?? existingPaymentLink?.tenantId ?? undefined,
+      tenantId: resolvedTenantId,
     });
   }
 
