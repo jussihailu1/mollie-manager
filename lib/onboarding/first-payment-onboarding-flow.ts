@@ -17,12 +17,13 @@ export type FirstPaymentOnboardingFlowInput = {
   };
   planInput: Omit<FirstPaymentPlanInput, "tenantPolicy">;
   selectedMode: MollieMode;
+  tenantId?: string;
 };
 
 export async function createFirstPaymentOnboardingFlow(
   input: FirstPaymentOnboardingFlowInput,
 ) {
-  const tenantPolicy = await ensureTenantSubscriptionPolicyDefaults();
+  const tenantPolicy = await ensureTenantSubscriptionPolicyDefaults(input.tenantId);
   const firstPaymentPlan = buildFirstPaymentPlan({
     ...input.planInput,
     tenantPolicy: {

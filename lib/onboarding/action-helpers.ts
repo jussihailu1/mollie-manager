@@ -66,8 +66,12 @@ export async function updateRelationFromLocalFields(
   return getEboekhoudenRelation(relationId);
 }
 
-export async function getLocalCustomer(customerId: string, mode: "live" | "test") {
-  const detail = await getCustomerDetail(customerId, mode);
+export async function getLocalCustomer(
+  customerId: string,
+  mode: "live" | "test",
+  tenantId?: string,
+) {
+  const detail = await getCustomerDetail(customerId, mode, tenantId);
   return detail?.customer ?? null;
 }
 
@@ -75,14 +79,15 @@ export async function assertRelationIsAvailable(
   relationId: number,
   mode: "live" | "test",
   excludeCustomerId?: string,
+  tenantId?: string,
 ) {
-  const tenantId = await getSingleTenantIdOrThrow();
+  const resolvedTenantId = tenantId ?? (await getSingleTenantIdOrThrow());
   const existing = await transaction(async (client) => {
     const result = excludeCustomerId
       ? await client.execute<{ id: string }>(sql`
           select id
           from customers
-          where tenant_id = ${tenantId}
+          where tenant_id = ${resolvedTenantId}
             and mode = ${mode}
             and eboekhouden_relation_id = ${relationId}
             and id <> ${excludeCustomerId}
@@ -91,7 +96,7 @@ export async function assertRelationIsAvailable(
       : await client.execute<{ id: string }>(sql`
         select id
         from customers
-        where tenant_id = ${tenantId}
+        where tenant_id = ${resolvedTenantId}
           and mode = ${mode}
           and eboekhouden_relation_id = ${relationId}
         limit 1

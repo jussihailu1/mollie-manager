@@ -26,6 +26,7 @@ type CustomerRelationLinkInput = {
     phone?: string;
   };
   mode: MollieMode;
+  tenantId?: string;
 };
 
 type CustomerRelationLinkResult =
@@ -42,7 +43,7 @@ type CustomerRelationLinkResult =
 export async function linkCustomerToEboekhoudenRelation(
   input: CustomerRelationLinkInput,
 ): Promise<CustomerRelationLinkResult> {
-  const customer = await getLocalCustomer(input.customerId, input.mode);
+  const customer = await getLocalCustomer(input.customerId, input.mode, input.tenantId);
 
   if (!customer) {
     return {
@@ -60,6 +61,7 @@ export async function linkCustomerToEboekhoudenRelation(
     input.fields.eboekhoudenRelationId,
     input.mode,
     customer.id,
+    input.tenantId,
   );
 
   const relationFields = toCustomerRelationFields(input.fields);
@@ -68,7 +70,7 @@ export async function linkCustomerToEboekhoudenRelation(
     relationFields,
   );
   const normalizedNote = normalizeCustomerNoteBody(input.fields.notes ?? "");
-  const tenantId = await requireCustomerTenantId(customer.id);
+  const tenantId = input.tenantId ?? (await requireCustomerTenantId(customer.id));
 
   await transaction(async (client) => {
     await client.execute(sql`

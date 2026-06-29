@@ -40,8 +40,9 @@ export async function createFirstPaymentActionFlow(input: {
   customerId: string;
   mode: MollieMode;
   planInput: FirstPaymentActionPlanInput;
+  tenantId?: string;
 }): Promise<CreateFirstPaymentActionFlowResult> {
-  const customer = await getLocalCustomer(input.customerId, input.mode);
+  const customer = await getLocalCustomer(input.customerId, input.mode, input.tenantId);
 
   if (!customer || !customer.mollieCustomerId) {
     return {
@@ -55,7 +56,7 @@ export async function createFirstPaymentActionFlow(input: {
     };
   }
 
-  const detail = await getCustomerDetail(customer.id, input.mode);
+  const detail = await getCustomerDetail(customer.id, input.mode, input.tenantId);
   const firstPaymentBlocker = resolveFirstPaymentCreationBlocker({
     paymentLinks: detail?.paymentLinks ?? [],
     payments: detail?.payments ?? [],
@@ -76,6 +77,7 @@ export async function createFirstPaymentActionFlow(input: {
     },
     planInput: input.planInput,
     selectedMode: input.mode,
+    tenantId: input.tenantId,
   });
 
   return {

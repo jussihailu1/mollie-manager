@@ -25,8 +25,9 @@ type CreateCustomerFlowInput = {
 export async function createCustomerFlow(input: {
   input: CreateCustomerFlowInput;
   mode: MollieMode;
+  tenantId?: string;
 }) {
-  const tenantId = await getSingleTenantIdOrThrow();
+  const tenantId = input.tenantId ?? (await getSingleTenantIdOrThrow());
   const localCustomerId = crypto.randomUUID();
   const relationFields = toCustomerRelationFields(input.input);
   const relationIdToLink =
@@ -36,7 +37,7 @@ export async function createCustomerFlow(input: {
   const normalizedNote = normalizeCustomerNoteBody(input.input.notes ?? "");
 
   if (relationIdToLink) {
-    await assertRelationIsAvailable(relationIdToLink, input.mode);
+    await assertRelationIsAvailable(relationIdToLink, input.mode, undefined, tenantId);
   }
 
   const linkedRelation =

@@ -139,11 +139,16 @@ export async function repairCustomerBillingState(input: {
   actor?: RepairActor;
   customerId: string;
   mode: "live" | "test";
+  tenantId?: string;
 }): Promise<CustomerRepairResult> {
   const actor = input.actor ?? {
     kind: "system" as const,
   };
-  const customerDetail = await getCustomerDetail(input.customerId, input.mode);
+  const customerDetail = await getCustomerDetail(
+    input.customerId,
+    input.mode,
+    input.tenantId,
+  );
   if (!customerDetail) {
     return {
       customerId: input.customerId,
@@ -188,7 +193,7 @@ export async function repairCustomerBillingState(input: {
   const mandates = await mollie.customerMandates.page({
     customerId: mollieCustomerId,
   });
-  const tenantId = await requireCustomerTenantId(customer.id);
+  const tenantId = input.tenantId ?? (await requireCustomerTenantId(customer.id));
 
   await transaction(async (client) => {
     const mandateIdMap = new Map<string, string>();

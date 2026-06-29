@@ -43,8 +43,9 @@ export async function archiveCustomerRecord(input: {
   actor: CustomerArchiveActor;
   customerId: string;
   mode: MollieMode;
+  tenantId?: string;
 }): Promise<ArchiveCustomerRecordResult> {
-  const detail = await getCustomerDetail(input.customerId, input.mode);
+  const detail = await getCustomerDetail(input.customerId, input.mode, input.tenantId);
 
   if (!detail) {
     return {
@@ -101,8 +102,9 @@ export async function restoreCustomerRecord(input: {
   actor: CustomerArchiveActor;
   customerId: string;
   mode: MollieMode;
+  tenantId?: string;
 }): Promise<RestoreCustomerRecordResult> {
-  const detail = await getCustomerDetail(input.customerId, input.mode);
+  const detail = await getCustomerDetail(input.customerId, input.mode, input.tenantId);
 
   if (!detail) {
     return {

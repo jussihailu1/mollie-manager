@@ -180,6 +180,9 @@ Current bounded implementation slice:
 - e-Boekhouden relation detail lookups now require active tenant context
 - consent-link lookup now resolves the active tenant before reading latest
   customer consent URLs
+- onboarding customer actions now thread the active tenant through customer
+  creation, linking, archival, restoration, first-payment creation, and billing
+  repair flows
 - webhook intake now resolves managed local tenant context before syncing
   Mollie resources
 - replay and repair operator actions now require the current tenant when
