@@ -160,8 +160,8 @@ export async function reconcileOperationalData(
 
   const [afterFirstPaymentInvoiceStates, afterRecurringInvoiceStates] =
     await Promise.all([
-      getFirstPaymentInvoiceStateCounts(modeParam),
-      getRecurringInvoiceStateCounts(modeParam),
+      getFirstPaymentInvoiceStateCounts(modeParam, tenantParam ?? undefined),
+      getRecurringInvoiceStateCounts(modeParam, tenantParam ?? undefined),
     ]);
 
   const result: ReconciliationSummary = {
