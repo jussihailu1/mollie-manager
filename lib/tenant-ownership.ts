@@ -3,7 +3,6 @@ import "server-only";
 import { sql } from "drizzle-orm";
 
 import { getDb, type DbClient } from "@/lib/db";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 type TenantLookupInput = {
   customerId?: string | null;
@@ -66,7 +65,7 @@ export async function requireTenantIdForLinkedEntity(
     return linkedTenantId;
   }
 
-  return getSingleTenantIdOrThrow();
+  throw new Error("Unable to resolve tenant id from linked entity.");
 }
 
 export async function requireCustomerTenantId(
