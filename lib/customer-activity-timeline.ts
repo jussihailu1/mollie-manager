@@ -5,7 +5,6 @@ import { cache } from "react";
 
 import type { DashboardModeFilter } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export type CustomerActivityTimelineItemType =
   | "alert_opened"
@@ -45,10 +44,6 @@ export type CustomerActivityTimelineItem = {
 
 function toModeParam(mode?: DashboardModeFilter) {
   return !mode || mode === "all" ? null : mode;
-}
-
-async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
 }
 
 const listCustomerActivityTimelineByMode = cache(async (
@@ -402,13 +397,12 @@ export async function listCustomerActivityTimeline(options: {
   customerId: string;
   limit?: number;
   mode?: DashboardModeFilter;
-  tenantId?: string;
+  tenantId: string;
 }) {
-  const tenantId = await resolveTenantId(options.tenantId);
   return listCustomerActivityTimelineByMode(
     options.customerId,
     options.mode ?? "all",
     options.limit ?? 50,
-    tenantId,
+    options.tenantId,
   );
 }

@@ -12,6 +12,8 @@ describe("customer invoice links surface", () => {
     assert.match(source, /invoicePdfUrl: normalizeTrustedInvoicePdfUrl/);
     assert.match(source, /from payments p/);
     assert.match(source, /from recurring_billing_schedules rbs/);
+    assert.doesNotMatch(source, /getSingleTenantIdOrThrow/);
+    assert.match(source, /tenantId: string;/);
   });
 
   it("serves invoice links through an authenticated customer api", () => {

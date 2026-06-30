@@ -6,7 +6,6 @@ import { cache } from "react";
 import type { DashboardModeFilter } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
 import { normalizeTrustedInvoicePdfUrl } from "@/lib/invoice-pdf";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export type CustomerInvoiceLink = {
   createdAt: string | null;
@@ -25,10 +24,6 @@ type CustomerInvoiceLinkRow = Omit<CustomerInvoiceLink, "invoicePdfUrl"> & {
 
 function toModeParam(mode?: DashboardModeFilter) {
   return !mode || mode === "all" ? null : mode;
-}
-
-async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
 }
 
 function sanitizeInvoiceLink(row: CustomerInvoiceLinkRow): CustomerInvoiceLink {
@@ -113,13 +108,12 @@ export async function listCustomerInvoiceLinks(options: {
   customerId: string;
   limit?: number;
   mode?: DashboardModeFilter;
-  tenantId?: string;
+  tenantId: string;
 }) {
-  const tenantId = await resolveTenantId(options.tenantId);
   return listCustomerInvoiceLinksByMode(
     options.customerId,
     options.mode ?? "all",
     options.limit ?? 20,
-    tenantId,
+    options.tenantId,
   );
 }

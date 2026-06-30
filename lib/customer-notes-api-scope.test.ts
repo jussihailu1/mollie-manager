@@ -25,6 +25,8 @@ describe("customer notes api surface", () => {
     assert.match(source, /action: "customer_note\.create"/);
     assert.match(source, /noteId/);
     assert.doesNotMatch(source, /details:\s*\{[\s\S]*?body/);
+    assert.doesNotMatch(source, /getSingleTenantIdOrThrow/);
+    assert.match(source, /tenantId: string;/);
   });
 
   it("lets the customer drawer add notes and refresh activity", () => {

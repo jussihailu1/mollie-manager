@@ -20,6 +20,8 @@ describe("customer notification history scope", () => {
     assert.match(routeSource, /listCustomerNotificationHistory/);
     assert.match(querySource, /where cpn\.mode = \$\{options\.mode\}/);
     assert.match(querySource, /coalesce\(cpn\.customer_id, p\.customer_id\) = \$\{options\.customerId\}/);
+    assert.doesNotMatch(querySource, /getSingleTenantIdOrThrow/);
+    assert.match(querySource, /tenantId: string;/);
   });
 
   it("excludes recipient, error, lease, payload, and metadata fields", () => {

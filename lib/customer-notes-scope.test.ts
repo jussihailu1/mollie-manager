@@ -27,6 +27,8 @@ describe("customer notes source", () => {
     assert.match(source, /insert into customer_notes[\s\S]*tenant_id/);
     assert.doesNotMatch(source, /audit_logs/);
     assert.doesNotMatch(source, /customers\.notes|c\.notes/);
+    assert.doesNotMatch(source, /getSingleTenantIdOrThrow/);
+    assert.match(source, /tenantId: string;/);
   });
 
   it("adds notes to the sanitized customer activity timeline as stable items", () => {

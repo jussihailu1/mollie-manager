@@ -7,7 +7,6 @@ import type { DashboardModeFilter } from "@/lib/dashboard-mode";
 import { normalizeCustomerNoteBody } from "@/lib/customer-note-policy";
 import { getDb } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export { normalizeCustomerNoteBody };
 
@@ -26,10 +25,6 @@ export type CustomerNote = {
 
 function toModeParam(mode?: DashboardModeFilter) {
   return !mode || mode === "all" ? null : mode;
-}
-
-async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
 }
 
 const listCustomerNotesByMode = cache(async (
@@ -66,14 +61,13 @@ export async function listCustomerNotes(options: {
   customerId: string;
   limit?: number;
   mode?: DashboardModeFilter;
-  tenantId?: string;
+  tenantId: string;
 }) {
-  const tenantId = await resolveTenantId(options.tenantId);
   return listCustomerNotesByMode(
     options.customerId,
     options.mode ?? "all",
     options.limit ?? 20,
-    tenantId,
+    options.tenantId,
   );
 }
 
@@ -81,9 +75,8 @@ export async function createCustomerNote(input: {
   body: string;
   customerId: string;
   mode: "live" | "test";
-  tenantId?: string;
+  tenantId: string;
 }) {
-  const tenantId = await resolveTenantId(input.tenantId);
   const body = normalizeCustomerNoteBody(input.body);
 
   if (!body) {
@@ -101,7 +94,7 @@ export async function createCustomerNote(input: {
       source
     ) values (
       ${noteId},
-      ${tenantId},
+      ${input.tenantId},
       ${input.mode},
       ${input.customerId},
       ${body},
