@@ -8,7 +8,11 @@ describe("e-Boekhouden relation detail route scope", () => {
 
     assert.match(source, /getCurrentTenantSelectionForViewer/);
     assert.doesNotMatch(source, /requireViewerSession/);
+    assert.match(source, /const \{ currentTenant \} = await getCurrentTenantSelectionForViewer\(\);/);
     assert.match(source, /const \{ id \} = await params;/);
-    assert.match(source, /const relation = await getEboekhoudenRelation\(relationId\);/);
+    assert.match(
+      source,
+      /const relation = await getEboekhoudenRelation\(relationId, currentTenant\.id\);/,
+    );
   });
 });

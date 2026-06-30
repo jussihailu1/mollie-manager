@@ -1,10 +1,13 @@
 import process from "node:process";
 
 import { ensureTenantBillingSettings } from "@/lib/billing-settings";
+import { upsertTenantEboekhoudenCredentials } from "@/lib/eboekhouden/tenant-credentials";
 import { ensureTenantSubscriptionPolicyDefaults } from "@/lib/subscription-policy-defaults";
 import { provisionTenant } from "@/lib/tenants";
 
 type CliArgs = {
+  eboekhoudenApiSource: string | null;
+  eboekhoudenApiToken: string | null;
   name: string;
   operatorEmail: string | null;
   platformOperatorEmail: string | null;
@@ -28,11 +31,13 @@ function parseArgs(args: string[]): CliArgs {
 
   if (!slug || !name) {
     throw new Error(
-      "Usage: npm run tenant:provision -- --slug <slug> --name <name> [--operator-email <email>] [--platform-operator-email <email>] [--tenant-id <id>]",
+      "Usage: npm run tenant:provision -- --slug <slug> --name <name> [--operator-email <email>] [--platform-operator-email <email>] [--tenant-id <id>] [--eboekhouden-api-token <token>] [--eboekhouden-api-source <source>]",
     );
   }
 
   return {
+    eboekhoudenApiSource: readFlag(args, "eboekhouden-api-source"),
+    eboekhoudenApiToken: readFlag(args, "eboekhouden-api-token"),
     name,
     operatorEmail: readFlag(args, "operator-email"),
     platformOperatorEmail: readFlag(args, "platform-operator-email"),
@@ -54,9 +59,20 @@ async function main() {
   await ensureTenantSubscriptionPolicyDefaults(tenantId);
   await ensureTenantBillingSettings(tenantId);
 
+  if (args.eboekhoudenApiToken) {
+    await upsertTenantEboekhoudenCredentials(
+      {
+        apiSource: args.eboekhoudenApiSource ?? "Kify",
+        apiToken: args.eboekhoudenApiToken,
+      },
+      tenantId,
+    );
+  }
+
   console.log(
     JSON.stringify(
       {
+        hasEboekhoudenCredentials: Boolean(args.eboekhoudenApiToken),
         name: args.name,
         operatorEmail: args.operatorEmail,
         platformOperatorEmail: args.platformOperatorEmail,

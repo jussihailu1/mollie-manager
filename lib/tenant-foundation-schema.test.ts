@@ -19,8 +19,10 @@ describe("tenant foundation schema", () => {
   it("makes tenant policy and billing rows tenant-owned", () => {
     assert.match(schemaSource, /tenant_subscription_policy_defaults[\s\S]*tenantId: text\("tenant_id"\)/);
     assert.match(schemaSource, /tenant_billing_settings[\s\S]*tenantId: text\("tenant_id"\)/);
+    assert.match(schemaSource, /tenant_eboekhouden_credentials[\s\S]*tenantId: text\("tenant_id"\)/);
     assert.match(schemaSource, /tenant_subscription_policy_defaults_tenant_id_key/);
     assert.match(schemaSource, /tenant_billing_settings_tenant_id_key/);
+    assert.match(schemaSource, /tenant_eboekhouden_credentials_tenant_id_key/);
   });
 
   it("tenantizes core customer-linked business tables", () => {
@@ -94,6 +96,25 @@ describe("tenant foundation schema", () => {
       assert.match(source, /payments_tenant_invoice_state_idx/i);
       assert.match(source, /subscription_onboarding_consents_tenant_id_fkey/i);
       assert.match(source, /customer_notes_tenant_customer_created_idx/i);
+    }
+  });
+
+  it("adds tenant-owned e-Boekhouden credential storage", () => {
+    const migrationSource = readFileSync(
+      resolve("db/migrations/0020_tenant_eboekhouden_credentials.sql"),
+      "utf8",
+    );
+    const drizzleSource = readFileSync(
+      resolve("db/drizzle/0019_tenant_eboekhouden_credentials.sql"),
+      "utf8",
+    );
+
+    for (const source of [migrationSource, drizzleSource]) {
+      assert.match(source, /tenant_eboekhouden_credentials/i);
+      assert.match(source, /tenant_id/i);
+      assert.match(source, /api_source/i);
+      assert.match(source, /api_token_ciphertext/i);
+      assert.match(source, /unique/i);
     }
   });
 });

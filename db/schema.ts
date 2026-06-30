@@ -653,6 +653,36 @@ export const tenantBillingSettings = pgTable(
   ],
 );
 
+export const tenantEboekhoudenCredentials = pgTable(
+  "tenant_eboekhouden_credentials",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    apiSource: text("api_source").notNull(),
+    apiTokenCiphertext: text("api_token_ciphertext").notNull(),
+    createdAt: timestamp("created_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+      name: "tenant_eboekhouden_credentials_tenant_id_fkey",
+    }).onDelete("cascade"),
+    unique("tenant_eboekhouden_credentials_tenant_id_key").on(table.tenantId),
+  ],
+);
+
 export const payments = pgTable(
   "payments",
   {

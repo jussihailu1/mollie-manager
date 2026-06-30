@@ -149,10 +149,12 @@ export async function updateTenantBillingSettings(
   return getTenantBillingSettings(resolvedTenantId);
 }
 
-export async function discoverEboekhoudenBillingSettings(): Promise<BillingDiscovery> {
+export async function discoverEboekhoudenBillingSettings(
+  tenantId: string,
+): Promise<BillingDiscovery> {
   const [templateResponse, ledgerResponse] = await Promise.all([
-    listEboekhoudenInvoiceTemplates({ active: true }),
-    listEboekhoudenLedgers(),
+    listEboekhoudenInvoiceTemplates({ active: true, tenantId }),
+    listEboekhoudenLedgers({ tenantId }),
   ]);
   const invoiceTemplates = normalizeItems(templateResponse.items);
   const ledgers = normalizeItems(ledgerResponse.items);

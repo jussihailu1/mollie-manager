@@ -106,8 +106,11 @@ Provider ownership for the pilot is:
 - platform SMTP may remain shared for the pilot
 - future tenant-specific SMTP overrides remain later scope
 
-Current global env-backed provider credentials are implementation debt that must
-be replaced before the shared multi-tenant pilot is considered ready.
+Current global env-backed provider credentials remain implementation debt for
+live tenant business mutations. Tenant e-Boekhouden settings discovery and
+relation reads can now resolve tenant-owned credentials, but broader provider
+flows must still stop relying on the shared env-backed path before the shared
+multi-tenant pilot is considered ready.
 
 ## Tenant-Owned Product Defaults
 

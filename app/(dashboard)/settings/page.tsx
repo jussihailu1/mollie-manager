@@ -138,13 +138,13 @@ export default async function SettingsPage({
     ensureTenantBillingSettings(tenantId),
     getSelectedMollieMode(),
   ]);
-  const billingDiscovery = await discoverEboekhoudenBillingSettings().catch(
+  const billingDiscovery = await discoverEboekhoudenBillingSettings(tenantId).catch(
     (discoveryError) => ({
-        error:
-          discoveryError instanceof Error
-            ? discoveryError.message
-            : "Could not load e-Boekhouden billing data.",
-      }),
+      error:
+        discoveryError instanceof Error
+          ? discoveryError.message
+          : "Could not load e-Boekhouden billing data.",
+    }),
   );
   const invoiceTemplates =
     billingDiscovery && "invoiceTemplates" in billingDiscovery

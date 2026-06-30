@@ -25,15 +25,15 @@ describe("sync orchestration tenant scope", () => {
     assert.match(subscriptionSyncSource, /const tenantId = localSubscription\.tenantId;/);
     assert.match(
       subscriptionSyncSource,
-      /handlePaymentAlerts\(\{[\s\S]*tenantId,\n\s*\}\);/,
+      /handlePaymentAlerts\(\{[\s\S]*tenantId,\r?\n\s*\}\);/,
     );
     assert.match(
       subscriptionSyncSource,
-      /runFirstPaymentInvoiceSyncFollowUp\(\{[\s\S]*tenantId,\n\s*\}\);/,
+      /runFirstPaymentInvoiceSyncFollowUp\(\{[\s\S]*tenantId,\r?\n\s*\}\);/,
     );
     assert.match(
       subscriptionSyncSource,
-      /handleSubscriptionAlerts\(\{[\s\S]*tenantId,\n\s*\}\);/,
+      /handleSubscriptionAlerts\(\{[\s\S]*tenantId,\r?\n\s*\}\);/,
     );
     assert.match(
       subscriptionSyncSource,

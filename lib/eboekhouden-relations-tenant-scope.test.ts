@@ -11,8 +11,16 @@ describe("e-Boekhouden relation search tenant scope", () => {
     );
 
     assert.match(source, /getCurrentTenantSelectionForViewer/);
+    assert.match(
+      source,
+      /const \{ currentTenant \} = await getCurrentTenantSelectionForViewer\(\);/,
+    );
     assert.match(source, /async function getLinkedRelationIds\(tenantId: string\)/);
     assert.match(source, /where tenant_id = \$\{tenantId\}/);
     assert.match(source, /getLinkedRelationIds\(currentTenant\.id\)/);
+    assert.match(
+      source,
+      /searchEboekhoudenRelations\(\{[\s\S]*tenantId: currentTenant\.id,/,
+    );
   });
 });

@@ -22,6 +22,10 @@ describe("tenant settings helper scope", () => {
       billingSettingsSource,
       /export async function updateTenantBillingSettings\(/,
     );
+    assert.match(
+      billingSettingsSource,
+      /export async function discoverEboekhoudenBillingSettings\(\s*tenantId: string,\s*\): Promise<BillingDiscovery>/,
+    );
     assert.doesNotMatch(billingSettingsSource, /getSingleTenantIdOrThrow/);
 
     assert.match(
@@ -35,6 +39,15 @@ describe("tenant settings helper scope", () => {
     assert.doesNotMatch(
       subscriptionPolicyDefaultsSource,
       /getSingleTenantIdOrThrow/,
+    );
+
+    const settingsPageSource = readFileSync(
+      "app/(dashboard)/settings/page.tsx",
+      "utf8",
+    );
+    assert.match(
+      settingsPageSource,
+      /discoverEboekhoudenBillingSettings\(tenantId\)/,
     );
   });
 });

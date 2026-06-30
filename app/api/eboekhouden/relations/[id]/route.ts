@@ -11,7 +11,7 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  await getCurrentTenantSelectionForViewer();
+  const { currentTenant } = await getCurrentTenantSelectionForViewer();
 
   const { id } = await params;
   const relationId = Number(id);
@@ -24,7 +24,7 @@ export async function GET(
   }
 
   try {
-    const relation = await getEboekhoudenRelation(relationId);
+    const relation = await getEboekhoudenRelation(relationId, currentTenant.id);
 
     return Response.json({
       localFields: relationToLocalFields(relation),

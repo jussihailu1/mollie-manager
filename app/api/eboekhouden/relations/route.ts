@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
   try {
     const [relationsList, linkedRelationIds] = await Promise.all([
       searchEboekhoudenRelations({
+        tenantId: currentTenant.id,
         limit: Number.isFinite(limit) ? limit : 20,
         offset: Number.isFinite(offset) ? offset : 0,
         query,

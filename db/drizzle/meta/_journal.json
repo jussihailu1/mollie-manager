@@ -134,6 +134,13 @@
       "when": 1782813600000,
       "tag": "0018_alert_tenant_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1782900000000,
+      "tag": "0019_tenant_eboekhouden_credentials",
+      "breakpoints": true
     }
   ]
 }

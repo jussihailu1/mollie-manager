@@ -1,6 +1,11 @@
 import "server-only";
 
-import { getEboekhoudenConfig } from "@/lib/env";
+import { ZodError } from "zod";
+
+import {
+  resolveTenantEboekhoudenConfig,
+  TenantEboekhoudenCredentialError,
+} from "@/lib/eboekhouden/tenant-credentials";
 import type { EboekhoudenRelation } from "@/lib/eboekhouden/relation-mapping";
 
 const EBOEKHOUDEN_API_BASE_URL = "https://api.e-boekhouden.nl";
@@ -64,11 +69,11 @@ export type EboekhoudenInvoice = {
   urlPdfFile?: string | null;
 };
 
-let sessionCache: SessionCache | null = null;
+const sessionCacheByKey = new Map<string, SessionCache>();
 
 export class EboekhoudenConfigError extends Error {
-  constructor() {
-    super("EBOEKHOUDEN_API_TOKEN is missing.");
+  constructor(message = "EBOEKHOUDEN_API_TOKEN is missing.") {
+    super(message);
     this.name = "EboekhoudenConfigError";
   }
 }
@@ -90,12 +95,25 @@ export class EboekhoudenApiError extends Error {
   }
 }
 
-function getConfig() {
+async function getConfig(tenantId?: string) {
   try {
-    return getEboekhoudenConfig();
-  } catch {
-    throw new EboekhoudenConfigError();
+    return await resolveTenantEboekhoudenConfig(tenantId);
+  } catch (error) {
+    if (
+      error instanceof TenantEboekhoudenCredentialError ||
+      error instanceof ZodError
+    ) {
+      throw new EboekhoudenConfigError(
+        error instanceof Error ? error.message : undefined,
+      );
+    }
+
+    throw error;
   }
+}
+
+function getSessionCacheKey(tenantId?: string) {
+  return tenantId ?? "__global_eboekhouden__";
 }
 
 async function parseError(response: Response) {
@@ -143,8 +161,8 @@ async function parseError(response: Response) {
   });
 }
 
-async function startSession() {
-  const config = getConfig();
+async function startSession(tenantId?: string) {
+  const config = await getConfig(tenantId);
   const response = await fetch(`${EBOEKHOUDEN_API_BASE_URL}/v1/session`, {
     body: JSON.stringify({
       accessToken: config.EBOEKHOUDEN_API_TOKEN,
@@ -166,27 +184,32 @@ async function startSession() {
     token: string;
   };
 
-  sessionCache = {
+  const cacheEntry = {
     expiresAt: Date.now() + Math.max(session.expiresIn - 30, 1) * 1000,
     token: session.token,
   };
+  sessionCacheByKey.set(getSessionCacheKey(tenantId), cacheEntry);
 
-  return sessionCache.token;
+  return cacheEntry.token;
 }
 
-async function getSessionToken() {
+async function getSessionToken(tenantId?: string) {
+  const cacheKey = getSessionCacheKey(tenantId);
+  const sessionCache = sessionCacheByKey.get(cacheKey);
+
   if (sessionCache && sessionCache.expiresAt > Date.now()) {
     return sessionCache.token;
   }
 
-  return startSession();
+  return startSession(tenantId);
 }
 
 async function requestEboekhouden<T>(
   path: string,
   options: RequestInit = {},
+  tenantId?: string,
 ): Promise<T> {
-  const token = await getSessionToken();
+  const token = await getSessionToken(tenantId);
   const response = await fetch(`${EBOEKHOUDEN_API_BASE_URL}${path}`, {
     ...options,
     cache: "no-store",
@@ -198,8 +221,8 @@ async function requestEboekhouden<T>(
   });
 
   if (response.status === 401) {
-    sessionCache = null;
-    const retryToken = await getSessionToken();
+    sessionCacheByKey.delete(getSessionCacheKey(tenantId));
+    const retryToken = await getSessionToken(tenantId);
     const retryResponse = await fetch(`${EBOEKHOUDEN_API_BASE_URL}${path}`, {
       ...options,
       cache: "no-store",
@@ -251,6 +274,7 @@ export async function listEboekhoudenRelations(options?: {
   limit?: number;
   name?: string;
   offset?: number;
+  tenantId?: string;
 }) {
   const params = new URLSearchParams();
 
@@ -263,6 +287,8 @@ export async function listEboekhoudenRelations(options?: {
 
   return requestEboekhouden<RelationListResponse>(
     `/v1/relation?${params.toString()}`,
+    {},
+    options?.tenantId,
   );
 }
 
@@ -270,21 +296,22 @@ export async function searchEboekhoudenRelations(options: {
   limit?: number;
   offset?: number;
   query?: string;
+  tenantId?: string;
 }) {
   const limit = Math.min(Math.max(options.limit ?? 20, 1), 100);
   const offset = Math.max(options.offset ?? 0, 0);
   const query = options.query?.trim();
 
   if (!query) {
-    return listEboekhoudenRelations({ limit, offset });
+    return listEboekhoudenRelations({ limit, offset, tenantId: options.tenantId });
   }
 
   const likeQuery = `%${query}%`;
   const responses = await Promise.all([
-    listEboekhoudenRelations({ limit, name: likeQuery, offset: 0 }),
-    listEboekhoudenRelations({ contact: likeQuery, limit, offset: 0 }),
-    listEboekhoudenRelations({ email: likeQuery, limit, offset: 0 }),
-    listEboekhoudenRelations({ code: query, limit, offset: 0 }),
+    listEboekhoudenRelations({ limit, name: likeQuery, offset: 0, tenantId: options.tenantId }),
+    listEboekhoudenRelations({ contact: likeQuery, limit, offset: 0, tenantId: options.tenantId }),
+    listEboekhoudenRelations({ email: likeQuery, limit, offset: 0, tenantId: options.tenantId }),
+    listEboekhoudenRelations({ code: query, limit, offset: 0, tenantId: options.tenantId }),
   ]);
   const itemsById = new Map<number, NonNullable<RelationListResponse["items"]>[number]>();
 
@@ -302,14 +329,15 @@ export async function searchEboekhoudenRelations(options: {
   } satisfies RelationListResponse;
 }
 
-export async function getEboekhoudenRelation(id: number) {
-  return requestEboekhouden<EboekhoudenRelation>(`/v1/relation/${id}`);
+export async function getEboekhoudenRelation(id: number, tenantId?: string) {
+  return requestEboekhouden<EboekhoudenRelation>(`/v1/relation/${id}`, {}, tenantId);
 }
 
 export async function listEboekhoudenInvoiceTemplates(options?: {
   active?: boolean;
   limit?: number;
   offset?: number;
+  tenantId?: string;
   type?: "A" | "E";
 }) {
   const params = new URLSearchParams();
@@ -324,12 +352,15 @@ export async function listEboekhoudenInvoiceTemplates(options?: {
 
   return requestEboekhouden<EboekhoudenListResponse<EboekhoudenInvoiceTemplate>>(
     `/v1/invoicetemplate?${params.toString()}`,
+    {},
+    options?.tenantId,
   );
 }
 
 export async function listEboekhoudenLedgers(options?: {
   limit?: number;
   offset?: number;
+  tenantId?: string;
 }) {
   const params = new URLSearchParams();
   params.set("limit", String(Math.min(Math.max(options?.limit ?? 2000, 1), 2000)));
@@ -337,6 +368,8 @@ export async function listEboekhoudenLedgers(options?: {
 
   return requestEboekhouden<EboekhoudenListResponse<EboekhoudenLedger>>(
     `/v1/ledger?${params.toString()}`,
+    {},
+    options?.tenantId,
   );
 }
 
@@ -404,8 +437,7 @@ export function toPublicEboekhoudenError(error: unknown) {
   if (error instanceof EboekhoudenConfigError) {
     return {
       code: "missing_config",
-      message:
-        "EBOEKHOUDEN_API_TOKEN is missing. Add it to the server environment before importing relations.",
+      message: error.message,
       status: 503,
     };
   }

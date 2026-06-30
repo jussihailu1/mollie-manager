@@ -184,6 +184,9 @@ Current bounded implementation slice:
 - session-authenticated `/api/health` diagnostics now resolve the active tenant
   before reading the shared reliability ops snapshot
 - e-Boekhouden relation detail lookups now require active tenant context
+- tenant-owned e-Boekhouden credential storage now exists, manual
+  `tenant:provision` can seed those credentials, and relation search/detail plus
+  billing-settings discovery now resolve e-Boekhouden credentials per tenant
 - consent-link lookup now resolves the active tenant before reading latest
   customer consent URLs
 - customer activity, invoice-link, customer-note, and customer-notification
@@ -219,8 +222,9 @@ Current bounded implementation slice:
 - alert open/resolve/email-sent helper writes now require tenant context, and
   unresolved alert uniqueness is now scoped by tenant-backed alert payload and
   linked entities
-- alerts, audit logs, replay/repair/cron follow-up, and tenant-owned provider
-  credentials remain deferred follow-up inside Phase 0.5
+- alerts, audit logs, replay/repair/cron follow-up, tenant-owned Mollie
+  credentials, and broader live e-Boekhouden mutation flows remain deferred
+  follow-up inside Phase 0.5
 
 Required behavior:
 
