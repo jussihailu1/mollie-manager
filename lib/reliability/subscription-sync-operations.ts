@@ -54,6 +54,7 @@ export async function syncSubscriptionByLocalId(
     localSubscription.mode,
     options?.strictMode,
   );
+  const tenantId = localSubscription.tenantId;
   const resolvedSubscriptionId = localSubscription.id;
   let normalizedFirstPayments: { id: string; isPaid: boolean }[] = [];
   let persistedPayments: { localPaymentId: string; payment: Payment }[] = [];
@@ -63,7 +64,7 @@ export async function syncSubscriptionByLocalId(
       id: localSubscription.customerId,
       mollieCustomerId: localSubscription.customerMollieId,
       mode: localSubscription.mode,
-      tenantId: localSubscription.tenantId,
+      tenantId,
     } satisfies SyncResourceCustomerLink;
     const mandateIdMap = await upsertMandatesForCustomer(client, localCustomer);
     const localMandateId =
@@ -74,7 +75,7 @@ export async function syncSubscriptionByLocalId(
         localSubscription.mode,
         subscription.mandateId,
         client,
-        localSubscription.tenantId,
+        tenantId,
       ));
     const persistedSubscription = await persistSyncedSubscriptionPayments(client, {
       actor,
@@ -87,7 +88,7 @@ export async function syncSubscriptionByLocalId(
           localSubscription.mode,
           paymentMandateId ?? undefined,
           client,
-          localSubscription.tenantId,
+          tenantId,
         )),
       subscription,
     });
@@ -101,7 +102,7 @@ export async function syncSubscriptionByLocalId(
       localPaymentId: persistedPayment.localPaymentId,
       payment: persistedPayment.payment,
       subscriptionId: localSubscription.id,
-      tenantId: localSubscription.tenantId,
+      tenantId,
     });
   }
 
@@ -114,7 +115,7 @@ export async function syncSubscriptionByLocalId(
       mode: localSubscription.mode,
       paymentId: firstPayment.id,
       reconciliationMode,
-      tenantId: localSubscription.tenantId,
+      tenantId,
     });
   }
 
@@ -122,7 +123,7 @@ export async function syncSubscriptionByLocalId(
     customerId: localSubscription.customerId,
     localStatus: mapSubscriptionLifecycle(subscription.status),
     localSubscriptionId: resolvedSubscriptionId,
-    tenantId: localSubscription.tenantId,
+    tenantId,
   });
 
   return {
@@ -170,6 +171,6 @@ export async function syncSubscriptionByMollieId(
   return syncSubscriptionByLocalId(localSubscription.id, {
     actor: options?.actor,
     strictMode: options?.strictMode,
-    tenantId: options?.tenantId ?? localSubscription.tenantId,
+    tenantId: localSubscription.tenantId,
   });
 }

@@ -104,7 +104,7 @@ export async function syncPaymentByMollieId(
         mode,
         payment.mandateId,
         client,
-        options?.tenantId ?? localCustomer?.tenantId ?? localSubscription?.tenantId ?? undefined,
+        resolvedTenantId,
       )) ??
       localSubscription?.mandateId ??
       null;

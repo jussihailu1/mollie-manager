@@ -6,7 +6,6 @@ import { sql } from "drizzle-orm";
 import { getDb, type DbClient, type DbTransaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { getMollieClient } from "@/lib/mollie/client";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 import type {
   CancellationRequestSubscription,
   WithdrawableOperationRequest,
@@ -50,7 +49,11 @@ export type SyncResourceSubscriptionLink = LocalSubscriptionLink;
 export type SyncResourceStoredPaymentLink = LocalStoredPaymentLink;
 
 async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
+  if (!tenantId) {
+    throw new Error("Tenant context is required.");
+  }
+
+  return tenantId;
 }
 
 export async function getLocalCustomerByMollieId(

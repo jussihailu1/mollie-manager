@@ -197,6 +197,10 @@ Current bounded implementation slice:
   back to a single-tenant default
 - reconciliation fan-out now carries the active tenant into payment and
   payment-link sync dependencies
+- sync resource-state lookups now fail closed without tenant context instead of
+  falling back to a single-tenant default
+- tenant-scoped reconciliation summaries now keep their before/after invoice
+  state deltas scoped to the active tenant through fan-out
 - payment-link sync now requires explicit tenant context instead of a
   single-tenant fallback
 - invoice email delivery now carries tenant context through first-payment and
