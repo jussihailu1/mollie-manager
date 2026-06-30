@@ -12,6 +12,14 @@ describe("sync orchestration tenant scope", () => {
   it("threads the resolved tenant through payment and subscription sync follow-up paths", () => {
     assert.match(syncSource, /Payment tenant context is missing\./);
     assert.match(syncSource, /Payment-link tenant context is missing\./);
+    assert.match(
+      syncSource,
+      /findPaymentAcrossModes\([\s\S]*options\?\.tenantId/,
+    );
+    assert.match(
+      syncSource,
+      /findPaymentLinkAcrossModes\([\s\S]*options\?\.tenantId/,
+    );
     assert.match(syncSource, /findLocalMandateId\([\s\S]*resolvedTenantId/);
     assert.match(
       syncSource,
@@ -23,6 +31,10 @@ describe("sync orchestration tenant scope", () => {
     );
 
     assert.match(subscriptionSyncSource, /const tenantId = localSubscription\.tenantId;/);
+    assert.match(
+      subscriptionSyncSource,
+      /findSubscriptionAcrossModes\([\s\S]*localSubscription\.tenantId/,
+    );
     assert.match(
       subscriptionSyncSource,
       /handlePaymentAlerts\(\{[\s\S]*tenantId,\r?\n\s*\}\);/,

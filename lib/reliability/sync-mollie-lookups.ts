@@ -3,7 +3,8 @@ import "server-only";
 import type { Payment } from "@mollie/api-client";
 
 import type { MollieMode } from "@/lib/env";
-import { getMollieClient, isMollieConfigured } from "@/lib/mollie/client";
+import { getTenantMollieClient, isMollieConfigured } from "@/lib/mollie/client";
+import { resolveTenantMollieConfig } from "@/lib/mollie/tenant-credentials";
 import { buildConfiguredMollieModeOrder } from "@/lib/reliability/mollie-mode-selection";
 import { findMollieResourceAcrossModes } from "@/lib/reliability/mollie-resource-lookup";
 import type { PaymentLinkSyncSource } from "@/lib/reliability/payment-link-sync-record";
@@ -18,18 +19,67 @@ export type SyncMolliePaymentLink = {
   webhookUrl?: string;
 } & PaymentLinkSyncSource;
 
+function buildRequestedMollieModeOrder(
+  preferredMode?: MollieMode,
+  strictMode = false,
+): MollieMode[] {
+  if (preferredMode && strictMode) {
+    return [preferredMode];
+  }
+
+  return preferredMode
+    ? [preferredMode, preferredMode === "live" ? "test" : "live"]
+    : (["live", "test"] satisfies MollieMode[]);
+}
+
+async function buildLookupMollieModeOrder(input: {
+  preferredMode?: MollieMode;
+  strictMode?: boolean;
+  tenantId?: string;
+}) {
+  const { preferredMode, strictMode = false, tenantId } = input;
+
+  if (!tenantId) {
+    return buildConfiguredMollieModeOrder({
+      isConfigured: isMollieConfigured,
+      preferredMode,
+      strictMode,
+    });
+  }
+
+  const orderedModes = buildRequestedMollieModeOrder(preferredMode, strictMode);
+  const availableModes: MollieMode[] = [];
+  let lastCredentialError: unknown;
+
+  for (const mode of orderedModes) {
+    try {
+      await resolveTenantMollieConfig(tenantId, mode);
+      availableModes.push(mode);
+    } catch (error) {
+      lastCredentialError = error;
+    }
+  }
+
+  if (availableModes.length > 0) {
+    return availableModes;
+  }
+
+  throw lastCredentialError ?? new Error("Tenant Mollie credentials are missing.");
+}
+
 export async function findPaymentAcrossModes(
   molliePaymentId: string,
   preferredMode?: MollieMode,
   strictMode = false,
+  tenantId?: string,
 ) {
   const result = await findMollieResourceAcrossModes(
-    buildConfiguredMollieModeOrder({
-      isConfigured: isMollieConfigured,
+    await buildLookupMollieModeOrder({
       preferredMode,
       strictMode,
+      tenantId,
     }),
-    (mode) => getMollieClient(mode).payments.get(molliePaymentId),
+    async (mode) => (await getTenantMollieClient(tenantId, mode)).payments.get(molliePaymentId),
     "Payment was not found in Mollie.",
   );
 
@@ -43,15 +93,16 @@ export async function findPaymentLinkAcrossModes(
   molliePaymentLinkId: string,
   preferredMode?: MollieMode,
   strictMode = false,
+  tenantId?: string,
 ) {
   const result = await findMollieResourceAcrossModes(
-    buildConfiguredMollieModeOrder({
-      isConfigured: isMollieConfigured,
+    await buildLookupMollieModeOrder({
       preferredMode,
       strictMode,
+      tenantId,
     }),
-    (mode) =>
-      getMollieClient(mode).paymentLinks.get(
+    async (mode) =>
+      (await getTenantMollieClient(tenantId, mode)).paymentLinks.get(
         molliePaymentLinkId,
       ) as unknown as Promise<SyncMolliePaymentLink>,
     "Payment link was not found in Mollie.",
@@ -68,15 +119,16 @@ export async function findSubscriptionAcrossModes(
   customerMollieId: string,
   preferredMode?: MollieMode,
   strictMode = false,
+  tenantId?: string,
 ) {
   const result = await findMollieResourceAcrossModes(
-    buildConfiguredMollieModeOrder({
-      isConfigured: isMollieConfigured,
+    await buildLookupMollieModeOrder({
       preferredMode,
       strictMode,
+      tenantId,
     }),
     async (mode) => {
-      const client = getMollieClient(mode);
+      const client = await getTenantMollieClient(tenantId, mode);
       const subscription = await client.customerSubscriptions.get(
         mollieSubscriptionId,
         {

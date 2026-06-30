@@ -53,6 +53,7 @@ export async function syncSubscriptionByLocalId(
     localSubscription.customerMollieId,
     localSubscription.mode,
     options?.strictMode,
+    localSubscription.tenantId,
   );
   const tenantId = localSubscription.tenantId;
   const resolvedSubscriptionId = localSubscription.id;

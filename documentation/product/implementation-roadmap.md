@@ -183,6 +183,10 @@ Current bounded implementation slice:
   from tenant-scoped schedule candidates
 - session-authenticated `/api/health` diagnostics now resolve the active tenant
   before reading the shared reliability ops snapshot
+- tenant-aware Mollie sync/reliability cross-mode lookup helpers now thread
+  explicit tenant context through sync, replay, repair, and subscription-sync
+  lookups; global/bootstrap `/api/health` diagnostics and the shared
+  env-backed fallback remain intentionally deferred
 - e-Boekhouden relation detail lookups now require active tenant context
 - tenant-owned e-Boekhouden credential storage now exists, manual
   `tenant:provision` can seed those credentials, and relation search/detail plus
@@ -233,9 +237,8 @@ Current bounded implementation slice:
 - alert open/resolve/email-sent helper writes now require tenant context, and
   unresolved alert uniqueness is now scoped by tenant-backed alert payload and
   linked entities
-- alerts, audit logs, replay/repair/cron follow-up, broader tenant-aware
-  Mollie sync/reliability cross-mode lookups, and broader live e-Boekhouden
-  mutation flows remain deferred follow-up inside Phase 0.5
+- alerts, audit logs, replay/repair/cron follow-up, and broader live
+  e-Boekhouden mutation flows remain deferred follow-up inside Phase 0.5
 
 Required behavior:
 

@@ -65,6 +65,7 @@ export async function syncPaymentByMollieId(
     molliePaymentId,
     options?.preferredMode,
     options?.strictMode,
+    options?.tenantId,
   );
   const localCustomer = await getLocalCustomerByMollieId(
     mode,
@@ -198,6 +199,7 @@ export async function syncPaymentLinkByMollieId(
     molliePaymentLinkId,
     options?.preferredMode,
     options?.strictMode,
+    options?.tenantId,
   );
   const payments = await collectPaymentLinkPayments(paymentLink);
   const existingPaymentLink = await getLocalPaymentLinkByMollieId(
