@@ -16,5 +16,6 @@ describe("payment drawer tenant scope", () => {
     assert.match(source, /and rbs\.tenant_id = p\.tenant_id/);
     assert.match(source, /c\.tenant_id = p\.tenant_id/);
     assert.match(source, /getEboekhoudenInvoice\(invoiceId, tenantId\)/);
+    assert.match(source, /const mollie = await getTenantMollieClient\(tenantId, selectedMode\);/);
   });
 });

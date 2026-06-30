@@ -23,6 +23,10 @@ describe("payment link sync module boundary", () => {
       paymentLinkSyncSource,
       /export async function syncMatchingPaymentLinkForPayment/,
     );
+    assert.match(
+      paymentLinkSyncSource,
+      /const mollie = await getTenantMollieClient\(tenantId, mode\);/,
+    );
     assert.doesNotMatch(syncSource, /async function collectPaymentLinkPayments/);
     assert.doesNotMatch(syncSource, /async function upsertPaymentLinkFromMollie/);
     assert.doesNotMatch(

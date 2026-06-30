@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 
 import { getDb, type DbClient, type DbTransaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
-import { getMollieClient } from "@/lib/mollie/client";
+import { getTenantMollieClient } from "@/lib/mollie/client";
 import type {
   CancellationRequestSubscription,
   WithdrawableOperationRequest,
@@ -267,7 +267,8 @@ export async function upsertMandatesForCustomer(
     return new Map<string, string>();
   }
 
-  const mandates = await getMollieClient(customer.mode).customerMandates.page({
+  const mollie = await getTenantMollieClient(customer.tenantId, customer.mode);
+  const mandates = await mollie.customerMandates.page({
     customerId: customer.mollieCustomerId,
   });
   const mandateIdMap = new Map<string, string>();

@@ -2,12 +2,16 @@ import process from "node:process";
 
 import { ensureTenantBillingSettings } from "@/lib/billing-settings";
 import { upsertTenantEboekhoudenCredentials } from "@/lib/eboekhouden/tenant-credentials";
+import { getDefaultMollieMode } from "@/lib/mollie/client";
+import { upsertTenantMollieCredentials } from "@/lib/mollie/tenant-credentials";
 import { ensureTenantSubscriptionPolicyDefaults } from "@/lib/subscription-policy-defaults";
 import { provisionTenant } from "@/lib/tenants";
 
 type CliArgs = {
   eboekhoudenApiSource: string | null;
   eboekhoudenApiToken: string | null;
+  mollieApiKey: string | null;
+  mollieMode: "test" | "live" | null;
   name: string;
   operatorEmail: string | null;
   platformOperatorEmail: string | null;
@@ -31,13 +35,16 @@ function parseArgs(args: string[]): CliArgs {
 
   if (!slug || !name) {
     throw new Error(
-      "Usage: npm run tenant:provision -- --slug <slug> --name <name> [--operator-email <email>] [--platform-operator-email <email>] [--tenant-id <id>] [--eboekhouden-api-token <token>] [--eboekhouden-api-source <source>]",
+      "Usage: npm run tenant:provision -- --slug <slug> --name <name> [--operator-email <email>] [--platform-operator-email <email>] [--tenant-id <id>] [--eboekhouden-api-token <token>] [--eboekhouden-api-source <source>] [--mollie-api-key <key>] [--mollie-mode <test|live>]",
     );
   }
 
   return {
     eboekhoudenApiSource: readFlag(args, "eboekhouden-api-source"),
     eboekhoudenApiToken: readFlag(args, "eboekhouden-api-token"),
+    mollieApiKey: readFlag(args, "mollie-api-key"),
+    mollieMode:
+      (readFlag(args, "mollie-mode") as CliArgs["mollieMode"]) ?? null,
     name,
     operatorEmail: readFlag(args, "operator-email"),
     platformOperatorEmail: readFlag(args, "platform-operator-email"),
@@ -69,10 +76,24 @@ async function main() {
     );
   }
 
+  if (args.mollieApiKey) {
+    await upsertTenantMollieCredentials(
+      {
+        apiKey: args.mollieApiKey,
+        mode: args.mollieMode ?? getDefaultMollieMode(),
+      },
+      tenantId,
+    );
+  }
+
   console.log(
     JSON.stringify(
       {
         hasEboekhoudenCredentials: Boolean(args.eboekhoudenApiToken),
+        hasMollieCredentials: Boolean(args.mollieApiKey),
+        mollieMode: args.mollieApiKey
+          ? args.mollieMode ?? getDefaultMollieMode()
+          : null,
         name: args.name,
         operatorEmail: args.operatorEmail,
         platformOperatorEmail: args.platformOperatorEmail,

@@ -7,7 +7,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { transaction, type DbTransaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { getCustomerDetail } from "@/lib/onboarding/data";
-import { getMollieClient } from "@/lib/mollie/client";
+import { getTenantMollieClient } from "@/lib/mollie/client";
 import { syncPaymentLinkByMollieId } from "@/lib/reliability/sync";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 import { requireCustomerTenantId } from "@/lib/tenant-ownership";
@@ -189,11 +189,11 @@ export async function repairCustomerBillingState(input: {
     };
   }
 
-  const mollie = getMollieClient(input.mode);
+  const tenantId = input.tenantId ?? (await requireCustomerTenantId(customer.id));
+  const mollie = await getTenantMollieClient(tenantId, input.mode);
   const mandates = await mollie.customerMandates.page({
     customerId: mollieCustomerId,
   });
-  const tenantId = input.tenantId ?? (await requireCustomerTenantId(customer.id));
 
   await transaction(async (client) => {
     const mandateIdMap = new Map<string, string>();

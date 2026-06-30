@@ -5,7 +5,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { normalizeCustomerNoteBody } from "@/lib/customer-note-policy";
 import { transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
-import { getMollieClient } from "@/lib/mollie/client";
+import { getTenantMollieClient } from "@/lib/mollie/client";
 import { assertRelationIsAvailable, updateRelationFromLocalFields } from "@/lib/onboarding/action-helpers";
 import { toCustomerRelationFields } from "@/lib/onboarding/customer-relation-fields";
 
@@ -53,7 +53,7 @@ export async function createCustomerFlow(input: {
         )
       : null;
 
-  const mollie = getMollieClient(input.mode);
+  const mollie = await getTenantMollieClient(tenantId, input.mode);
   const createdCustomer = await mollie.customers.create({
     email: input.input.email,
     idempotencyKey: crypto.randomUUID(),

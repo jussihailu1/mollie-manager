@@ -6,8 +6,8 @@ import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
 import { getEboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import { normalizeTrustedInvoicePdfUrl } from "@/lib/invoice-pdf";
+import { getTenantMollieClient } from "@/lib/mollie/client";
 import type { PaymentDrawerData } from "@/lib/payment-details";
-import { getMollieClient } from "@/lib/mollie/client";
 import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
 type LocalPaymentLookup = {
@@ -415,7 +415,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const payment = await getMollieClient(selectedMode).payments.get(
+    const mollie = await getTenantMollieClient(tenantId, selectedMode);
+    const payment = await mollie.payments.get(
       localPayment.molliePaymentId,
     );
 

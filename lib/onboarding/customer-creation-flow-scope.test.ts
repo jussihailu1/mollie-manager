@@ -12,6 +12,10 @@ describe("customer creation flow module boundary", () => {
   it("moves customer create/import orchestration out of the main actions file", () => {
     assert.match(actionsSource, /@\/lib\/onboarding\/customer-creation-flow/);
     assert.match(flowSource, /export async function createCustomerFlow/);
+    assert.match(
+      flowSource,
+      /const mollie = await getTenantMollieClient\(tenantId, input\.mode\);/,
+    );
     assert.match(flowSource, /customers\.create/);
     assert.match(flowSource, /updateRelationFromLocalFields/);
     assert.match(flowSource, /insert into customers/);

@@ -19,6 +19,10 @@ describe("first-payment onboarding flow module boundary", () => {
     assert.match(flowSource, /buildFirstPaymentPlan/);
     assert.match(flowSource, /buildFirstPaymentOnboardingRecords/);
     assert.match(flowSource, /persistFirstPaymentOnboardingRecords/);
+    assert.match(
+      flowSource,
+      /const mollie = await getTenantMollieClient\(\s*input\.tenantId,\s*input\.selectedMode,\s*\);/,
+    );
     assert.match(flowSource, /paymentLinks\.create/);
     assert.doesNotMatch(actionsSource, /buildFirstPaymentPlan/);
     assert.doesNotMatch(actionsSource, /buildFirstPaymentOnboardingRecords/);

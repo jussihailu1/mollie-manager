@@ -24,14 +24,26 @@ describe("onboarding tenant scope", () => {
     assert.match(actionHelpers, /assertRelationIsAvailable\(\s*relationId: number,\s*mode: "live" \| "test",\s*excludeCustomerId\?: string,\s*tenantId\?: string/);
     assert.match(archiveFlow, /getCustomerDetail\(input\.customerId, input\.mode, input\.tenantId\)/);
     assert.match(billingRepair, /getCustomerDetail\(\s*input\.customerId,\s*input\.mode,\s*input\.tenantId,\s*\)/);
+    assert.match(
+      billingRepair,
+      /const mollie = await getTenantMollieClient\(tenantId, input\.mode\);/,
+    );
     assert.match(creationFlow, /const tenantId = input\.tenantId;/);
     assert.doesNotMatch(creationFlow, /getSingleTenantIdOrThrow/);
     assert.match(creationFlow, /await assertRelationIsAvailable\(relationIdToLink, input\.mode, undefined, tenantId\);/);
+    assert.match(
+      creationFlow,
+      /const mollie = await getTenantMollieClient\(tenantId, input\.mode\);/,
+    );
     assert.match(relationLinkFlow, /const customer = await getLocalCustomer\(input\.customerId, input\.mode, input\.tenantId\);/);
     assert.match(relationLinkFlow, /input\.tenantId \?\? \(await requireCustomerTenantId\(customer\.id\)\)/);
     assert.match(firstPaymentAction, /getLocalCustomer\(input\.customerId, input\.mode, input\.tenantId\)/);
     assert.match(firstPaymentAction, /getCustomerDetail\(customer\.id, input\.mode, input\.tenantId\)/);
     assert.match(firstPaymentAction, /tenantId: input\.tenantId/);
     assert.match(firstPaymentOnboarding, /ensureTenantSubscriptionPolicyDefaults\(input\.tenantId\)/);
+    assert.match(
+      firstPaymentOnboarding,
+      /const mollie = await getTenantMollieClient\(\s*input\.tenantId,\s*input\.selectedMode,\s*\);/,
+    );
   });
 });

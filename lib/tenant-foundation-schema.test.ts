@@ -9,6 +9,12 @@ describe("tenant foundation schema", () => {
     "db/migrations/0017_tenant_foundation.sql",
     "db/drizzle/0016_tenant_foundation.sql",
   ].map((path) => readFileSync(resolve(path), "utf8"));
+  const credentialMigrationSources = [
+    "db/migrations/0020_tenant_eboekhouden_credentials.sql",
+    "db/drizzle/0019_tenant_eboekhouden_credentials.sql",
+    "db/migrations/0021_tenant_mollie_credentials.sql",
+    "db/drizzle/0020_tenant_mollie_credentials.sql",
+  ].map((path) => readFileSync(resolve(path), "utf8"));
 
   it("defines tenant, platform operator, and membership tables", () => {
     assert.match(schemaSource, /export const tenants = pgTable/);
@@ -100,20 +106,28 @@ describe("tenant foundation schema", () => {
   });
 
   it("adds tenant-owned e-Boekhouden credential storage", () => {
-    const migrationSource = readFileSync(
-      resolve("db/migrations/0020_tenant_eboekhouden_credentials.sql"),
-      "utf8",
-    );
-    const drizzleSource = readFileSync(
-      resolve("db/drizzle/0019_tenant_eboekhouden_credentials.sql"),
-      "utf8",
-    );
-
-    for (const source of [migrationSource, drizzleSource]) {
+    for (const source of credentialMigrationSources.slice(0, 2)) {
       assert.match(source, /tenant_eboekhouden_credentials/i);
       assert.match(source, /tenant_id/i);
       assert.match(source, /api_source/i);
       assert.match(source, /api_token_ciphertext/i);
+      assert.match(source, /unique/i);
+    }
+  });
+
+  it("adds tenant-owned Mollie credential storage", () => {
+    assert.match(
+      schemaSource,
+      /tenant_mollie_credentials[\s\S]*tenantId: text\("tenant_id"\)/,
+    );
+    assert.match(schemaSource, /tenant_mollie_credentials_tenant_id_fkey/);
+    assert.match(schemaSource, /tenant_mollie_credentials_tenant_id_mode_key/);
+
+    for (const source of credentialMigrationSources.slice(2)) {
+      assert.match(source, /tenant_mollie_credentials/i);
+      assert.match(source, /tenant_id/i);
+      assert.match(source, /mode/i);
+      assert.match(source, /api_key_ciphertext/i);
       assert.match(source, /unique/i);
     }
   });

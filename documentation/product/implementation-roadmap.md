@@ -190,6 +190,11 @@ Current bounded implementation slice:
 - first-payment and recurring invoice create/reconcile flows, invoice PDF fetch
   paths, and onboarding relation patch flows now thread explicit tenant context
   into live e-Boekhouden invoice and relation reads/writes
+- tenant-owned Mollie credential storage now exists, manual `tenant:provision`
+  can seed mode-specific Mollie API keys, and tenant-aware Mollie client
+  resolution now drives onboarding customer creation, first-payment payment-link
+  creation, subscription activation, billing repair, payment-link sync, mandate
+  sync, and payment drawer live fetches
 - current tenant e-Boekhouden credential encryption still derives from
   `AUTH_SECRET`; Phase 0.5 hardening must move this to a dedicated
   rotation-friendly application encryption key before pilot closure
@@ -228,9 +233,9 @@ Current bounded implementation slice:
 - alert open/resolve/email-sent helper writes now require tenant context, and
   unresolved alert uniqueness is now scoped by tenant-backed alert payload and
   linked entities
-- alerts, audit logs, replay/repair/cron follow-up, tenant-owned Mollie
-  credentials, and broader live e-Boekhouden mutation flows remain deferred
-  follow-up inside Phase 0.5
+- alerts, audit logs, replay/repair/cron follow-up, broader tenant-aware
+  Mollie sync/reliability cross-mode lookups, and broader live e-Boekhouden
+  mutation flows remain deferred follow-up inside Phase 0.5
 
 Required behavior:
 
