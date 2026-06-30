@@ -9,7 +9,7 @@ const credentialSource = readFileSync(
 );
 
 describe("e-Boekhouden client tenant credential scope", () => {
-  it("resolves tenant-owned credentials for relation and discovery reads", () => {
+  it("threads tenant context through relation and invoice read/mutation ops", () => {
     assert.match(
       clientSource,
       /resolveTenantEboekhoudenConfig,/,
@@ -23,8 +23,40 @@ describe("e-Boekhouden client tenant credential scope", () => {
       clientSource,
       /export async function getEboekhoudenRelation\(id: number, tenantId\?: string\)/,
     );
+    assert.match(
+      clientSource,
+      /export async function createEboekhoudenInvoice\(\s*payload: EboekhoudenCreateInvoiceInput,\s*tenantId\?: string,\s*\)/,
+    );
+    assert.match(
+      clientSource,
+      /export async function getEboekhoudenInvoice\(id: number, tenantId\?: string\)/,
+    );
+    assert.match(
+      clientSource,
+      /export async function listEboekhoudenInvoices\(\s*options\?: \{[\s\S]*tenantId\?: string;[\s\S]*\}\)/,
+    );
+    assert.match(
+      clientSource,
+      /export async function createEboekhoudenRelation\(\s*payload: Record<string, unknown>,\s*tenantId\?: string,\s*\)/,
+    );
+    assert.match(
+      clientSource,
+      /export async function updateEboekhoudenRelation\(\s*id: number,\s*payload: Record<string, unknown>,\s*tenantId\?: string,\s*\)/,
+    );
     assert.match(clientSource, /listEboekhoudenInvoiceTemplates\(options\?: \{[\s\S]*tenantId\?: string;/);
     assert.match(clientSource, /listEboekhoudenLedgers\(options\?: \{[\s\S]*tenantId\?: string;/);
+    assert.match(
+      clientSource,
+      /export async function createEboekhoudenInvoice\([\s\S]*requestEboekhouden<EboekhoudenInvoice>[\s\S]*tenantId\);/,
+    );
+    assert.match(
+      clientSource,
+      /export async function createEboekhoudenRelation\([\s\S]*requestEboekhouden<\{ id\?: number \} \| EboekhoudenRelation>[\s\S]*tenantId\);/,
+    );
+    assert.match(
+      clientSource,
+      /export async function updateEboekhoudenRelation\([\s\S]*requestEboekhouden<void>[\s\S]*tenantId\);/,
+    );
   });
 
   it("stores encrypted tenant e-Boekhouden tokens and keeps legacy-default env fallback", () => {

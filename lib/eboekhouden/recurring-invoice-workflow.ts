@@ -106,6 +106,7 @@ export async function createEboekhoudenInvoiceForSchedule(
       date: candidate.invoiceSendDueDate,
       reference,
       relationId: candidate.eboekhoudenRelationId,
+      tenantId: candidate.tenantId,
     });
 
     if (existing.status === "ambiguous") {
@@ -144,7 +145,7 @@ export async function createEboekhoudenInvoiceForSchedule(
       };
     }
 
-    const invoice = await createEboekhoudenInvoice({
+    const invoiceInput: Parameters<typeof createEboekhoudenInvoice>[0] = {
       date: candidate.invoiceSendDueDate,
       inExVat: "EX",
       items: [
@@ -164,7 +165,11 @@ export async function createEboekhoudenInvoiceForSchedule(
         candidate.invoiceSendDueDate,
         candidate.plannedCollectionDate,
       ),
-    });
+    };
+    const invoice = await createEboekhoudenInvoice(
+      invoiceInput,
+      candidate.tenantId,
+    );
     const storedInvoice = await storeRecurringInvoiceCreationSuccess({
       actor,
       candidate,
@@ -197,6 +202,7 @@ export async function createEboekhoudenInvoiceForSchedule(
         date: candidate.invoiceSendDueDate,
         reference,
         relationId: candidate.eboekhoudenRelationId,
+        tenantId: candidate.tenantId,
       });
 
       if (existing.status === "found") {

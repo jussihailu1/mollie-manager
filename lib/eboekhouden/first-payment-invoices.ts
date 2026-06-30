@@ -122,6 +122,7 @@ export async function recoverFailedFirstPaymentInvoicesBatch(input: {
       date: invoiceDate,
       reference,
       relationId: candidate.eboekhoudenRelationId,
+      tenantId: candidate.tenantId,
     });
 
     if (existing.status === "ambiguous") {

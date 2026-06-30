@@ -14,6 +14,10 @@ describe("invoice delivery scope", () => {
     assert.match(source, /tenantId: input\.tenantId/);
     assert.match(
       source,
+      /getEboekhoudenInvoice\(numericInvoiceId, input\.tenantId\)/,
+    );
+    assert.match(
+      source,
       /async function getInvoiceEntityMetadata\(input: \{\s+entityId: string;\s+invoiceType: "first_payment" \| "recurring";\s+tenantId: string;\s+\}\)/,
     );
     assert.match(

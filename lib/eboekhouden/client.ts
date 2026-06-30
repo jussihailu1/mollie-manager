@@ -375,15 +375,20 @@ export async function listEboekhoudenLedgers(options?: {
 
 export async function createEboekhoudenInvoice(
   payload: EboekhoudenCreateInvoiceInput,
+  tenantId?: string,
 ) {
   return requestEboekhouden<EboekhoudenInvoice>("/v1/invoice", {
     body: JSON.stringify(payload),
     method: "POST",
-  });
+  }, tenantId);
 }
 
-export async function getEboekhoudenInvoice(id: number) {
-  return requestEboekhouden<EboekhoudenInvoice>(`/v1/invoice/${id}`);
+export async function getEboekhoudenInvoice(id: number, tenantId?: string) {
+  return requestEboekhouden<EboekhoudenInvoice>(
+    `/v1/invoice/${id}`,
+    {},
+    tenantId,
+  );
 }
 
 export async function listEboekhoudenInvoices(options?: {
@@ -392,6 +397,7 @@ export async function listEboekhoudenInvoices(options?: {
   limit?: number;
   offset?: number;
   relationId?: number;
+  tenantId?: string;
 }) {
   const params = new URLSearchParams();
   params.set("limit", String(Math.min(Math.max(options?.limit ?? 100, 1), 2000)));
@@ -408,11 +414,14 @@ export async function listEboekhoudenInvoices(options?: {
 
   return requestEboekhouden<EboekhoudenListResponse<EboekhoudenInvoice>>(
     `/v1/invoice?${params.toString()}`,
+    {},
+    options?.tenantId,
   );
 }
 
 export async function createEboekhoudenRelation(
   payload: Record<string, unknown>,
+  tenantId?: string,
 ) {
   return requestEboekhouden<{ id?: number } | EboekhoudenRelation>(
     "/v1/relation",
@@ -420,17 +429,19 @@ export async function createEboekhoudenRelation(
       body: JSON.stringify(payload),
       method: "POST",
     },
+    tenantId,
   );
 }
 
 export async function updateEboekhoudenRelation(
   id: number,
   payload: Record<string, unknown>,
+  tenantId?: string,
 ) {
   await requestEboekhouden<void>(`/v1/relation/${id}`, {
     body: JSON.stringify(payload),
     method: "PATCH",
-  });
+  }, tenantId);
 }
 
 export function toPublicEboekhoudenError(error: unknown) {

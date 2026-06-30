@@ -155,6 +155,7 @@ export async function recoverFailedRecurringInvoicesBatch(input: {
       date: candidate.invoiceSendDueDate,
       reference,
       relationId: candidate.eboekhoudenRelationId,
+      tenantId: candidate.tenantId,
     });
 
     if (existing.status === "ambiguous") {

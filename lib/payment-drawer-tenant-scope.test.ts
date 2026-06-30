@@ -15,5 +15,6 @@ describe("payment drawer tenant scope", () => {
     assert.match(source, /where p\.tenant_id = \$\{tenantId\}/);
     assert.match(source, /and rbs\.tenant_id = p\.tenant_id/);
     assert.match(source, /c\.tenant_id = p\.tenant_id/);
+    assert.match(source, /getEboekhoudenInvoice\(invoiceId, tenantId\)/);
   });
 });

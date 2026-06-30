@@ -46,7 +46,11 @@ export async function createCustomerFlow(input: {
 
   const linkedRelation =
     relationIdToLink
-      ? await updateRelationFromLocalFields(relationIdToLink, relationFields)
+      ? await updateRelationFromLocalFields(
+          relationIdToLink,
+          relationFields,
+          tenantId,
+        )
       : null;
 
   const mollie = getMollieClient(input.mode);

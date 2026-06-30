@@ -64,13 +64,14 @@ export async function linkCustomerToEboekhoudenRelation(
     input.tenantId,
   );
 
+  const tenantId = input.tenantId ?? (await requireCustomerTenantId(customer.id));
   const relationFields = toCustomerRelationFields(input.fields);
   const linkedRelation = await updateRelationFromLocalFields(
     input.fields.eboekhoudenRelationId,
     relationFields,
+    tenantId,
   );
   const normalizedNote = normalizeCustomerNoteBody(input.fields.notes ?? "");
-  const tenantId = input.tenantId ?? (await requireCustomerTenantId(customer.id));
 
   await transaction(async (client) => {
     await client.execute(sql`

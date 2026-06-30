@@ -187,6 +187,12 @@ Current bounded implementation slice:
 - tenant-owned e-Boekhouden credential storage now exists, manual
   `tenant:provision` can seed those credentials, and relation search/detail plus
   billing-settings discovery now resolve e-Boekhouden credentials per tenant
+- first-payment and recurring invoice create/reconcile flows, invoice PDF fetch
+  paths, and onboarding relation patch flows now thread explicit tenant context
+  into live e-Boekhouden invoice and relation reads/writes
+- current tenant e-Boekhouden credential encryption still derives from
+  `AUTH_SECRET`; Phase 0.5 hardening must move this to a dedicated
+  rotation-friendly application encryption key before pilot closure
 - consent-link lookup now resolves the active tenant before reading latest
   customer consent URLs
 - customer activity, invoice-link, customer-note, and customer-notification

@@ -157,6 +157,7 @@ function deliveryFailureAlertTitle(input: {
 async function resolveInvoicePdfUrl(input: {
   eboekhoudenInvoiceId: string | null;
   eboekhoudenInvoicePdfUrl?: string | null;
+  tenantId: string;
 }) {
   const trustedMetadataUrl = normalizeTrustedInvoicePdfUrl(
     input.eboekhoudenInvoicePdfUrl,
@@ -174,7 +175,7 @@ async function resolveInvoicePdfUrl(input: {
     return null;
   }
 
-  const invoice = await getEboekhoudenInvoice(numericInvoiceId);
+  const invoice = await getEboekhoudenInvoice(numericInvoiceId, input.tenantId);
   return normalizeTrustedInvoicePdfUrl(invoice.urlPdfFile ?? null);
 }
 
@@ -465,6 +466,7 @@ export async function deliverCustomerInvoiceEmail(input: DeliveryInput) {
   const invoicePdfUrl = await resolveInvoicePdfUrl({
     eboekhoudenInvoiceId: input.eboekhoudenInvoiceId,
     eboekhoudenInvoicePdfUrl: input.eboekhoudenInvoicePdfUrl,
+    tenantId: input.tenantId,
   });
   const attachmentResult = await buildTrustedInvoicePdfAttachment({
     invoiceNumber,

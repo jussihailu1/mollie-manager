@@ -132,6 +132,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       date: invoiceDate,
       reference,
       relationId: eligibleCandidate.eboekhoudenRelationId,
+      tenantId: candidate.tenantId,
     });
 
     if (existing.status === "ambiguous") {
@@ -178,7 +179,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       throw new Error("Stored onboarding consent snapshot is invalid.");
     }
 
-    const invoice = await createEboekhoudenInvoice({
+    const invoiceInput: Parameters<typeof createEboekhoudenInvoice>[0] = {
       date: invoiceDate,
       inExVat: "EX",
       items: [
@@ -195,7 +196,11 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       relationId: eligibleCandidate.eboekhoudenRelationId,
       templateId: settings!.invoiceTemplateId!,
       termOfPayment: 0,
-    });
+    };
+    const invoice = await createEboekhoudenInvoice(
+      invoiceInput,
+      candidate.tenantId,
+    );
     const storedInvoice = await storeFirstPaymentInvoiceCreationSuccess({
       actor,
       candidate,
@@ -228,6 +233,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
         date: invoiceDate,
         reference,
         relationId: eligibleCandidate.eboekhoudenRelationId,
+        tenantId: candidate.tenantId,
       });
 
       if (existing.status === "found") {

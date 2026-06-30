@@ -50,8 +50,9 @@ export function serializeIntegrationError(error: unknown) {
 export async function updateRelationFromLocalFields(
   relationId: number,
   fields: LocalRelationFields,
+  tenantId: string,
 ) {
-  const relation = await getEboekhoudenRelation(relationId);
+  const relation = await getEboekhoudenRelation(relationId, tenantId);
 
   if (!shouldPatchEboekhoudenRelation(relation, fields)) {
     return relation;
@@ -60,9 +61,10 @@ export async function updateRelationFromLocalFields(
   await updateEboekhoudenRelation(
     relationId,
     localFieldsToRelationPatch(fields, relation),
+    tenantId,
   );
 
-  return getEboekhoudenRelation(relationId);
+  return getEboekhoudenRelation(relationId, tenantId);
 }
 
 export async function getLocalCustomer(

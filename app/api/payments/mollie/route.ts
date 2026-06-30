@@ -115,7 +115,10 @@ function extractInvoiceAttachmentStatus(
   }
 }
 
-async function resolveInvoicePdfUrl(localPayment: LocalPaymentLookup) {
+async function resolveInvoicePdfUrl(
+  localPayment: LocalPaymentLookup,
+  tenantId: string,
+) {
   const metadataUrl = extractInvoicePdfUrl(localPayment.invoiceMetadata);
   if (metadataUrl) {
     return metadataUrl;
@@ -131,7 +134,7 @@ async function resolveInvoicePdfUrl(localPayment: LocalPaymentLookup) {
   }
 
   try {
-    const invoice = await getEboekhoudenInvoice(invoiceId);
+    const invoice = await getEboekhoudenInvoice(invoiceId, tenantId);
     return normalizeTrustedInvoicePdfUrl(invoice.urlPdfFile ?? null);
   } catch {
     return null;
@@ -141,8 +144,9 @@ async function resolveInvoicePdfUrl(localPayment: LocalPaymentLookup) {
 async function toPaymentDrawerData(
   localPayment: LocalPaymentLookup,
   payment: Payment,
+  tenantId: string,
 ): Promise<PaymentDrawerData> {
-  const invoicePdfUrl = await resolveInvoicePdfUrl(localPayment);
+  const invoicePdfUrl = await resolveInvoicePdfUrl(localPayment, tenantId);
   const documentAttachmentStatus = extractInvoiceAttachmentStatus(
     localPayment.invoiceMetadata,
   );
@@ -415,7 +419,9 @@ export async function GET(request: NextRequest) {
       localPayment.molliePaymentId,
     );
 
-    return Response.json(await toPaymentDrawerData(localPayment, payment));
+    return Response.json(
+      await toPaymentDrawerData(localPayment, payment, tenantId),
+    );
   } catch {
     return Response.json(
       {
