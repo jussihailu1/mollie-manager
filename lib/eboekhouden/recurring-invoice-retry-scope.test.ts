@@ -26,6 +26,7 @@ describe("recurring invoice retry module boundary", () => {
       retrySource,
       /export async function queueRetryForSafeFailedRecurringInvoicesBatch/,
     );
+    assert.doesNotMatch(retrySource, /getSingleTenantIdOrThrow/);
     assert.doesNotMatch(
       recurringSource,
       /export async function getFailedRecurringInvoiceRetrySummary/,

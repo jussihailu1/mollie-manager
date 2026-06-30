@@ -7,7 +7,6 @@ import {
   buildFirstPaymentFilter,
 } from "@/lib/eboekhouden/first-payment-invoice-match-query";
 import { toInvoiceCount } from "@/lib/eboekhouden/invoice-flow-helpers";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 const TERMINAL_OR_IN_PROGRESS_STATES = [
   "invoice_creating",
@@ -27,7 +26,11 @@ type DueFirstPaymentInvoiceCandidate = {
 };
 
 async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
+  if (!tenantId) {
+    throw new Error("Tenant id is required.");
+  }
+
+  return tenantId;
 }
 
 export async function listDueFirstPaymentInvoiceCandidates(

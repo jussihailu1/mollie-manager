@@ -8,7 +8,6 @@ import type { MollieMode } from "@/lib/env";
 import { getMollieClient } from "@/lib/mollie/client";
 import { assertRelationIsAvailable, updateRelationFromLocalFields } from "@/lib/onboarding/action-helpers";
 import { toCustomerRelationFields } from "@/lib/onboarding/customer-relation-fields";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 type CreateCustomerFlowInput = {
   address?: string;
@@ -27,7 +26,12 @@ export async function createCustomerFlow(input: {
   mode: MollieMode;
   tenantId?: string;
 }) {
-  const tenantId = input.tenantId ?? (await getSingleTenantIdOrThrow());
+  const tenantId = input.tenantId;
+
+  if (!tenantId) {
+    throw new Error("Tenant id is required.");
+  }
+
   const localCustomerId = crypto.randomUUID();
   const relationFields = toCustomerRelationFields(input.input);
   const relationIdToLink =

@@ -12,6 +12,7 @@ describe("onboarding action helpers boundary", () => {
     assert.match(helpersSource, /export async function updateRelationFromLocalFields/);
     assert.match(helpersSource, /export async function getLocalCustomer/);
     assert.match(helpersSource, /export async function assertRelationIsAvailable/);
+    assert.doesNotMatch(helpersSource, /getSingleTenantIdOrThrow/);
     assert.doesNotMatch(actionsSource, /function redirectWithMessage/);
     assert.doesNotMatch(actionsSource, /function serializeError/);
     assert.doesNotMatch(actionsSource, /function serializeIntegrationError/);

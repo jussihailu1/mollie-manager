@@ -6,7 +6,6 @@ import type { EboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import { buildRecurringFailedInvoiceFilter } from "@/lib/eboekhouden/recurring-invoice-query";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { deliverAlertEmail, openAlert } from "@/lib/reliability/alerts";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export type RecurringInvoiceActor = {
   email?: string | null;
@@ -30,7 +29,11 @@ export async function listFailedRecurringRecoveryCandidates(
   limit: number,
   tenantId?: string,
 ) {
-  const resolvedTenantId = tenantId ?? (await getSingleTenantIdOrThrow());
+  if (!tenantId) {
+    throw new Error("Tenant id is required.");
+  }
+
+  const resolvedTenantId = tenantId;
   const result = await getDb().execute<RecurringInvoiceRecoveryCandidate>(sql`
     select
       rbs.id as "scheduleId",

@@ -21,5 +21,6 @@ describe("onboarding data tenant scope", () => {
     assert.match(source, /pl\.tenant_id = \$\{resolvedTenantId\}/);
     assert.match(source, /s\.tenant_id = \$\{resolvedTenantId\}/);
     assert.match(source, /soc\.tenant_id = \$\{resolvedTenantId\}/);
+    assert.doesNotMatch(source, /getSingleTenantIdOrThrow/);
   });
 });

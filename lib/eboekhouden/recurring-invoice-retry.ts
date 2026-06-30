@@ -10,7 +10,6 @@ import { buildInvoiceRetryQueuedMetadata } from "@/lib/eboekhouden/invoice-retry
 import { filterSafeFailedInvoiceRetryIds } from "@/lib/eboekhouden/invoice-retry-candidates";
 import { countSafeInvoiceRetryFailures } from "@/lib/eboekhouden/invoice-retry-summary";
 import { buildRecurringFailedInvoiceFilter } from "@/lib/eboekhouden/recurring-invoice-query";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 const DEFAULT_BATCH_SIZE = 25;
 
@@ -30,7 +29,11 @@ type FailedRecurringInvoiceRetrySummary = {
 };
 
 async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
+  if (!tenantId) {
+    throw new Error("Tenant id is required.");
+  }
+
+  return tenantId;
 }
 
 async function queueRetryForFailedRecurringInvoice(input: {

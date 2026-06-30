@@ -16,7 +16,6 @@ import { updateActionPath } from "@/lib/onboarding/action-path";
 import {
   shouldPatchEboekhoudenRelation,
 } from "@/lib/onboarding/customer-relation-fields";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export function redirectWithMessage(
   pathname: string,
@@ -81,7 +80,11 @@ export async function assertRelationIsAvailable(
   excludeCustomerId?: string,
   tenantId?: string,
 ) {
-  const resolvedTenantId = tenantId ?? (await getSingleTenantIdOrThrow());
+  if (!tenantId) {
+    throw new Error("Tenant id is required.");
+  }
+
+  const resolvedTenantId = tenantId;
   const existing = await transaction(async (client) => {
     const result = excludeCustomerId
       ? await client.execute<{ id: string }>(sql`

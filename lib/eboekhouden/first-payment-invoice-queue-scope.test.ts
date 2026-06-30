@@ -22,6 +22,7 @@ describe("first-payment invoice queue module boundary", () => {
     assert.match(queueSource, /export async function listDueFirstPaymentInvoiceCandidates/);
     assert.match(queueSource, /export async function normalizeFirstPaymentInvoiceStates/);
     assert.match(queueSource, /export async function getDueFirstPaymentInvoiceQueueSummary/);
+    assert.doesNotMatch(queueSource, /getSingleTenantIdOrThrow/);
     assert.doesNotMatch(
       invoiceSource,
       /export async function normalizeFirstPaymentInvoiceStates/,

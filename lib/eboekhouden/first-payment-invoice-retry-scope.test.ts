@@ -26,6 +26,7 @@ describe("first-payment invoice retry module boundary", () => {
       retrySource,
       /export async function queueRetryForFailedFirstPaymentInvoicesBatch/,
     );
+    assert.doesNotMatch(retrySource, /getSingleTenantIdOrThrow/);
     assert.doesNotMatch(
       firstPaymentSource,
       /export async function queueRetryForSafeFailedFirstPaymentInvoicesBatch/,

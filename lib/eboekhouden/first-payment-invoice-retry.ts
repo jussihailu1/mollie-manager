@@ -11,7 +11,6 @@ import { type FirstPaymentInvoiceActor } from "@/lib/eboekhouden/first-payment-i
 import { buildInvoiceRetryQueuedMetadata } from "@/lib/eboekhouden/invoice-retry-metadata";
 import { filterSafeFailedInvoiceRetryIds } from "@/lib/eboekhouden/invoice-retry-candidates";
 import { countSafeInvoiceRetryFailures } from "@/lib/eboekhouden/invoice-retry-summary";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 const DEFAULT_BATCH_SIZE = 25;
 
@@ -26,7 +25,11 @@ type FailedFirstPaymentInvoiceRetrySummary = {
 };
 
 async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
+  if (!tenantId) {
+    throw new Error("Tenant id is required.");
+  }
+
+  return tenantId;
 }
 
 function buildFailedFirstPaymentRetryFilter(mode: MollieMode, tenantId?: string) {

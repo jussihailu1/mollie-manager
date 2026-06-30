@@ -21,7 +21,7 @@ describe("customer overview consent scope", () => {
   it("scopes root customer and payment loaders by tenant", () => {
     const source = readFileSync(resolve("lib/onboarding/data.ts"), "utf8");
 
-    assert.match(source, /getSingleTenantIdOrThrow/);
+    assert.doesNotMatch(source, /getSingleTenantIdOrThrow/);
     assert.match(source, /c\.tenant_id = \$\{resolvedTenantId\}/);
     assert.match(source, /p\.tenant_id = \$\{resolvedTenantId\}/);
     assert.match(source, /pl\.tenant_id = \$\{resolvedTenantId\}/);

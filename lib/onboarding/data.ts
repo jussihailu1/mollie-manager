@@ -11,7 +11,6 @@ import {
   buildConsentTokenStorage,
   resolveStoredConsentToken,
 } from "@/lib/onboarding/consent-token-storage";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export type CustomerOverview = {
   address: string | null;
@@ -195,7 +194,11 @@ function toModeParam(mode?: DashboardModeFilter) {
 }
 
 async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
+  if (!tenantId) {
+    throw new Error("Tenant id is required.");
+  }
+
+  return tenantId;
 }
 
 const customerBusinessNameSelect = sql<string | null>`

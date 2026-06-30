@@ -30,7 +30,6 @@ import {
 } from "@/lib/eboekhouden/recurring-invoice-recovery";
 import { createInvoiceBatchWithDependencies } from "@/lib/invoice-creation-batch";
 import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export { createEboekhoudenInvoiceForSchedule };
 export {
@@ -66,7 +65,11 @@ type FailedRecurringRecoveryBatchResult = {
 };
 
 async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
+  if (!tenantId) {
+    throw new Error("Tenant id is required.");
+  }
+
+  return tenantId;
 }
 
 async function listDueRecurringInvoiceCandidates(
