@@ -276,6 +276,7 @@ export async function attemptSubscriptionActivation(input: {
     };
   }
 
+  const tenantId = await requireCustomerTenantId(customer.id);
   const consentLinkedSubscription = context.subscriptions.find(
     (subscription) => subscription.consentId === acceptedConsent.consentId,
   );
@@ -283,6 +284,7 @@ export async function attemptSubscriptionActivation(input: {
   if (consentLinkedSubscription) {
     await resolveAlertsForEntity({
       paymentId: latestPaidFirstPayment.id,
+      tenantId,
     });
 
     return {
@@ -310,7 +312,6 @@ export async function attemptSubscriptionActivation(input: {
 
   const plan = parsedPlan.data;
   const localSubscriptionId = crypto.randomUUID();
-  const tenantId = await requireCustomerTenantId(customer.id);
 
   try {
     const subscription = await getMollieClient(input.mode).customerSubscriptions.create({
@@ -443,6 +444,7 @@ export async function attemptSubscriptionActivation(input: {
 
     await resolveAlertsForEntity({
       paymentId: latestPaidFirstPayment.id,
+      tenantId,
     });
 
     return {
@@ -486,6 +488,7 @@ export async function attemptSubscriptionActivation(input: {
         trigger: input.trigger,
       },
       severity: "warning",
+      tenantId,
       title: "Subscription activation failed",
     });
 

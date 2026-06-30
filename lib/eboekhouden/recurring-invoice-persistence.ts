@@ -123,6 +123,7 @@ export async function storeRecurringInvoiceCreationSuccess(input: {
       where status = 'open'
         and payload ->> 'kind' = 'recurring_invoice_creation_failed'
         and payload ->> 'scheduleId' = ${input.candidate.scheduleId}
+        and payload ->> 'tenantId' = ${input.candidate.tenantId}
     `);
 
     return openAlert(
@@ -143,6 +144,7 @@ export async function storeRecurringInvoiceCreationSuccess(input: {
         },
         severity: "info",
         subscriptionId: input.candidate.subscriptionId,
+        tenantId: input.candidate.tenantId,
         title:
           source === "created"
             ? `Recurring invoice created for ${input.candidate.plannedCollectionDate}`
@@ -211,6 +213,7 @@ export async function storeRecurringInvoiceCreationFailure(input: {
         },
         severity: "warning",
         subscriptionId: input.candidate.subscriptionId,
+        tenantId: input.candidate.tenantId,
         title: `Recurring invoice creation failed for ${input.candidate.plannedCollectionDate}`,
       },
       tx,

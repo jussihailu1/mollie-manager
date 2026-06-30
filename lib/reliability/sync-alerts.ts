@@ -41,6 +41,7 @@ export async function handlePaymentAlerts(input: {
         },
         severity: "critical",
         subscriptionId: input.subscriptionId,
+        tenantId: input.tenantId,
         title: "Recurring collection reversed",
       });
 
@@ -70,6 +71,7 @@ export async function handlePaymentAlerts(input: {
         },
         severity: "critical",
         subscriptionId: input.subscriptionId,
+        tenantId: input.tenantId,
         title: "Recurring mandate problem",
       });
 
@@ -101,6 +103,7 @@ export async function handlePaymentAlerts(input: {
         },
         severity: "warning",
         subscriptionId: input.subscriptionId,
+        tenantId: input.tenantId,
         title: "Recurring collection failed",
       });
 
@@ -120,6 +123,7 @@ export async function handlePaymentAlerts(input: {
     if (recurringCollectionState === "settled") {
       await resolveAlertsForEntity({
         paymentId: input.localPaymentId,
+        tenantId: input.tenantId,
       });
       return;
     }
@@ -133,6 +137,7 @@ export async function handlePaymentAlerts(input: {
       paymentId: input.localPaymentId,
       severity: "critical",
       subscriptionId: input.subscriptionId,
+      tenantId: input.tenantId,
       title: "Disputed payment",
     });
 
@@ -161,6 +166,7 @@ export async function handlePaymentAlerts(input: {
       paymentId: input.localPaymentId,
       severity: "warning",
       subscriptionId: input.subscriptionId,
+      tenantId: input.tenantId,
       title: alertTitle,
     });
 
@@ -181,6 +187,7 @@ export async function handlePaymentAlerts(input: {
 
   await resolveAlertsForEntity({
     paymentId: input.localPaymentId,
+    tenantId: input.tenantId,
   });
 }
 
@@ -197,6 +204,7 @@ export async function handleSubscriptionAlerts(input: {
         "The subscription is suspended or waiting for a payment-related intervention in Mollie.",
       severity: "warning",
       subscriptionId: input.localSubscriptionId,
+      tenantId: input.tenantId,
       title: "Subscription needs payment action",
     });
 
@@ -220,6 +228,7 @@ export async function handleSubscriptionAlerts(input: {
         "The local subscription state no longer matches the latest Mollie state.",
       severity: "critical",
       subscriptionId: input.localSubscriptionId,
+      tenantId: input.tenantId,
       title: "Subscription out of sync",
     });
 
@@ -238,5 +247,6 @@ export async function handleSubscriptionAlerts(input: {
 
   await resolveAlertsForEntity({
     subscriptionId: input.localSubscriptionId,
+    tenantId: input.tenantId,
   });
 }

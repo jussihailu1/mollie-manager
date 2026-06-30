@@ -338,6 +338,7 @@ async function storeDeliveryFailure(input: DeliveryInput & { errorMessage: strin
         },
         severity: "warning",
         subscriptionId: input.subscriptionId,
+        tenantId: input.tenantId,
         title: deliveryFailureAlertTitle({
           entityId: input.entityId,
           invoiceType: input.invoiceType,
@@ -410,6 +411,7 @@ async function storeDeliveryFailure(input: DeliveryInput & { errorMessage: strin
           },
           severity: "critical",
           subscriptionId: input.subscriptionId,
+          tenantId: input.tenantId,
           title: deliveryFailureAlertTitle({
             entityId: input.entityId,
             invoiceType: input.invoiceType,

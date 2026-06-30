@@ -130,6 +130,7 @@ export async function storeRecoveredFailedInvoiceSuccess(input: {
       },
       severity: "info",
       subscriptionId: input.candidate.subscriptionId,
+      tenantId: input.candidate.tenantId,
       title: "Recurring invoice recovered",
     },
     undefined,

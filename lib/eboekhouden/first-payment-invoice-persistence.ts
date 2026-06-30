@@ -25,6 +25,7 @@ export type FirstPaymentInvoicePersistenceCandidate = {
   paymentId: string;
   paymentLinkId: string;
   subscriptionId: string | null;
+  tenantId: string;
 };
 
 type AlertResult = {
@@ -128,6 +129,7 @@ export async function storeFirstPaymentInvoiceCreationSuccess(input: {
       where status = 'open'
         and payment_id = ${input.candidate.paymentId}
         and payload ->> 'kind' = 'first_payment_invoice_creation_failed'
+        and payload ->> 'tenantId' = ${input.candidate.tenantId}
     `);
 
     return openAlert(
@@ -149,6 +151,7 @@ export async function storeFirstPaymentInvoiceCreationSuccess(input: {
         },
         severity: "info",
         subscriptionId: input.candidate.subscriptionId,
+        tenantId: input.candidate.tenantId,
         title:
           source === "created"
             ? "First-payment invoice created"
@@ -220,6 +223,7 @@ export async function storeFirstPaymentInvoiceCreationFailure(input: {
         },
         severity: "warning",
         subscriptionId: input.candidate.subscriptionId,
+        tenantId: input.candidate.tenantId,
         title: "First-payment invoice creation failed",
       },
       tx,

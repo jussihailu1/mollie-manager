@@ -216,6 +216,9 @@ Current bounded implementation slice:
   points now fail closed without explicit tenant context
 - repair candidate alert lookups now verify tenant-owned payments,
   subscriptions, and customers before surfacing repair priority
+- alert open/resolve/email-sent helper writes now require tenant context, and
+  unresolved alert uniqueness is now scoped by tenant-backed alert payload and
+  linked entities
 - alerts, audit logs, replay/repair/cron follow-up, and tenant-owned provider
   credentials remain deferred follow-up inside Phase 0.5
 

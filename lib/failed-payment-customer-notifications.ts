@@ -39,6 +39,7 @@ type PaymentNotificationContextRow = {
   firstPaymentMode: "mandate_only" | "real_installment" | null;
   invoiceNumber: string | null;
   plannedCollectionDate: string | null;
+  tenantId: string;
   subscriptionId: string | null;
 };
 
@@ -72,6 +73,7 @@ async function loadPaymentNotificationContext(
   const result = await db.execute<PaymentNotificationContextRow>(sql`
       select
         p.customer_id as "customerId",
+        p.tenant_id as "tenantId",
         p.subscription_id as "subscriptionId",
         p.amount_value::text as "amountValue",
         p.amount_currency as "amountCurrency",
@@ -280,6 +282,7 @@ export async function runFailedPaymentCustomerNotificationForSyncedPayment(input
           taskContext.outcome.state === "mandate_problem"
             ? "critical"
             : "warning",
+        tenantId: row.tenantId,
         subscriptionId: taskContext.subscriptionId,
         title: "Failed payment customer follow-up",
       });

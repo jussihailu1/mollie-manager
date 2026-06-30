@@ -182,6 +182,12 @@ async function updateAlertStatus(
           left join customers c on c.id = coalesce(a.customer_id, p.customer_id, s.customer_id)
             and c.tenant_id = ${tenantId}
           where ${alertModeExpression} = ${mode}
+            and (
+              coalesce(a.payload ->> 'tenantId', '') = ${tenantId}
+              or p.id is not null
+              or s.id is not null
+              or c.id is not null
+            )
         )
     `);
 }
@@ -478,11 +484,12 @@ export async function sendTestAlertAction(formData: FormData) {
           ${title},
           ${message},
           ${JSON.stringify({
-          kind: "manual_test",
-          mode: selectedMode,
-          requestedAt,
-          requestedBy: session.user.email ?? null,
-        })}::jsonb
+            kind: "manual_test",
+            mode: selectedMode,
+            requestedAt,
+            requestedBy: session.user.email ?? null,
+            tenantId: tenantSelection.currentTenant.id,
+          })}::jsonb
         )
       `);
   });
@@ -597,6 +604,12 @@ export async function markAllAlertsReadAction(formData: FormData) {
             on c.id = coalesce(a.customer_id, p.customer_id, s.customer_id)
             and c.tenant_id = ${tenantSelection.currentTenant.id}
           where ${alertModeExpression} = ${selectedMode}
+            and (
+              coalesce(a.payload ->> 'tenantId', '') = ${tenantSelection.currentTenant.id}
+              or p.id is not null
+              or s.id is not null
+              or c.id is not null
+            )
         )
     `);
 
