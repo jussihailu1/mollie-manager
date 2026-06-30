@@ -187,6 +187,7 @@ async function storeDeliverySuccess(input: {
   metadata: Record<string, unknown>;
   mode: MollieMode;
   recipientOverridden: boolean;
+  tenantId: string;
 }) {
   if (input.invoiceType === "first_payment") {
     await getDb().execute(sql`
@@ -197,6 +198,7 @@ async function storeDeliverySuccess(input: {
         metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(input.metadata)}::jsonb,
         updated_at = now()
       where id = ${input.entityId}
+        and tenant_id = ${input.tenantId}
         and invoice_state in ('invoice_created', 'invoice_sent')
     `);
   } else {
@@ -208,6 +210,7 @@ async function storeDeliverySuccess(input: {
         metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(input.metadata)}::jsonb,
         updated_at = now()
       where id = ${input.entityId}
+        and tenant_id = ${input.tenantId}
         and invoice_state in ('invoice_created', 'invoice_sent')
     `);
   }
@@ -249,12 +252,14 @@ async function storeDeliverySuccess(input: {
 async function getInvoiceEntityMetadata(input: {
   entityId: string;
   invoiceType: "first_payment" | "recurring";
+  tenantId: string;
 }) {
   if (input.invoiceType === "first_payment") {
     const result = await getDb().execute<{ metadata: Record<string, unknown> }>(sql`
       select metadata
       from payments
       where id = ${input.entityId}
+        and tenant_id = ${input.tenantId}
       limit 1
     `);
     return result.rows[0]?.metadata ?? null;
@@ -264,6 +269,7 @@ async function getInvoiceEntityMetadata(input: {
     select metadata
     from recurring_billing_schedules
     where id = ${input.entityId}
+      and tenant_id = ${input.tenantId}
     limit 1
   `);
   return result.rows[0]?.metadata ?? null;
@@ -275,6 +281,7 @@ async function storeDeliveryFailure(input: DeliveryInput & { errorMessage: strin
     (await getInvoiceEntityMetadata({
       entityId: input.entityId,
       invoiceType: input.invoiceType,
+      tenantId: input.tenantId,
     })) ?? {};
   const attemptCount = toInvoiceDeliveryAttemptCount(currentMetadata) + 1;
   const nextRetryAt =
@@ -299,6 +306,7 @@ async function storeDeliveryFailure(input: DeliveryInput & { errorMessage: strin
         metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(payload)}::jsonb,
         updated_at = now()
       where id = ${input.entityId}
+        and tenant_id = ${input.tenantId}
         and invoice_state in ('invoice_created', 'invoice_sent')
     `);
   } else {
@@ -308,6 +316,7 @@ async function storeDeliveryFailure(input: DeliveryInput & { errorMessage: strin
         metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(payload)}::jsonb,
         updated_at = now()
       where id = ${input.entityId}
+        and tenant_id = ${input.tenantId}
         and invoice_state in ('invoice_created', 'invoice_sent')
     `);
   }
@@ -498,6 +507,7 @@ export async function deliverCustomerInvoiceEmail(input: DeliveryInput) {
       },
       mode: input.mode,
       recipientOverridden: env.INVOICE_EMAIL_OVERRIDE_TO ? true : false,
+      tenantId: input.tenantId,
     });
 
     return { status: "sent" as const };

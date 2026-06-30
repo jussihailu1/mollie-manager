@@ -205,6 +205,8 @@ Current bounded implementation slice:
   single-tenant fallback
 - invoice email delivery now carries tenant context through first-payment and
   resend flows instead of global fallback
+- invoice delivery helper metadata reads and invoice-state writes now fence by
+  tenant id instead of bare payment or schedule ids
 - webhook intake now resolves managed local tenant context before syncing
   Mollie resources
 - replay and repair operator actions now require the current tenant when
