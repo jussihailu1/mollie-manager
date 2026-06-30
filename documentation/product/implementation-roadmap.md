@@ -186,9 +186,15 @@ Current bounded implementation slice:
 - e-Boekhouden relation detail lookups now require active tenant context
 - consent-link lookup now resolves the active tenant before reading latest
   customer consent URLs
+- customer activity, invoice-link, customer-note, and customer-notification
+  history helpers now require explicit tenant context instead of a
+  single-tenant fallback
 - onboarding customer actions now thread the active tenant through customer
   creation, linking, archival, restoration, first-payment creation, and billing
   repair flows
+- onboarding helper/data reads and first-payment/recurring invoice helper
+  queries now fail closed without explicit tenant context instead of falling
+  back to a single-tenant default
 - reconciliation fan-out now carries the active tenant into payment and
   payment-link sync dependencies
 - payment-link sync now requires explicit tenant context instead of a
@@ -199,6 +205,9 @@ Current bounded implementation slice:
   Mollie resources
 - replay and repair operator actions now require the current tenant when
   replaying failed webhooks or running targeted repair actions
+- payment follow-up queue, pending subscription request queries, invoice
+  automation metrics, dashboard reliability reads, and repair helper entry
+  points now fail closed without explicit tenant context
 - repair candidate alert lookups now verify tenant-owned payments,
   subscriptions, and customers before surfacing repair priority
 - alerts, audit logs, replay/repair/cron follow-up, and tenant-owned provider

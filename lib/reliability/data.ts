@@ -5,7 +5,6 @@ import { cache } from "react";
 
 import type { DashboardModeFilter } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export type AlertInboxItem = {
   createdAt: string;
@@ -59,8 +58,12 @@ function toModeParam(mode?: DashboardModeFilter) {
   return !mode || mode === "all" ? null : mode;
 }
 
-async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
+function requireTenantId(tenantId?: string) {
+  if (!tenantId) {
+    throw new Error("Explicit tenant context is required.");
+  }
+
+  return tenantId;
 }
 
 const alertModeExpression = sql<"live" | "test" | null>`
@@ -353,7 +356,7 @@ export async function getReliabilitySnapshot(options?: {
   mode?: DashboardModeFilter;
   tenantId?: string;
 }) {
-  const tenantId = await resolveTenantId(options?.tenantId);
+  const tenantId = requireTenantId(options?.tenantId);
   return getReliabilitySnapshotByMode(options?.mode ?? "all", tenantId);
 }
 

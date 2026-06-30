@@ -6,7 +6,6 @@ import { cache } from "react";
 import { getDb } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import type { CancellationEffect } from "@/lib/subscription-policy";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export type PendingSubscriptionOperationRequest = {
   cancellationEffect: CancellationEffect;
@@ -25,10 +24,6 @@ export type PendingSubscriptionOperationRequest = {
   summary: string;
   title: string;
 };
-
-async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
-}
 
 const listPendingSubscriptionOperationRequestsCached = cache(async (
   mode: MollieMode,
@@ -98,9 +93,9 @@ export async function listPendingSubscriptionOperationRequests(options: {
   customerId?: string;
   limit?: number;
   mode: MollieMode;
-  tenantId?: string;
+  tenantId: string;
 }) {
-  const tenantId = await resolveTenantId(options.tenantId);
+  const tenantId = options.tenantId;
   return listPendingSubscriptionOperationRequestsCached(
     options.mode,
     tenantId,

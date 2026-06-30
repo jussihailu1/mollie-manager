@@ -12,7 +12,6 @@ import {
   syncSubscriptionByMollieId,
 } from "@/lib/reliability/sync";
 import type { MollieMode } from "@/lib/env";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export type RepairActor = {
   email?: string | null;
@@ -93,10 +92,6 @@ function toMillis(value: string | null) {
 
 function buildCandidateThresholdExpression() {
   return sql`now() - ${REPAIR_STALE_AFTER_MS} * interval '1 millisecond'`;
-}
-
-async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
 }
 
 async function processWebhookResource(
@@ -396,7 +391,7 @@ export async function repairCustomerTarget(input: {
   actor?: RepairActor;
   customerId: string;
   mode: MollieMode;
-  tenantId?: string;
+  tenantId: string;
 }): Promise<RepairTargetResult> {
   const result = await repairCustomerBillingState({
     actor: input.actor,
@@ -417,7 +412,7 @@ export async function repairReliabilityTarget(input: {
   id: string;
   kind: RepairTargetKind;
   mode: MollieMode;
-  tenantId?: string;
+  tenantId: string;
 }): Promise<RepairTargetResult> {
   if (input.kind === "customer") {
     return repairCustomerTarget({
@@ -449,9 +444,8 @@ export async function repairPaymentTarget(input: {
   actor?: RepairActor;
   paymentId: string;
   mode: MollieMode;
-  tenantId?: string;
+  tenantId: string;
 }): Promise<RepairTargetResult> {
-  const tenantId = await resolveTenantId(input.tenantId);
   const payment = await getDb().execute<LocalPaymentLookup>(sql`
       select
         id,
@@ -460,7 +454,7 @@ export async function repairPaymentTarget(input: {
       from payments
       where id = ${input.paymentId}
         and mode = ${input.mode}
-        and tenant_id = ${tenantId}
+        and tenant_id = ${input.tenantId}
       limit 1
     `);
   const row = payment.rows[0];
@@ -487,7 +481,7 @@ export async function repairPaymentTarget(input: {
     actor: input.actor,
     preferredMode: row.mode,
     strictMode: true,
-    tenantId,
+    tenantId: input.tenantId,
   });
 
   return {
@@ -501,9 +495,8 @@ export async function repairSubscriptionTarget(input: {
   actor?: RepairActor;
   subscriptionId: string;
   mode: MollieMode;
-  tenantId?: string;
+  tenantId: string;
 }): Promise<RepairTargetResult> {
-  const tenantId = await resolveTenantId(input.tenantId);
   const subscription = await getDb().execute<LocalSubscriptionLookup>(sql`
       select
         id,
@@ -512,7 +505,7 @@ export async function repairSubscriptionTarget(input: {
       from subscriptions
       where id = ${input.subscriptionId}
         and mode = ${input.mode}
-        and tenant_id = ${tenantId}
+        and tenant_id = ${input.tenantId}
       limit 1
     `);
   const row = subscription.rows[0];
@@ -539,7 +532,7 @@ export async function repairSubscriptionTarget(input: {
     actor: input.actor,
     preferredMode: row.mode,
     strictMode: true,
-    tenantId,
+    tenantId: input.tenantId,
   });
 
   return {
@@ -553,17 +546,16 @@ export async function repairWebhookEventsBatch(input: {
   actor?: RepairActor;
   limit: number;
   mode: MollieMode;
-  tenantId?: string;
+  tenantId: string;
 }) {
   const actor = input.actor ?? {
     kind: "system" as const,
   };
   const limit = normalizeLimit(input.limit);
-  const tenantId = await resolveTenantId(input.tenantId);
   const candidates = await listFailedWebhookCandidatesForTenant(
     input.mode,
     limit,
-    tenantId,
+    input.tenantId,
   );
 
   let repairedCount = 0;
@@ -580,7 +572,7 @@ export async function repairWebhookEventsBatch(input: {
         candidate.resourceId,
         candidate.mode,
         actor,
-        tenantId,
+        input.tenantId,
       );
       await updateWebhookEventStatus({
         id: candidate.id,
@@ -625,17 +617,16 @@ export async function repairStaleRecordsBatch(input: {
   actor?: RepairActor;
   limit: number;
   mode: MollieMode;
-  tenantId?: string;
+  tenantId: string;
 }): Promise<RepairBatchResult> {
   const actor = input.actor ?? {
     kind: "system" as const,
   };
   const limit = normalizeLimit(input.limit);
-  const tenantId = await resolveTenantId(input.tenantId);
   const [customerRows, paymentRows, subscriptionRows] = await Promise.all([
-    listCustomerCandidates(input.mode, limit, tenantId),
-    listPaymentCandidates(input.mode, limit, tenantId),
-    listSubscriptionCandidates(input.mode, limit, tenantId),
+    listCustomerCandidates(input.mode, limit, input.tenantId),
+    listPaymentCandidates(input.mode, limit, input.tenantId),
+    listSubscriptionCandidates(input.mode, limit, input.tenantId),
   ]);
 
   const candidates = [
@@ -676,7 +667,7 @@ export async function repairStaleRecordsBatch(input: {
       const result = await repairCustomerTarget({
         actor,
         customerId: candidate.id,
-        tenantId,
+        tenantId: input.tenantId,
         mode: input.mode,
       });
 
@@ -700,7 +691,7 @@ export async function repairStaleRecordsBatch(input: {
         actor,
         mode: input.mode,
         paymentId: candidate.id,
-        tenantId,
+        tenantId: input.tenantId,
       });
 
       if (result.status === "repaired") {
@@ -721,7 +712,7 @@ export async function repairStaleRecordsBatch(input: {
       actor,
       mode: input.mode,
       subscriptionId: candidate.id,
-      tenantId,
+      tenantId: input.tenantId,
     });
 
     if (result.status === "repaired") {

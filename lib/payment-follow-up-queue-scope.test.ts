@@ -13,7 +13,7 @@ const uiSource = readFileSync(resolve("components/notifications-workspace.tsx"),
 describe("payment follow-up queue scope", () => {
   it("isolates one explicit Mollie mode and deduplicates durable alerts", () => {
     assert.match(querySource, /mode: MollieMode/);
-    assert.match(querySource, /tenantId\?: string/);
+    assert.match(querySource, /tenantId: string/);
     assert.match(querySource, /where p\.tenant_id = \$\{tenantId\}/);
     assert.match(querySource, /and c\.tenant_id = \$\{tenantId\}/);
     assert.match(querySource, /p\.tenant_id = \$\{tenantId\}[\s\S]*p\.mode = \$\{mode\}/);
@@ -23,6 +23,7 @@ describe("payment follow-up queue scope", () => {
     assert.match(querySource, /follow_up_alert\.position = 1/);
     assert.match(querySource, /p2\.tenant_id = \$\{tenantId\}/);
     assert.match(querySource, /failed_payment_customer_notification/g);
+    assert.doesNotMatch(querySource, /getSingleTenantIdOrThrow/);
   });
 
   it("returns status evidence without raw notification or alert content", () => {

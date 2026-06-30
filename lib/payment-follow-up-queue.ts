@@ -12,7 +12,6 @@ import {
   type PaymentFollowUpTaskStatus,
   type PaymentFollowUpUrgency,
 } from "@/lib/payment-follow-up-state";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 type PaymentFollowUpRow = {
   alertId: string | null;
@@ -45,18 +44,14 @@ export type PaymentFollowUpQueueItem = {
   urgency: PaymentFollowUpUrgency;
 };
 
-async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
-}
-
 export async function listPaymentFollowUpQueue(options: {
   limit?: number;
   mode: MollieMode;
-  tenantId?: string;
+  tenantId: string;
 }): Promise<PaymentFollowUpQueueItem[]> {
   const limit = Math.max(1, Math.min(options.limit ?? 50, 100));
   const mode = options.mode;
-  const tenantId = await resolveTenantId(options.tenantId);
+  const tenantId = options.tenantId;
   const result = await getDb().execute<PaymentFollowUpRow>(sql`
     with candidate_payments as (
       select

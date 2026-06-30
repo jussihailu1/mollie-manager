@@ -4,7 +4,6 @@ import { sql } from "drizzle-orm";
 
 import type { MollieMode } from "@/lib/env";
 import { getDb } from "@/lib/db";
-import { getSingleTenantIdOrThrow } from "@/lib/tenants";
 
 export type InvoiceAutomationSnapshot = {
   dueFirstPaymentPendingCount: number;
@@ -34,15 +33,19 @@ function toCount(value: unknown) {
   return 0;
 }
 
-async function resolveTenantId(tenantId?: string) {
-  return tenantId ?? (await getSingleTenantIdOrThrow());
+function requireTenantId(tenantId?: string) {
+  if (!tenantId) {
+    throw new Error("Explicit tenant context is required.");
+  }
+
+  return tenantId;
 }
 
 export async function getInvoiceAutomationSnapshot(
   mode: MollieMode,
   tenantId?: string,
 ) {
-  const resolvedTenantId = await resolveTenantId(tenantId);
+  const resolvedTenantId = requireTenantId(tenantId);
   const result = await getDb().execute<{
     dueFirstPaymentPendingCount: number | string;
     dueRecurringPendingCount: number | string;
@@ -115,7 +118,7 @@ export async function getInvoiceAutomationCronHeartbeat(
   mode: MollieMode,
   tenantId?: string,
 ): Promise<InvoiceAutomationCronHeartbeat> {
-  const resolvedTenantId = await resolveTenantId(tenantId);
+  const resolvedTenantId = requireTenantId(tenantId);
   const result = await getDb().execute<{
     lastCronFailureAt: string | null;
     lastCronRunAt: string | null;
