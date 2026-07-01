@@ -34,6 +34,8 @@ describe("repair surface scope", () => {
     assert.match(helperSource, /alert_customer\.tenant_id = \$\{tenantId\}/);
     assert.match(helperSource, /alert_payment\.tenant_id = \$\{tenantId\}/);
     assert.match(helperSource, /alert_subscription\.tenant_id = \$\{tenantId\}/);
+    assert.match(helperSource, /from webhook_events[\s\S]*and tenant_id = \$\{tenantId\}[\s\S]*and processing_status = 'failed'[\s\S]*and resource_id is not null/);
+    assert.match(helperSource, /update webhook_events/);
   });
 
   it("requires advanced access for repair API calls", () => {

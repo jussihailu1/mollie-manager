@@ -27,6 +27,7 @@ describe("reliability data tenant scope", () => {
     assert.match(source, /fallback_customer\.tenant_id = \$\{tenantId\}/);
     assert.match(source, /or p\.id is not null/);
     assert.match(source, /or s\.id is not null/);
+    assert.match(source, /from webhook_events[\s\S]*where \(?[\s\S]*tenant_id = \$\{tenantId\}/);
     assert.match(source, /getReliabilitySnapshotByMode\([\s\S]*options\.mode \?\? "all"[\s\S]*options\.tenantId/);
   });
 

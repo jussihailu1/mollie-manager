@@ -233,11 +233,13 @@ Current bounded implementation slice:
   tenant id instead of bare payment or schedule ids
 - webhook intake now resolves managed local tenant context before syncing
   Mollie resources
-- replay and repair operator actions now require the current tenant when
-  replaying failed webhooks or running targeted repair actions
+- managed webhook_events now persist tenant ids, and replay and repair
+  operator actions now require the current tenant when replaying failed
+  webhooks or running targeted repair actions
 - payment follow-up queue, pending subscription request queries, invoice
   automation metrics, dashboard reliability reads, and repair helper entry
-  points now fail closed without explicit tenant context
+  points now fail closed without explicit tenant context, with dashboard
+  webhook history reads fenced by tenant directly
 - repair candidate alert lookups now verify tenant-owned payments,
   subscriptions, and customers before surfacing repair priority
 - alert open/resolve/email-sent helper writes now require tenant context, and

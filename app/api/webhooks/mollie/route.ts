@@ -113,6 +113,7 @@ export async function POST(request: Request) {
       insert into webhook_events (
         id,
         mode,
+        tenant_id,
         resource_type,
         resource_id,
         topic,
@@ -122,6 +123,7 @@ export async function POST(request: Request) {
       ) values (
         ${input.id},
         ${input.mode},
+        ${input.tenantId},
         ${input.resourceType ?? null},
         ${input.resourceId},
         ${input.topic},
@@ -148,6 +150,12 @@ export async function POST(request: Request) {
       await getDb().execute(sql`
         update webhook_events
         set
+          tenant_id = coalesce(
+            (select tenant_id from payments where id = ${resourceResult.paymentId} limit 1),
+            (select tenant_id from subscriptions where id = ${resourceResult.subscriptionId} limit 1),
+            (select tenant_id from payment_links where id = ${resourceResult.paymentLinkId} limit 1),
+            tenant_id
+          ),
           mode = coalesce(
             (select mode from payments where id = ${resourceResult.paymentId} limit 1),
             (select mode from subscriptions where id = ${resourceResult.subscriptionId} limit 1),

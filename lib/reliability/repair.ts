@@ -135,6 +135,7 @@ async function updateWebhookEventStatus(
     errorMessage?: string | null;
     id: string;
     processed: boolean;
+    tenantId?: string;
   },
 ) {
   await getDb().execute(sql`
@@ -150,6 +151,7 @@ async function updateWebhookEventStatus(
           else processed_at
         end
       where id = ${input.id}
+        and (${input.tenantId ?? null}::text is null or tenant_id = ${input.tenantId ?? null})
     `);
 }
 
@@ -168,28 +170,9 @@ async function listFailedWebhookCandidatesForTenant(
         retry_count as "retryCount"
       from webhook_events
       where mode = ${mode}
+        and tenant_id = ${tenantId}
         and processing_status = 'failed'
         and resource_id is not null
-        and (
-          exists (
-            select 1
-            from payments p
-            where p.tenant_id = ${tenantId}
-              and p.mollie_payment_id = webhook_events.resource_id
-          )
-          or exists (
-            select 1
-            from subscriptions s
-            where s.tenant_id = ${tenantId}
-              and s.mollie_subscription_id = webhook_events.resource_id
-          )
-          or exists (
-            select 1
-            from payment_links pl
-            where pl.tenant_id = ${tenantId}
-              and pl.mollie_payment_link_id = webhook_events.resource_id
-          )
-        )
       order by
         coalesce(last_attempt_at, received_at) asc,
         received_at desc
@@ -577,6 +560,7 @@ export async function repairWebhookEventsBatch(input: {
       await updateWebhookEventStatus({
         id: candidate.id,
         processed: true,
+        tenantId: input.tenantId,
       });
       repairedCount += 1;
     } catch (error) {
@@ -585,6 +569,7 @@ export async function repairWebhookEventsBatch(input: {
         errorMessage: message,
         id: candidate.id,
         processed: false,
+        tenantId: input.tenantId,
       });
       skippedCount += 1;
     }

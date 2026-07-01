@@ -46,7 +46,7 @@ Roadmap rule: feature sequencing comes from `implementation-roadmap.md`. This fi
 - [x] Legacy `/alerts` and `/payment-links` routes are compatibility redirects, not active standalone modules
   Status: this is intentional while notifications/settings and customer onboarding remain the real operator surfaces.
 - [x] Manual webhook replay and targeted repair are surfaced in the settings ops workflow
-  Status: the settings ops surface now exposes a failed-webhook replay queue with failed-only replay controls and explicit replay confirmation, plus a targeted repair form for single customer/payment/subscription resyncs.
+  Status: the settings ops surface now exposes a failed-webhook replay queue backed by tenant-fenced `webhook_events` rows with persisted tenant ids where managed local tenant context is known, plus failed-only replay controls and explicit replay confirmation, and a targeted repair form for single customer/payment/subscription resyncs and tenant-fenced dashboard webhook reads.
 - [x] Reliability and invoice automation health is unified across advanced `/settings` controls and `/api/health`
   Status: advanced settings controls and advanced/cron `/api/health` diagnostics now share the same reliability ops snapshot for webhook health, invoice automation, delivery retries, and cron heartbeat; CLI scripts still remain as deeper fallbacks.
 - [x] Deep technical operations controls can remain in settings during developer-operated use

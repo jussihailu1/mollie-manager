@@ -171,26 +171,7 @@ const listRecentWebhookEventsByMode = cache(async (
         processed_at as "processedAt"
       from webhook_events
       where (${modeParam}::mollie_mode is null or mode = ${modeParam})
-        and (
-          exists (
-            select 1
-            from payments p
-            where webhook_events.resource_id = p.mollie_payment_id
-              and p.tenant_id = ${tenantId}
-          )
-          or exists (
-            select 1
-            from subscriptions s
-            where webhook_events.resource_id = s.mollie_subscription_id
-              and s.tenant_id = ${tenantId}
-          )
-          or exists (
-            select 1
-            from payment_links pl
-            where webhook_events.resource_id = pl.mollie_payment_link_id
-              and pl.tenant_id = ${tenantId}
-          )
-        )
+        and tenant_id = ${tenantId}
       order by received_at desc
       limit 12
     `);
@@ -267,76 +248,19 @@ const getReliabilitySnapshotByMode = cache(async (
           from webhook_events w
           where w.processing_status = 'failed'
             and (${modeParam}::mollie_mode is null or w.mode = ${modeParam})
-            and (
-              exists (
-                select 1
-                from payments p
-                where w.resource_id = p.mollie_payment_id
-                  and p.tenant_id = ${tenantId}
-              )
-              or exists (
-                select 1
-                from subscriptions s
-                where w.resource_id = s.mollie_subscription_id
-                  and s.tenant_id = ${tenantId}
-              )
-              or exists (
-                select 1
-                from payment_links pl
-                where w.resource_id = pl.mollie_payment_link_id
-                  and pl.tenant_id = ${tenantId}
-              )
-            )
+            and w.tenant_id = ${tenantId}
         ) as "failedWebhookCount",
         (
           select max(w.received_at)
           from webhook_events w
           where (${modeParam}::mollie_mode is null or w.mode = ${modeParam})
-            and (
-              exists (
-                select 1
-                from payments p
-                where w.resource_id = p.mollie_payment_id
-                  and p.tenant_id = ${tenantId}
-              )
-              or exists (
-                select 1
-                from subscriptions s
-                where w.resource_id = s.mollie_subscription_id
-                  and s.tenant_id = ${tenantId}
-              )
-              or exists (
-                select 1
-                from payment_links pl
-                where w.resource_id = pl.mollie_payment_link_id
-                  and pl.tenant_id = ${tenantId}
-              )
-            )
+            and w.tenant_id = ${tenantId}
         ) as "lastReceivedWebhookAt",
         (
           select max(w.processed_at)
           from webhook_events w
           where (${modeParam}::mollie_mode is null or w.mode = ${modeParam})
-            and (
-              exists (
-                select 1
-                from payments p
-                where w.resource_id = p.mollie_payment_id
-                  and p.tenant_id = ${tenantId}
-              )
-              or exists (
-                select 1
-                from subscriptions s
-                where w.resource_id = s.mollie_subscription_id
-                  and s.tenant_id = ${tenantId}
-              )
-              or exists (
-                select 1
-                from payment_links pl
-                where w.resource_id = pl.mollie_payment_link_id
-                  and pl.tenant_id = ${tenantId}
-              )
-            )
+            and w.tenant_id = ${tenantId}
         ) as "lastProcessedWebhookAt"
       from alert_records
     `);
@@ -463,26 +387,7 @@ const listRecentAuditActivityByMode = cache(async (
             from webhook_events w
             where audit_logs.entity_type = 'webhook_event'
               and w.id = audit_logs.entity_id
-              and (
-                exists (
-                  select 1
-                  from payments p
-                  where w.resource_id = p.mollie_payment_id
-                    and p.tenant_id = ${tenantId}
-                )
-                or exists (
-                  select 1
-                  from subscriptions s
-                  where w.resource_id = s.mollie_subscription_id
-                    and s.tenant_id = ${tenantId}
-                )
-                or exists (
-                  select 1
-                  from payment_links pl
-                  where w.resource_id = pl.mollie_payment_link_id
-                    and pl.tenant_id = ${tenantId}
-                )
-              )
+              and w.tenant_id = ${tenantId}
           )
           or exists (
             select 1

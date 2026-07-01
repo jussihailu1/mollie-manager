@@ -148,6 +148,13 @@
       "when": 1782900000001,
       "tag": "0020_tenant_mollie_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1782903600000,
+      "tag": "0021_webhook_event_tenant_scope",
+      "breakpoints": true
     }
   ]
 }

@@ -24,6 +24,7 @@ export type WebhookEventInsertInput = {
   requestId: string | null;
   resourceId: string;
   resourceType: string | null;
+  tenantId: string | null;
   topic: string;
 };
 
@@ -138,6 +139,7 @@ export async function handleMollieWebhookRequest(
     requestId: request.headers.get("x-request-id") ?? null,
     resourceId: parsed.resourceId,
     resourceType: parsed.resourceType,
+    tenantId: existingResourceContext?.tenantId ?? null,
     topic: parsed.resourceType ?? "mollie-webhook",
   });
 

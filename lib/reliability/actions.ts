@@ -268,26 +268,7 @@ export async function replayWebhookEventAction(formData: FormData) {
       from webhook_events
       where id = ${parsed.data.webhookEventId}
         and mode = ${selectedMode}
-        and (
-          exists (
-            select 1
-            from payments p
-            where p.tenant_id = ${tenantSelection.currentTenant.id}
-              and p.mollie_payment_id = webhook_events.resource_id
-          )
-          or exists (
-            select 1
-            from subscriptions s
-            where s.tenant_id = ${tenantSelection.currentTenant.id}
-              and s.mollie_subscription_id = webhook_events.resource_id
-          )
-          or exists (
-            select 1
-            from payment_links pl
-            where pl.tenant_id = ${tenantSelection.currentTenant.id}
-              and pl.mollie_payment_link_id = webhook_events.resource_id
-          )
-        )
+        and tenant_id = ${tenantSelection.currentTenant.id}
       limit 1
     `);
   const event = result.rows[0];
@@ -314,6 +295,7 @@ export async function replayWebhookEventAction(formData: FormData) {
           last_attempt_at = now(),
           processed_at = now()
         where id = ${event.id}
+          and tenant_id = ${tenantSelection.currentTenant.id}
       `);
 
     await writeAuditLog(
@@ -355,6 +337,7 @@ export async function replayWebhookEventAction(formData: FormData) {
           retry_count = retry_count + 1,
           last_attempt_at = now()
         where id = ${event.id}
+          and tenant_id = ${tenantSelection.currentTenant.id}
       `);
 
     await writeAuditLog(

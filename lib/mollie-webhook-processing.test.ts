@@ -163,6 +163,7 @@ describe("mollie webhook processing", () => {
         requestId: "req_test",
         resourceId: "tr_success",
         resourceType: "payment",
+        tenantId: "tenant_test",
         topic: "payment",
       },
     ]);
@@ -190,6 +191,7 @@ describe("mollie webhook processing", () => {
     );
 
     assert.equal(inserted[0]?.mode, "test");
+    assert.equal(inserted[0]?.tenantId, null);
     assert.equal(synced[0]?.preferredMode, null);
     assert.equal(synced[0]?.tenantId, null);
   });

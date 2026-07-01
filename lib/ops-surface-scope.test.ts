@@ -14,7 +14,8 @@ describe("ops surface hardening", () => {
       /Only failed webhook events in the current mode can be replayed\./,
     );
     assert.match(source, /event\.processingStatus !== "failed"/);
-    assert.match(source, /p\.tenant_id = \$\{tenantSelection\.currentTenant\.id\}/);
+    assert.match(source, /from webhook_events[\s\S]*where id = \$\{parsed\.data\.webhookEventId\}[\s\S]*and mode = \$\{selectedMode\}/);
+    assert.match(source, /tenant_id = \$\{tenantSelection\.currentTenant\.id\}/);
   });
 
   it("surfaces first-class operator diagnostics and replay controls in settings", () => {
