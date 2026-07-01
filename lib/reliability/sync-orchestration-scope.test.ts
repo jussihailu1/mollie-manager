@@ -56,4 +56,16 @@ describe("sync orchestration tenant scope", () => {
       /tenantId: options\?\.tenantId \?\? localSubscription\.tenantId/,
     );
   });
+
+  it("keeps reconciliation fail-closed on explicit tenant context", () => {
+    assert.match(
+      syncSource,
+      /export async function reconcileOperationalData\(input: \{[\s\S]*tenantId: string;/,
+    );
+    assert.match(syncSource, /tenantId: input\.tenantId,/);
+    assert.doesNotMatch(
+      syncSource,
+      /export async function reconcileOperationalData\(input\?:/,
+    );
+  });
 });

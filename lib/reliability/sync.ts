@@ -257,17 +257,17 @@ export async function syncPaymentLinkByMollieId(
   } satisfies WebhookProcessingResult;
 }
 
-export async function reconcileOperationalData(input?: {
+export async function reconcileOperationalData(input: {
   actor?: SyncActor;
   mode?: MollieMode;
   reconciliationMode?: ReconciliationMode;
-  tenantId?: string;
+  tenantId: string;
 }): Promise<ReconciliationSummary> {
   return reconcileOperationalDataImpl({
-    actor: input?.actor,
-    mode: input?.mode,
-    reconciliationMode: input?.reconciliationMode,
-    tenantId: input?.tenantId,
+    actor: input.actor,
+    mode: input.mode,
+    reconciliationMode: input.reconciliationMode,
+    tenantId: input.tenantId,
     syncPaymentByMollieId,
     syncPaymentLinkByMollieId,
     syncSubscriptionByLocalId,
