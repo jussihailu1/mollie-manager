@@ -225,6 +225,7 @@ async function storeDeliverySuccess(input: {
     where status = 'open'
       and payload ->> 'kind' in ('invoice_delivery_failed', 'invoice_delivery_permanent_failure')
       and payload ->> 'entityId' = ${input.entityId}
+      and payload ->> 'tenantId' = ${input.tenantId}
   `);
 
   await writeAuditLog(

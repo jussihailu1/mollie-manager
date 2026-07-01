@@ -36,6 +36,10 @@ describe("invoice delivery scope", () => {
       source,
       /update recurring_billing_schedules[\s\S]*where id = \$\{input\.entityId\}[\s\S]*and tenant_id = \$\{input\.tenantId\}[\s\S]*and invoice_state in \('invoice_created', 'invoice_sent'\)/,
     );
+    assert.match(
+      source,
+      /update alerts[\s\S]*payload ->> 'entityId' = \$\{input\.entityId\}[\s\S]*payload ->> 'tenantId' = \$\{input\.tenantId\}/,
+    );
     assert.doesNotMatch(
       source,
       /where id = \$\{input\.entityId\}\s+and invoice_state in \('invoice_created', 'invoice_sent'\)/,

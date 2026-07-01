@@ -16,7 +16,10 @@ export type ScheduledInvoiceCandidate = {
   tenantId: string;
 };
 
-export async function getScheduledInvoiceCandidate(scheduleId: string) {
+export async function getScheduledInvoiceCandidate(
+  scheduleId: string,
+  tenantId: string,
+) {
   const result = await getDb().execute<ScheduledInvoiceCandidate>(sql`
     select
       rbs.id as "scheduleId",
@@ -31,9 +34,15 @@ export async function getScheduledInvoiceCandidate(scheduleId: string) {
       c.email as "customerEmail",
       c.eboekhouden_relation_id as "eboekhoudenRelationId"
     from recurring_billing_schedules rbs
-    inner join subscriptions s on s.id = rbs.subscription_id
-    inner join customers c on c.id = s.customer_id
+    inner join subscriptions s
+      on s.id = rbs.subscription_id
+      and s.tenant_id = rbs.tenant_id
+    inner join customers c
+      on c.id = s.customer_id
+      and c.mode = rbs.mode
+      and c.tenant_id = rbs.tenant_id
     where rbs.id = ${scheduleId}
+      and rbs.tenant_id = ${tenantId}
     limit 1
   `);
 

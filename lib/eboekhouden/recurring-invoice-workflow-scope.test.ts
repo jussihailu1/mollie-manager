@@ -15,6 +15,14 @@ describe("recurring invoice workflow module boundary", () => {
     assert.match(workflowSource, /deliverCustomerInvoiceEmail/);
     assert.match(
       workflowSource,
+      /getScheduledInvoiceCandidate\(scheduleId, options\.tenantId\)/,
+    );
+    assert.match(
+      workflowSource,
+      /claimScheduleForInvoice\(\{[\s\S]*tenantId: options\.tenantId,[\s\S]*\}\)/,
+    );
+    assert.match(
+      workflowSource,
       /findExistingEboekhoudenInvoiceByReference\(\{[\s\S]*tenantId: candidate\.tenantId,/,
     );
     assert.match(

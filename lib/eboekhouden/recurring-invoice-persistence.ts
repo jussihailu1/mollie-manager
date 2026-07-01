@@ -41,6 +41,7 @@ export async function claimScheduleForInvoice(input: {
   actor: RecurringInvoiceActor;
   mode: "live" | "test";
   scheduleId: string;
+  tenantId: string;
 }) {
   const result = await getDb().execute<{ id: string }>(sql`
     update recurring_billing_schedules
@@ -54,6 +55,7 @@ export async function claimScheduleForInvoice(input: {
         }),
       )}::jsonb
     where id = ${input.scheduleId}
+      and tenant_id = ${input.tenantId}
       and mode = ${input.mode}
       and invoice_state = 'pending_invoice'
       and eboekhouden_invoice_id is null
@@ -87,6 +89,7 @@ export async function storeRecurringInvoiceCreationSuccess(input: {
         )}::jsonb,
         updated_at = now()
       where id = ${input.candidate.scheduleId}
+        and tenant_id = ${input.candidate.tenantId}
         and invoice_state = 'invoice_creating'
     `);
 
@@ -178,6 +181,7 @@ export async function storeRecurringInvoiceCreationFailure(input: {
         )}::jsonb,
         updated_at = now()
       where id = ${input.candidate.scheduleId}
+        and tenant_id = ${input.candidate.tenantId}
         and invoice_state = 'invoice_creating'
     `);
 

@@ -66,7 +66,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
     options.settings
       ? Promise.resolve(options.settings)
       : getTenantBillingSettings(options.tenantId),
-    getFirstPaymentInvoiceCandidate(paymentId),
+    getFirstPaymentInvoiceCandidate(paymentId, options.tenantId),
   ]);
 
   if (!billingSettingsAreComplete(settings)) {
@@ -98,6 +98,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
     actor,
     mode: candidate.mode,
     paymentId,
+    tenantId: options.tenantId,
   });
 
   if (!claimedPaymentId) {

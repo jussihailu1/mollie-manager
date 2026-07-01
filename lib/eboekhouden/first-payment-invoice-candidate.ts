@@ -22,9 +22,12 @@ export type FirstPaymentInvoiceCandidate = {
   tenantId: string;
 };
 
-export async function getFirstPaymentInvoiceCandidate(paymentId: string) {
+export async function getFirstPaymentInvoiceCandidate(
+  paymentId: string,
+  tenantId: string,
+) {
   const result = await getDb().execute<FirstPaymentInvoiceCandidate>(sql`
-    ${buildDeterministicMatchCte({ paymentId })}
+    ${buildDeterministicMatchCte({ paymentId, tenantId })}
     select
       p.id as "paymentId",
       p.mode,
@@ -44,8 +47,12 @@ export async function getFirstPaymentInvoiceCandidate(paymentId: string) {
       dm.plan_snapshot as "planSnapshot"
     from payments p
     inner join deterministic_matches dm on dm.payment_id = p.id
-    left join customers c on c.id = p.customer_id and c.mode = p.mode
+    left join customers c
+      on c.id = p.customer_id
+      and c.mode = p.mode
+      and c.tenant_id = p.tenant_id
     where p.id = ${paymentId}
+      and p.tenant_id = ${tenantId}
     limit 1
   `);
 

@@ -44,6 +44,7 @@ export async function claimFirstPaymentInvoiceForCreation(input: {
   actor: FirstPaymentInvoiceActor;
   mode: MollieMode;
   paymentId: string;
+  tenantId: string;
 }) {
   const result = await getDb().execute<{ id: string }>(sql`
     update payments
@@ -57,6 +58,7 @@ export async function claimFirstPaymentInvoiceForCreation(input: {
         }),
       )}::jsonb
     where id = ${input.paymentId}
+      and tenant_id = ${input.tenantId}
       and mode = ${input.mode}
       and payment_type = 'first'
       and mollie_status = 'paid'
@@ -92,6 +94,7 @@ export async function storeFirstPaymentInvoiceCreationSuccess(input: {
         )}::jsonb,
         updated_at = now()
       where id = ${input.candidate.paymentId}
+        and tenant_id = ${input.candidate.tenantId}
         and invoice_state = 'invoice_creating'
     `);
 
@@ -185,6 +188,7 @@ export async function storeFirstPaymentInvoiceCreationFailure(input: {
         )}::jsonb,
         updated_at = now()
       where id = ${input.candidate.paymentId}
+        and tenant_id = ${input.candidate.tenantId}
         and invoice_state = 'invoice_creating'
     `);
 

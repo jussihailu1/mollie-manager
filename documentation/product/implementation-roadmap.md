@@ -195,6 +195,9 @@ Current bounded implementation slice:
 - first-payment and recurring invoice create/reconcile flows, invoice PDF fetch
   paths, and onboarding relation patch flows now thread explicit tenant context
   into live e-Boekhouden invoice and relation reads/writes
+- first-payment and recurring invoice candidate lookups, invoice-claim writes,
+  invoice-created state writes, and invoice-delivery alert resolution now fence
+  by tenant id through the invoice automation follow-up path
 - tenant-owned Mollie credential storage now exists, manual `tenant:provision`
   can seed mode-specific Mollie API keys, and tenant-aware Mollie client
   resolution now drives onboarding customer creation, first-payment payment-link

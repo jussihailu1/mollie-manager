@@ -8,5 +8,10 @@ describe("recurring invoice persistence scope", () => {
 
     assert.match(source, /tenantId: string/);
     assert.match(source, /tenantId: input\.candidate\.tenantId/);
+    assert.match(source, /where id = \$\{input\.scheduleId\}[\s\S]*and tenant_id = \$\{input\.tenantId\}/);
+    assert.match(
+      source,
+      /where id = \$\{input\.candidate\.scheduleId\}[\s\S]*and tenant_id = \$\{input\.candidate\.tenantId\}[\s\S]*and invoice_state = 'invoice_creating'/,
+    );
   });
 });

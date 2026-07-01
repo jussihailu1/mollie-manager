@@ -8,5 +8,8 @@ describe("recurring invoice candidate scope", () => {
 
     assert.match(source, /tenantId: string/);
     assert.match(source, /rbs\.tenant_id as "tenantId"/);
+    assert.match(source, /and s\.tenant_id = rbs\.tenant_id/);
+    assert.match(source, /and c\.tenant_id = rbs\.tenant_id/);
+    assert.match(source, /where rbs\.id = \$\{scheduleId\}[\s\S]*and rbs\.tenant_id = \$\{tenantId\}/);
   });
 });

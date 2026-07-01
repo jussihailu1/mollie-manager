@@ -63,7 +63,7 @@ export async function createEboekhoudenInvoiceForSchedule(
     options.settings
       ? Promise.resolve(options.settings)
       : getTenantBillingSettings(options.tenantId),
-    getScheduledInvoiceCandidate(scheduleId),
+    getScheduledInvoiceCandidate(scheduleId, options.tenantId),
   ]);
 
   if (!billingSettingsAreComplete(settings)) {
@@ -89,6 +89,7 @@ export async function createEboekhoudenInvoiceForSchedule(
     actor,
     mode: candidate.mode,
     scheduleId,
+    tenantId: options.tenantId,
   });
 
   if (!claimedScheduleId) {
