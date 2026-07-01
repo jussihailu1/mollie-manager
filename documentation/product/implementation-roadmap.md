@@ -160,8 +160,9 @@ Current bounded implementation slice:
   recording, withdrawing, transitioning, or syncing subscription request state
 - recurring-invoice cron fan-out now iterates accessible tenants explicitly so
   invoice create/recovery/retry automation stays tenant-scoped
-- recurring-invoice cron heartbeat metrics now read the tenant cron audit
-  entity so settings snapshots stay aligned with tenant-local runs
+- recurring-invoice cron heartbeat metrics now read tenant cron audit rows
+  directly by tenant audit entity id so settings snapshots stay aligned with
+  tenant-local runs
 - recent reliability audit activity now includes tenant-linked alert,
   webhook-event, and tenant cron rows
 - Needs Attention webhook items now require tenant-linked resources before

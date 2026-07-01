@@ -145,22 +145,7 @@ export async function getInvoiceAutomationCronHeartbeat(
       from audit_logs al2
       where al2.mode = ${mode}
         and al2.entity_type = 'tenant_recurring_billing_cron'
-        and (
-          exists (
-            select 1
-            from payments p
-            where al2.entity_type = 'payment'
-              and p.id = al2.entity_id
-              and p.tenant_id = ${resolvedTenantId}
-          )
-          or exists (
-            select 1
-            from recurring_billing_schedules rbs
-            where al2.entity_type = 'recurring_billing_schedule'
-              and rbs.id = al2.entity_id
-              and rbs.tenant_id = ${resolvedTenantId}
-          )
-        )
+        and al2.entity_id = ${resolvedTenantId}
           and al2.action = 'recurring_invoice.cron_batch_create'
         order by al2.created_at desc
         limit 1
@@ -168,22 +153,7 @@ export async function getInvoiceAutomationCronHeartbeat(
     from audit_logs al
     where al.mode = ${mode}
       and al.entity_type = 'tenant_recurring_billing_cron'
-      and (
-        exists (
-          select 1
-          from payments p
-          where al.entity_type = 'payment'
-            and p.id = al.entity_id
-            and p.tenant_id = ${resolvedTenantId}
-        )
-        or exists (
-          select 1
-          from recurring_billing_schedules rbs
-          where al.entity_type = 'recurring_billing_schedule'
-            and rbs.id = al.entity_id
-            and rbs.tenant_id = ${resolvedTenantId}
-        )
-      )
+      and al.entity_id = ${resolvedTenantId}
       and al.action = 'recurring_invoice.cron_batch_create'
   `);
   const row = result.rows[0];
