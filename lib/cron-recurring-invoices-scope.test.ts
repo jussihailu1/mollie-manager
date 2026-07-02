@@ -14,6 +14,7 @@ describe("recurring invoice cron tenant scope", () => {
     assert.match(routeSource, /tenantId: input\.tenantId/);
     assert.match(routeSource, /entityId: input\.tenantId/);
     assert.match(routeSource, /entityType: "tenant_recurring_billing_cron"/);
+    assert.doesNotMatch(routeSource, /entityType: "recurring_billing_cron"/);
     assert.match(routeSource, /repairWebhookEventsBatch\([\s\S]*tenantId: input\.tenantId/);
     assert.match(routeSource, /repairStaleRecordsBatch\([\s\S]*tenantId: input\.tenantId/);
     assert.match(routeSource, /queueRetryForSafeFailedRecurringInvoicesBatch\([\s\S]*tenantId: input\.tenantId/);
@@ -22,5 +23,12 @@ describe("recurring invoice cron tenant scope", () => {
     assert.match(routeSource, /recoverFailedFirstPaymentInvoicesBatch\([\s\S]*tenantId: input\.tenantId/);
     assert.match(routeSource, /retryUnsentRecurringInvoiceEmailsBatch\([\s\S]*tenantId: input\.tenantId/);
     assert.match(routeSource, /retryUnsentFirstPaymentInvoiceEmailsBatch\([\s\S]*tenantId: input\.tenantId/);
+  });
+
+  it("writes the cron repair batch audit against the tenant-scoped cron entity", () => {
+    assert.match(routeSource, /writeAuditLog\(/);
+    assert.match(routeSource, /action: "recurring_invoice\.cron_batch_create"/);
+    assert.match(routeSource, /entityId: input\.tenantId/);
+    assert.match(routeSource, /entityType: "tenant_recurring_billing_cron"/);
   });
 });

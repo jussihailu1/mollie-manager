@@ -548,20 +548,6 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Cron failed";
-    await writeAuditLog(
-      {
-        action: "recurring_invoice.cron_batch_create",
-        details: { error: message },
-        entityId: mode,
-        entityType: "recurring_billing_cron",
-        mode,
-        outcome: "failure",
-        summary: "Recurring invoice cron run failed.",
-      },
-      undefined,
-      { kind: "system" },
-    );
-
     return Response.json({ error: message }, { status: 500 });
   }
 }

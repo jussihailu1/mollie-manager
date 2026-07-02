@@ -167,6 +167,11 @@ Current bounded implementation slice:
   tenant-local runs
 - recent reliability audit activity now includes tenant-linked alert,
   webhook-event, and tenant cron rows
+- webhook and stale-repair batch audits now write to the tenant cron audit
+  entity instead of the global batch entity so advanced tenant audit history
+  stays tenant-scoped during protected cron repair follow-up
+- protected recurring-invoice cron no longer writes a route-level global
+  failure audit row before tenant context exists
 - Needs Attention webhook items now require tenant-linked resources before
   surfacing failed webhook rows
 - payment follow-up queue alert joins now verify tenant-owned payments before

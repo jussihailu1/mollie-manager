@@ -586,8 +586,8 @@ export async function repairWebhookEventsBatch(input: {
     {
       action: "repair.webhook_batch",
       details: result,
-      entityId: input.mode,
-      entityType: "webhook_repair_batch",
+      entityId: input.tenantId,
+      entityType: "tenant_recurring_billing_cron",
       mode: input.mode,
       outcome: repairedCount > 0 ? "success" : "failure",
       summary: "Processed a bounded repair batch for failed Mollie webhook events.",
@@ -721,8 +721,8 @@ export async function repairStaleRecordsBatch(input: {
     {
       action: "repair.stale_batch",
       details: batchResult,
-      entityId: input.mode,
-      entityType: "repair_batch",
+      entityId: input.tenantId,
+      entityType: "tenant_recurring_billing_cron",
       mode: input.mode,
       outcome: repairedCount > 0 ? "success" : "failure",
       summary: "Processed a bounded repair batch for stale Mollie records.",
