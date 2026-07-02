@@ -25,6 +25,16 @@ export class TenantEboekhoudenCredentialError extends Error {
   }
 }
 
+function requireTenantId(tenantId?: string) {
+  if (!tenantId) {
+    throw new TenantEboekhoudenCredentialError(
+      "Explicit tenant context is required.",
+    );
+  }
+
+  return tenantId;
+}
+
 export function encryptTenantEboekhoudenApiToken(token: string) {
   return encryptTenantCredential(token, {
     createError: (message) => new TenantEboekhoudenCredentialError(message),
@@ -105,11 +115,8 @@ export async function upsertTenantEboekhoudenCredentials(
 }
 
 export async function resolveTenantEboekhoudenConfig(tenantId?: string) {
-  if (!tenantId) {
-    return getEboekhoudenConfig();
-  }
-
-  const stored = await getTenantEboekhoudenCredentials(tenantId);
+  const resolvedTenantId = requireTenantId(tenantId);
+  const stored = await getTenantEboekhoudenCredentials(resolvedTenantId);
 
   if (stored) {
     return {
@@ -118,7 +125,7 @@ export async function resolveTenantEboekhoudenConfig(tenantId?: string) {
     };
   }
 
-  if (tenantId === LEGACY_DEFAULT_TENANT_ID) {
+  if (resolvedTenantId === LEGACY_DEFAULT_TENANT_ID) {
     return getEboekhoudenConfig();
   }
 

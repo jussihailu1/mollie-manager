@@ -97,6 +97,12 @@ export class EboekhoudenApiError extends Error {
 
 async function getConfig(tenantId?: string) {
   try {
+    if (!tenantId) {
+      throw new TenantEboekhoudenCredentialError(
+        "Explicit tenant context is required.",
+      );
+    }
+
     return await resolveTenantEboekhoudenConfig(tenantId);
   } catch (error) {
     if (
@@ -113,7 +119,11 @@ async function getConfig(tenantId?: string) {
 }
 
 function getSessionCacheKey(tenantId?: string) {
-  return tenantId ?? "__global_eboekhouden__";
+  if (!tenantId) {
+    throw new EboekhoudenConfigError("Explicit tenant context is required.");
+  }
+
+  return tenantId;
 }
 
 async function parseError(response: Response) {
@@ -162,6 +172,10 @@ async function parseError(response: Response) {
 }
 
 async function startSession(tenantId?: string) {
+  if (!tenantId) {
+    throw new EboekhoudenConfigError("Explicit tenant context is required.");
+  }
+
   const config = await getConfig(tenantId);
   const response = await fetch(`${EBOEKHOUDEN_API_BASE_URL}/v1/session`, {
     body: JSON.stringify({
@@ -194,6 +208,10 @@ async function startSession(tenantId?: string) {
 }
 
 async function getSessionToken(tenantId?: string) {
+  if (!tenantId) {
+    throw new EboekhoudenConfigError("Explicit tenant context is required.");
+  }
+
   const cacheKey = getSessionCacheKey(tenantId);
   const sessionCache = sessionCacheByKey.get(cacheKey);
 
@@ -207,7 +225,7 @@ async function getSessionToken(tenantId?: string) {
 async function requestEboekhouden<T>(
   path: string,
   options: RequestInit = {},
-  tenantId?: string,
+  tenantId: string,
 ): Promise<T> {
   const token = await getSessionToken(tenantId);
   const response = await fetch(`${EBOEKHOUDEN_API_BASE_URL}${path}`, {
@@ -267,14 +285,14 @@ function appendFilter(
   params.set(key, value);
 }
 
-export async function listEboekhoudenRelations(options?: {
+export async function listEboekhoudenRelations(options: {
   code?: string;
   contact?: string;
   email?: string;
   limit?: number;
   name?: string;
   offset?: number;
-  tenantId?: string;
+  tenantId: string;
 }) {
   const params = new URLSearchParams();
 
@@ -288,7 +306,7 @@ export async function listEboekhoudenRelations(options?: {
   return requestEboekhouden<RelationListResponse>(
     `/v1/relation?${params.toString()}`,
     {},
-    options?.tenantId,
+    options.tenantId,
   );
 }
 
@@ -296,7 +314,7 @@ export async function searchEboekhoudenRelations(options: {
   limit?: number;
   offset?: number;
   query?: string;
-  tenantId?: string;
+  tenantId: string;
 }) {
   const limit = Math.min(Math.max(options.limit ?? 20, 1), 100);
   const offset = Math.max(options.offset ?? 0, 0);
@@ -329,15 +347,15 @@ export async function searchEboekhoudenRelations(options: {
   } satisfies RelationListResponse;
 }
 
-export async function getEboekhoudenRelation(id: number, tenantId?: string) {
+export async function getEboekhoudenRelation(id: number, tenantId: string) {
   return requestEboekhouden<EboekhoudenRelation>(`/v1/relation/${id}`, {}, tenantId);
 }
 
-export async function listEboekhoudenInvoiceTemplates(options?: {
+export async function listEboekhoudenInvoiceTemplates(options: {
   active?: boolean;
   limit?: number;
   offset?: number;
-  tenantId?: string;
+  tenantId: string;
   type?: "A" | "E";
 }) {
   const params = new URLSearchParams();
@@ -351,31 +369,31 @@ export async function listEboekhoudenInvoiceTemplates(options?: {
   }
 
   return requestEboekhouden<EboekhoudenListResponse<EboekhoudenInvoiceTemplate>>(
-    `/v1/invoicetemplate?${params.toString()}`,
-    {},
-    options?.tenantId,
+      `/v1/invoicetemplate?${params.toString()}`,
+      {},
+      options.tenantId,
   );
 }
 
-export async function listEboekhoudenLedgers(options?: {
+export async function listEboekhoudenLedgers(options: {
   limit?: number;
   offset?: number;
-  tenantId?: string;
+  tenantId: string;
 }) {
   const params = new URLSearchParams();
   params.set("limit", String(Math.min(Math.max(options?.limit ?? 2000, 1), 2000)));
   params.set("offset", String(Math.max(options?.offset ?? 0, 0)));
 
   return requestEboekhouden<EboekhoudenListResponse<EboekhoudenLedger>>(
-    `/v1/ledger?${params.toString()}`,
-    {},
-    options?.tenantId,
+      `/v1/ledger?${params.toString()}`,
+      {},
+      options.tenantId,
   );
 }
 
 export async function createEboekhoudenInvoice(
   payload: EboekhoudenCreateInvoiceInput,
-  tenantId?: string,
+  tenantId: string,
 ) {
   return requestEboekhouden<EboekhoudenInvoice>("/v1/invoice", {
     body: JSON.stringify(payload),
@@ -383,7 +401,7 @@ export async function createEboekhoudenInvoice(
   }, tenantId);
 }
 
-export async function getEboekhoudenInvoice(id: number, tenantId?: string) {
+export async function getEboekhoudenInvoice(id: number, tenantId: string) {
   return requestEboekhouden<EboekhoudenInvoice>(
     `/v1/invoice/${id}`,
     {},
@@ -391,13 +409,13 @@ export async function getEboekhoudenInvoice(id: number, tenantId?: string) {
   );
 }
 
-export async function listEboekhoudenInvoices(options?: {
+export async function listEboekhoudenInvoices(options: {
   date?: string;
   invoiceNumber?: string;
   limit?: number;
   offset?: number;
   relationId?: number;
-  tenantId?: string;
+  tenantId: string;
 }) {
   const params = new URLSearchParams();
   params.set("limit", String(Math.min(Math.max(options?.limit ?? 100, 1), 2000)));
@@ -413,15 +431,15 @@ export async function listEboekhoudenInvoices(options?: {
   }
 
   return requestEboekhouden<EboekhoudenListResponse<EboekhoudenInvoice>>(
-    `/v1/invoice?${params.toString()}`,
-    {},
-    options?.tenantId,
+      `/v1/invoice?${params.toString()}`,
+      {},
+      options.tenantId,
   );
 }
 
 export async function createEboekhoudenRelation(
   payload: Record<string, unknown>,
-  tenantId?: string,
+  tenantId: string,
 ) {
   return requestEboekhouden<{ id?: number } | EboekhoudenRelation>(
     "/v1/relation",
@@ -436,7 +454,7 @@ export async function createEboekhoudenRelation(
 export async function updateEboekhoudenRelation(
   id: number,
   payload: Record<string, unknown>,
-  tenantId?: string,
+  tenantId: string,
 ) {
   await requestEboekhouden<void>(`/v1/relation/${id}`, {
     body: JSON.stringify(payload),

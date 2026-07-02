@@ -62,6 +62,9 @@ Do not extend product scope around those app-wide business credentials. The
 multi-tenant pilot foundation is actively replacing them with tenant-owned stored
 configuration, while platform env should remain for platform/runtime concerns
 such as auth, database, app URL, cron secrets, and shared SMTP.
+Current e-Boekhouden business flows now fail closed without explicit tenant
+context; the env-backed e-Boekhouden token remains only as an explicit
+`legacy-default` bootstrap fallback until a later backfill slice.
 `APP_ENCRYPTION_KEY` is also a platform/runtime secret and now encrypts stored
 tenant Mollie and e-Boekhouden credentials. Keep it stable per environment, and
 rotate it with a credential re-encryption/backfill plan rather than ad hoc.
