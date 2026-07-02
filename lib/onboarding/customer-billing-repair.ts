@@ -10,7 +10,6 @@ import { getCustomerDetail } from "@/lib/onboarding/data";
 import { getTenantMollieClient } from "@/lib/mollie/client";
 import { syncPaymentLinkByMollieId } from "@/lib/reliability/sync";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
-import { requireCustomerTenantId } from "@/lib/tenant-ownership";
 
 type LocalPaymentRecord = {
   id: string;
@@ -38,27 +37,39 @@ type RepairActor = {
   kind: "system" | "user";
 };
 
-async function getLocalPayments(customerId: string, client: DbTransaction) {
+async function getLocalPayments(
+  customerId: string,
+  tenantId: string,
+  client: DbTransaction,
+) {
   const result = await client.execute<LocalPaymentRecord>(sql`
       select
         id,
         mollie_payment_id as "molliePaymentId",
         payment_type as "paymentType"
       from payments
-      where customer_id = ${customerId} and mollie_payment_id is not null
+      where customer_id = ${customerId}
+        and tenant_id = ${tenantId}
+        and mollie_payment_id is not null
       order by created_at desc
     `);
 
   return result.rows;
 }
 
-async function getLocalSubscriptions(customerId: string, client: DbTransaction) {
+async function getLocalSubscriptions(
+  customerId: string,
+  tenantId: string,
+  client: DbTransaction,
+) {
   const result = await client.execute<LocalSubscriptionRecord>(sql`
       select
         id,
         mollie_subscription_id as "mollieSubscriptionId"
       from subscriptions
-      where customer_id = ${customerId} and mollie_subscription_id is not null
+      where customer_id = ${customerId}
+        and tenant_id = ${tenantId}
+        and mollie_subscription_id is not null
       order by created_at desc
     `);
 
@@ -139,7 +150,7 @@ export async function repairCustomerBillingState(input: {
   actor?: RepairActor;
   customerId: string;
   mode: "live" | "test";
-  tenantId?: string;
+  tenantId: string;
 }): Promise<CustomerRepairResult> {
   const actor = input.actor ?? {
     kind: "system" as const,
@@ -189,7 +200,7 @@ export async function repairCustomerBillingState(input: {
     };
   }
 
-  const tenantId = input.tenantId ?? (await requireCustomerTenantId(customer.id));
+  const tenantId = input.tenantId;
   const mollie = await getTenantMollieClient(tenantId, input.mode);
   const mandates = await mollie.customerMandates.page({
     customerId: mollieCustomerId,
@@ -216,7 +227,7 @@ export async function repairCustomerBillingState(input: {
       mandateIdMap.set(mandate.id, localMandateId);
     }
 
-    const localPayments = await getLocalPayments(customer.id, client);
+    const localPayments = await getLocalPayments(customer.id, tenantId, client);
 
     for (const localPayment of localPayments) {
       const payment = await mollie.payments.get(localPayment.molliePaymentId);
@@ -241,7 +252,11 @@ export async function repairCustomerBillingState(input: {
         `);
     }
 
-    const localSubscriptions = await getLocalSubscriptions(customer.id, client);
+    const localSubscriptions = await getLocalSubscriptions(
+      customer.id,
+      tenantId,
+      client,
+    );
 
     for (const localSubscription of localSubscriptions) {
       const subscription = (await mollie.customerSubscriptions.get(
@@ -300,6 +315,7 @@ export async function repairCustomerBillingState(input: {
       actor,
       preferredMode: input.mode,
       strictMode: true,
+      tenantId,
     });
   }
 

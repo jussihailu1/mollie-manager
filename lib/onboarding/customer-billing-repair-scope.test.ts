@@ -18,4 +18,23 @@ describe("customer billing repair module boundary", () => {
     assert.match(repairSource, /action: "customer\.repair"/);
     assert.match(repairSource, /update customers/);
   });
+
+  it("threads tenant context into payment-link sync follow-up", () => {
+    const repairSource = readFileSync(
+      resolve("lib/onboarding/customer-billing-repair.ts"),
+      "utf8",
+    );
+
+    assert.match(repairSource, /for \(const paymentLink of customerDetail\.paymentLinks\)/);
+    assert.match(
+      repairSource,
+      /syncPaymentLinkByMollieId\(\s*paymentLink\.molliePaymentLinkId,\s*\{[\s\S]*tenantId,\s*\}\s*\);/,
+    );
+    assert.match(repairSource, /preferredMode: input\.mode/);
+    assert.match(repairSource, /strictMode: true/);
+    assert.doesNotMatch(
+      repairSource,
+      /syncPaymentLinkByMollieId\(\s*paymentLink\.molliePaymentLinkId,\s*\{[\s\S]*strictMode: true,\s*\}\s*\);/,
+    );
+  });
 });

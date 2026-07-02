@@ -135,7 +135,7 @@ async function updateWebhookEventStatus(
     errorMessage?: string | null;
     id: string;
     processed: boolean;
-    tenantId?: string;
+    tenantId: string;
   },
 ) {
   await getDb().execute(sql`
@@ -151,7 +151,7 @@ async function updateWebhookEventStatus(
           else processed_at
         end
       where id = ${input.id}
-        and (${input.tenantId ?? null}::text is null or tenant_id = ${input.tenantId ?? null})
+        and tenant_id = ${input.tenantId}
     `);
 }
 
@@ -380,6 +380,7 @@ export async function repairCustomerTarget(input: {
     actor: input.actor,
     customerId: input.customerId,
     mode: input.mode,
+    tenantId: input.tenantId,
   });
 
   return {

@@ -201,7 +201,8 @@ Current bounded implementation slice:
 - tenant-owned Mollie credential storage now exists, manual `tenant:provision`
   can seed mode-specific Mollie API keys, and tenant-aware Mollie client
   resolution now drives onboarding customer creation, first-payment payment-link
-  creation, subscription activation, billing repair, payment-link sync, mandate
+  creation, subscription activation, billing repair, with payment-link
+  follow-up now threading explicit tenant context, payment-link sync, mandate
   sync, and payment drawer live fetches
 - current tenant e-Boekhouden credential encryption still derives from
   `AUTH_SECRET`; Phase 0.5 hardening must move this to a dedicated
@@ -225,8 +226,9 @@ Current bounded implementation slice:
   falling back to a single-tenant default
 - tenant-scoped reconciliation summaries now keep their before/after invoice
   state deltas scoped to the active tenant through fan-out
-- payment-link sync now requires explicit tenant context instead of a
-  single-tenant fallback
+- billing-repair payment-link follow-up now threads explicit tenant context
+  instead of the old tenant-less sync fallback, and payment-link sync still
+  requires explicit tenant context instead of a single-tenant fallback
 - invoice email delivery now carries tenant context through first-payment and
   resend flows instead of global fallback
 - invoice delivery helper metadata reads and invoice-state writes now fence by
@@ -239,7 +241,8 @@ Current bounded implementation slice:
 - payment follow-up queue, pending subscription request queries, invoice
   automation metrics, dashboard reliability reads, and repair helper entry
   points now fail closed without explicit tenant context, with dashboard
-  webhook history reads fenced by tenant directly
+  webhook history reads fenced by tenant directly and failed-webhook repair
+  status writes keeping tenant scope in the update path
 - repair candidate alert lookups now verify tenant-owned payments,
   subscriptions, and customers before surfacing repair priority
 - alert open/resolve/email-sent helper writes now require tenant context, and

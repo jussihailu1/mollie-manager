@@ -24,9 +24,20 @@ describe("onboarding tenant scope", () => {
     assert.match(actionHelpers, /assertRelationIsAvailable\(\s*relationId: number,\s*mode: "live" \| "test",\s*excludeCustomerId\?: string,\s*tenantId\?: string/);
     assert.match(archiveFlow, /getCustomerDetail\(input\.customerId, input\.mode, input\.tenantId\)/);
     assert.match(billingRepair, /getCustomerDetail\(\s*input\.customerId,\s*input\.mode,\s*input\.tenantId,\s*\)/);
+    assert.match(billingRepair, /tenantId: string;/);
     assert.match(
       billingRepair,
       /const mollie = await getTenantMollieClient\(tenantId, input\.mode\);/,
+    );
+    assert.match(
+      billingRepair,
+      /syncPaymentLinkByMollieId\(paymentLink\.molliePaymentLinkId, \{[\s\S]*tenantId,\s*\}\);/,
+    );
+    assert.match(billingRepair, /preferredMode: input\.mode/);
+    assert.match(billingRepair, /strictMode: true/);
+    assert.doesNotMatch(
+      billingRepair,
+      /syncPaymentLinkByMollieId\(paymentLink\.molliePaymentLinkId, \{[\s\S]*strictMode: true,\s*\}\);/,
     );
     assert.match(creationFlow, /const tenantId = input\.tenantId;/);
     assert.doesNotMatch(creationFlow, /getSingleTenantIdOrThrow/);
