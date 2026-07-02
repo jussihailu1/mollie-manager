@@ -16,16 +16,22 @@ function resolveMode(request: Request): MollieMode {
   return env.MOLLIE_DEFAULT_MODE;
 }
 
+function resolveRequestedTenantId(request: Request) {
+  const tenantId = new URL(request.url).searchParams.get("tenantId")?.trim();
+  return tenantId ? tenantId : null;
+}
+
 async function resolveDiagnosticsContext(request: Request) {
   const secrets = getAcceptedCronSecrets({
     cronSecret: process.env.CRON_SECRET ?? null,
     invoiceCronSharedSecret: env.INVOICE_CRON_SHARED_SECRET,
   });
+  const requestedTenantId = resolveRequestedTenantId(request);
 
   if (isBearerAuthorized(request.headers.get("authorization"), secrets)) {
     return {
       authorized: true,
-      tenantId: null,
+      tenantId: requestedTenantId,
     };
   }
 
@@ -58,14 +64,22 @@ export async function GET(request: Request) {
 
   const mode = resolveMode(request);
   const setupStatus = getSetupStatus();
-  const [database, opsSnapshot] = await Promise.all([
-    checkDatabaseConnection(),
-    getReliabilityOpsSnapshot({ mode, tenantId: diagnosticsContext.tenantId ?? undefined }),
-  ]);
+  const database = await checkDatabaseConnection();
+  const opsSnapshot = diagnosticsContext.tenantId
+    ? await getReliabilityOpsSnapshot({
+        mode,
+        tenantId: diagnosticsContext.tenantId,
+      })
+    : null;
 
   return Response.json({
     app: "Kify",
     currentMode: mode,
+    diagnosticsTenantId: diagnosticsContext.tenantId,
+    diagnosticsTenantScoped: Boolean(diagnosticsContext.tenantId),
+    diagnosticsNotice: diagnosticsContext.tenantId
+      ? null
+      : "Pass ?tenantId=<tenant-id> to read tenant-scoped reliability diagnostics.",
     phase: "reliability",
     status:
       database.ok && Object.values(setupStatus).every((section) => section.ready)
@@ -77,11 +91,11 @@ export async function GET(request: Request) {
       notificationsConfigured: notificationsAreConfigured(),
       mollieTestConfigured: isMollieConfigured("test"),
     },
-    invoiceAutomation: opsSnapshot.invoiceAutomation,
-    invoiceAutomationCron: opsSnapshot.invoiceAutomationCron,
-    invoiceDeliveryQueue: opsSnapshot.invoiceDeliveryQueue,
+    invoiceAutomation: opsSnapshot?.invoiceAutomation ?? null,
+    invoiceAutomationCron: opsSnapshot?.invoiceAutomationCron ?? null,
+    invoiceDeliveryQueue: opsSnapshot?.invoiceDeliveryQueue ?? null,
     opsSnapshot,
-    reliability: opsSnapshot.reliability,
+    reliability: opsSnapshot?.reliability ?? null,
     setupStatus,
     timestamp: new Date().toISOString(),
   });

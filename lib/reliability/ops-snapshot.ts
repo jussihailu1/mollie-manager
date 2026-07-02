@@ -42,7 +42,7 @@ const EMPTY_INVOICE_DELIVERY_QUEUE_SUMMARY = {
 export async function getReliabilityOpsSnapshot(options: {
   billingSettingsComplete?: boolean;
   mode: MollieMode;
-  tenantId?: string;
+  tenantId: string;
 }): Promise<ReliabilityOpsSnapshot> {
   const billingSettingsComplete = options.billingSettingsComplete ?? true;
 

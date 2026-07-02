@@ -184,6 +184,9 @@ Current bounded implementation slice:
   from tenant-scoped schedule candidates
 - session-authenticated `/api/health` diagnostics now resolve the active tenant
   before reading the shared reliability ops snapshot
+- bearer-authorized `/api/health` diagnostics now stay on setup/database checks
+  unless an explicit `tenantId` is supplied for the shared tenant-scoped
+  reliability snapshot
 - tenant-aware Mollie sync/reliability cross-mode lookup helpers now thread
   explicit tenant context through sync, replay, repair, and subscription-sync
   lookups; global/bootstrap `/api/health` diagnostics and the shared

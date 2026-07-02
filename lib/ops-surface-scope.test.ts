@@ -107,11 +107,14 @@ describe("ops surface hardening", () => {
   it("shares the same reliability ops snapshot between settings and health diagnostics", () => {
     const settingsSource = readFileSync(resolve("app/(dashboard)/settings/page.tsx"), "utf8");
     const healthSource = readFileSync(resolve("app/api/health/route.ts"), "utf8");
+    const snapshotSource = readFileSync(resolve("lib/reliability/ops-snapshot.ts"), "utf8");
 
     assert.match(settingsSource, /getReliabilityOpsSnapshot/);
     assert.match(healthSource, /getReliabilityOpsSnapshot/);
     assert.match(healthSource, /getCurrentTenantSelectionForViewer/);
     assert.match(healthSource, /tenantId: diagnosticsContext\.tenantId/);
+    assert.match(healthSource, /const opsSnapshot = diagnosticsContext\.tenantId/);
+    assert.match(snapshotSource, /tenantId: string;/);
     assert.match(healthSource, /opsSnapshot/);
   });
 
