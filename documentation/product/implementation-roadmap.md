@@ -146,6 +146,8 @@ Current bounded implementation slice:
   API, and e-Boekhouden relation-search linked-record filtering to explicit
   tenant context, while preserving single-tenant fail-closed behavior until
   membership/session tenant selection lands
+- payment drawer invoice-trigger audit lookups now verify tenant-owned payment
+  and recurring schedule rows before surfacing audit summaries
 - dashboard layout now blocks signed-in operators without tenant membership or
   bootstrap platform-operator access
 - tenant-selection shell plumbing now persists the active tenant in a cookie,

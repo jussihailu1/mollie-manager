@@ -376,10 +376,25 @@ export async function GET(request: NextRequest) {
         where
           al.entity_id = ic.invoice_owner_id
           and (
-            (ic.invoice_owner_type = 'payment' and al.entity_type = 'payment')
+            (
+              ic.invoice_owner_type = 'payment'
+              and al.entity_type = 'payment'
+              and exists (
+                select 1
+                from payments ap
+                where ap.id = al.entity_id
+                  and ap.tenant_id = ${tenantId}
+              )
+            )
             or (
               ic.invoice_owner_type = 'recurring_schedule'
               and al.entity_type = 'recurring_billing_schedule'
+              and exists (
+                select 1
+                from recurring_billing_schedules arbs
+                where arbs.id = al.entity_id
+                  and arbs.tenant_id = ${tenantId}
+              )
             )
           )
           and al.action in ('first_payment_invoice.create', 'recurring_invoice.create')
