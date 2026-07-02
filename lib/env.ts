@@ -42,6 +42,7 @@ const rawServerEnvSchema = z.object({
   APP_ENV: z.enum(["development", "test", "production"]).default("development"),
   AUTH_URL: optionalUrl,
   APP_URL: optionalUrl,
+  APP_ENCRYPTION_KEY: optionalString,
   AUTH_SECRET: optionalString,
   AUTH_ALLOWED_EMAIL: optionalEmail,
   AUTH_GOOGLE_ID: optionalString,
@@ -164,6 +165,9 @@ function buildStatus(issues: string[]): SetupSectionStatus {
 }
 
 export function getSetupStatus() {
+  const applicationIssues = [
+    env.APP_ENCRYPTION_KEY ? null : "APP_ENCRYPTION_KEY is missing.",
+  ].filter((value): value is string => value !== null);
   const authIssues = [
     env.AUTH_ALLOWED_EMAIL ? null : "AUTH_ALLOWED_EMAIL is missing.",
     env.AUTH_GOOGLE_ID ? null : "AUTH_GOOGLE_ID is missing.",
@@ -199,6 +203,7 @@ export function getSetupStatus() {
   ].filter((value): value is string => value !== null);
 
   return {
+    application: buildStatus(applicationIssues),
     auth: buildStatus(authIssues),
     database: buildStatus(databaseIssues),
     mollie: buildStatus(mollieIssues),

@@ -8,10 +8,15 @@ describe("tenant Mollie credential scope", () => {
     const source = readFileSync(resolve("lib/mollie/tenant-credentials.ts"), "utf8");
 
     assert.match(source, /export class TenantMollieCredentialError extends Error/);
-    assert.match(source, /createCipheriv\(/);
-    assert.match(source, /createDecipheriv\(/);
+    assert.match(source, /decryptTenantCredential,/);
+    assert.match(source, /encryptTenantCredential,/);
     assert.match(source, /encryptTenantMollieApiKey/);
     assert.match(source, /decryptTenantMollieApiKey/);
+    assert.match(source, /APP_ENCRYPTION_KEY is missing\./);
+    assert.match(
+      source,
+      /Stored tenant Mollie credentials still require AUTH_SECRET for legacy decryption\./,
+    );
     assert.match(source, /insert into tenant_mollie_credentials/);
     assert.match(source, /select[\s\S]*from tenant_mollie_credentials/);
     assert.match(source, /if \(tenantId === LEGACY_DEFAULT_TENANT_ID\)/);

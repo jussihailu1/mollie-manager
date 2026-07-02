@@ -61,8 +61,15 @@ describe("e-Boekhouden client tenant credential scope", () => {
 
   it("stores encrypted tenant e-Boekhouden tokens and keeps legacy-default env fallback", () => {
     assert.match(credentialSource, /export class TenantEboekhoudenCredentialError extends Error/);
+    assert.match(credentialSource, /decryptTenantCredential,/);
+    assert.match(credentialSource, /encryptTenantCredential,/);
     assert.match(credentialSource, /encryptTenantEboekhoudenApiToken/);
     assert.match(credentialSource, /decryptTenantEboekhoudenApiToken/);
+    assert.match(credentialSource, /APP_ENCRYPTION_KEY is missing\./);
+    assert.match(
+      credentialSource,
+      /Stored tenant e-Boekhouden credentials still require AUTH_SECRET for legacy decryption\./,
+    );
     assert.match(credentialSource, /insert into tenant_eboekhouden_credentials/);
     assert.match(credentialSource, /if \(tenantId === LEGACY_DEFAULT_TENANT_ID\)/);
     assert.match(credentialSource, /Tenant e-Boekhouden credentials are missing\./);

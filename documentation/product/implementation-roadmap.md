@@ -204,9 +204,10 @@ Current bounded implementation slice:
   creation, subscription activation, billing repair, with payment-link
   follow-up now threading explicit tenant context, payment-link sync, mandate
   sync, and payment drawer live fetches
-- current tenant e-Boekhouden credential encryption still derives from
-  `AUTH_SECRET`; Phase 0.5 hardening must move this to a dedicated
-  rotation-friendly application encryption key before pilot closure
+- tenant-owned Mollie and e-Boekhouden credential encryption now writes through
+  dedicated `APP_ENCRYPTION_KEY` ciphertext while keeping legacy
+  `AUTH_SECRET`-encrypted tenant rows readable until a later re-encryption or
+  backfill slice
 - consent-link lookup now resolves the active tenant before reading latest
   customer consent URLs
 - customer activity, invoice-link, customer-note, and customer-notification

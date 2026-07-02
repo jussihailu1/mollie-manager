@@ -1,15 +1,17 @@
 import "server-only";
 
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-
 import { sql } from "drizzle-orm";
 
 import { getDb, transaction } from "@/lib/db";
 import { getEboekhoudenConfig } from "@/lib/env";
+import {
+  decryptTenantCredential,
+  encryptTenantCredential,
+} from "@/lib/tenant-credential-encryption";
 import { LEGACY_DEFAULT_TENANT_ID } from "@/lib/tenants";
 
-const TENANT_CREDENTIAL_VERSION = "v1";
-const TENANT_CREDENTIAL_ALGORITHM = "aes-256-gcm";
+const TENANT_EBOEKHOUDEN_CREDENTIAL_SCOPE =
+  "mollie-manager:tenant-eboekhouden-credentials:";
 
 type StoredTenantEboekhoudenCredentials = {
   apiSource: string;
@@ -23,68 +25,26 @@ export class TenantEboekhoudenCredentialError extends Error {
   }
 }
 
-function getTenantEboekhoudenCredentialKey() {
-  const authSecret = process.env.AUTH_SECRET?.trim();
-
-  if (!authSecret) {
-    throw new TenantEboekhoudenCredentialError("AUTH_SECRET is missing.");
-  }
-
-  return createHash("sha256")
-    .update("mollie-manager:tenant-eboekhouden-credentials:")
-    .update(authSecret)
-    .digest();
-}
-
 export function encryptTenantEboekhoudenApiToken(token: string) {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv(
-    TENANT_CREDENTIAL_ALGORITHM,
-    getTenantEboekhoudenCredentialKey(),
-    iv,
-  );
-  const ciphertext = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
-  const authTag = cipher.getAuthTag();
-
-  return [
-    TENANT_CREDENTIAL_VERSION,
-    iv.toString("hex"),
-    authTag.toString("hex"),
-    ciphertext.toString("hex"),
-  ].join(":");
+  return encryptTenantCredential(token, {
+    createError: (message) => new TenantEboekhoudenCredentialError(message),
+    currentSecret: process.env.APP_ENCRYPTION_KEY,
+    currentSecretMissingMessage: "APP_ENCRYPTION_KEY is missing.",
+    scope: TENANT_EBOEKHOUDEN_CREDENTIAL_SCOPE,
+  });
 }
 
 export function decryptTenantEboekhoudenApiToken(ciphertext: string) {
-  const [version, ivHex, authTagHex, payloadHex] = ciphertext.split(":");
-
-  if (
-    version !== TENANT_CREDENTIAL_VERSION ||
-    !ivHex ||
-    !authTagHex ||
-    !payloadHex
-  ) {
-    throw new TenantEboekhoudenCredentialError(
-      "Stored tenant e-Boekhouden credentials are invalid.",
-    );
-  }
-
-  try {
-    const decipher = createDecipheriv(
-      TENANT_CREDENTIAL_ALGORITHM,
-      getTenantEboekhoudenCredentialKey(),
-      Buffer.from(ivHex, "hex"),
-    );
-    decipher.setAuthTag(Buffer.from(authTagHex, "hex"));
-
-    return Buffer.concat([
-      decipher.update(Buffer.from(payloadHex, "hex")),
-      decipher.final(),
-    ]).toString("utf8");
-  } catch {
-    throw new TenantEboekhoudenCredentialError(
-      "Stored tenant e-Boekhouden credentials are invalid.",
-    );
-  }
+  return decryptTenantCredential(ciphertext, {
+    createError: (message) => new TenantEboekhoudenCredentialError(message),
+    currentSecret: process.env.APP_ENCRYPTION_KEY,
+    currentSecretMissingMessage: "APP_ENCRYPTION_KEY is missing.",
+    invalidMessage: "Stored tenant e-Boekhouden credentials are invalid.",
+    legacySecret: process.env.AUTH_SECRET,
+    legacySecretMissingMessage:
+      "Stored tenant e-Boekhouden credentials still require AUTH_SECRET for legacy decryption.",
+    scope: TENANT_EBOEKHOUDEN_CREDENTIAL_SCOPE,
+  });
 }
 
 export async function getTenantEboekhoudenCredentials(tenantId: string) {

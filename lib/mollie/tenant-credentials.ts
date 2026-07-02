@@ -1,15 +1,19 @@
 import "server-only";
 
-import { createCipheriv, createDecipheriv, createHash, randomUUID, randomBytes } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import { sql } from "drizzle-orm";
 
 import { env, getMollieApiKey, type MollieMode } from "@/lib/env";
 import { getDb, transaction } from "@/lib/db";
+import {
+  decryptTenantCredential,
+  encryptTenantCredential,
+} from "@/lib/tenant-credential-encryption";
 import { LEGACY_DEFAULT_TENANT_ID } from "@/lib/tenants";
 
-const TENANT_CREDENTIAL_VERSION = "v1";
-const TENANT_CREDENTIAL_ALGORITHM = "aes-256-gcm";
+const TENANT_MOLLIE_CREDENTIAL_SCOPE =
+  "mollie-manager:tenant-mollie-credentials:";
 
 type StoredTenantMollieCredentials = {
   apiKeyCiphertext: string;
@@ -22,68 +26,26 @@ export class TenantMollieCredentialError extends Error {
   }
 }
 
-function getTenantMollieCredentialKey() {
-  const authSecret = process.env.AUTH_SECRET?.trim();
-
-  if (!authSecret) {
-    throw new TenantMollieCredentialError("AUTH_SECRET is missing.");
-  }
-
-  return createHash("sha256")
-    .update("mollie-manager:tenant-mollie-credentials:")
-    .update(authSecret)
-    .digest();
-}
-
 export function encryptTenantMollieApiKey(apiKey: string) {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv(
-    TENANT_CREDENTIAL_ALGORITHM,
-    getTenantMollieCredentialKey(),
-    iv,
-  );
-  const ciphertext = Buffer.concat([cipher.update(apiKey, "utf8"), cipher.final()]);
-  const authTag = cipher.getAuthTag();
-
-  return [
-    TENANT_CREDENTIAL_VERSION,
-    iv.toString("hex"),
-    authTag.toString("hex"),
-    ciphertext.toString("hex"),
-  ].join(":");
+  return encryptTenantCredential(apiKey, {
+    createError: (message) => new TenantMollieCredentialError(message),
+    currentSecret: process.env.APP_ENCRYPTION_KEY,
+    currentSecretMissingMessage: "APP_ENCRYPTION_KEY is missing.",
+    scope: TENANT_MOLLIE_CREDENTIAL_SCOPE,
+  });
 }
 
 export function decryptTenantMollieApiKey(ciphertext: string) {
-  const [version, ivHex, authTagHex, payloadHex] = ciphertext.split(":");
-
-  if (
-    version !== TENANT_CREDENTIAL_VERSION ||
-    !ivHex ||
-    !authTagHex ||
-    !payloadHex
-  ) {
-    throw new TenantMollieCredentialError(
-      "Stored tenant Mollie credentials are invalid.",
-    );
-  }
-
-  try {
-    const decipher = createDecipheriv(
-      TENANT_CREDENTIAL_ALGORITHM,
-      getTenantMollieCredentialKey(),
-      Buffer.from(ivHex, "hex"),
-    );
-    decipher.setAuthTag(Buffer.from(authTagHex, "hex"));
-
-    return Buffer.concat([
-      decipher.update(Buffer.from(payloadHex, "hex")),
-      decipher.final(),
-    ]).toString("utf8");
-  } catch {
-    throw new TenantMollieCredentialError(
-      "Stored tenant Mollie credentials are invalid.",
-    );
-  }
+  return decryptTenantCredential(ciphertext, {
+    createError: (message) => new TenantMollieCredentialError(message),
+    currentSecret: process.env.APP_ENCRYPTION_KEY,
+    currentSecretMissingMessage: "APP_ENCRYPTION_KEY is missing.",
+    invalidMessage: "Stored tenant Mollie credentials are invalid.",
+    legacySecret: process.env.AUTH_SECRET,
+    legacySecretMissingMessage:
+      "Stored tenant Mollie credentials still require AUTH_SECRET for legacy decryption.",
+    scope: TENANT_MOLLIE_CREDENTIAL_SCOPE,
+  });
 }
 
 export async function getTenantMollieCredentials(

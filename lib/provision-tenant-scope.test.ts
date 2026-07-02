@@ -21,9 +21,14 @@ describe("tenant provisioning boundary", () => {
     assert.doesNotMatch(provisionTenantSource, /getTenantMollieClient/);
 
     assert.match(scriptSource, /import { getDefaultMollieMode } from "@\/lib\/mollie\/client";/);
+    assert.match(scriptSource, /import { env } from "@\/lib\/env";/);
     assert.match(scriptSource, /import { upsertTenantMollieCredentials } from "@\/lib\/mollie\/tenant-credentials";/);
     assert.match(scriptSource, /mollieApiKey: string \| null;/);
     assert.match(scriptSource, /mollieMode: "test" \| "live" \| null;/);
+    assert.match(
+      scriptSource,
+      /APP_ENCRYPTION_KEY is required before provisioning tenant provider credentials\./,
+    );
     assert.match(scriptSource, /await ensureTenantSubscriptionPolicyDefaults\(tenantId\);/);
     assert.match(scriptSource, /await ensureTenantBillingSettings\(tenantId\);/);
     assert.match(scriptSource, /await upsertTenantEboekhoudenCredentials\(/);

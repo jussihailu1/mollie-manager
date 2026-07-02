@@ -1,6 +1,7 @@
 import process from "node:process";
 
 import { ensureTenantBillingSettings } from "@/lib/billing-settings";
+import { env } from "@/lib/env";
 import { upsertTenantEboekhoudenCredentials } from "@/lib/eboekhouden/tenant-credentials";
 import { getDefaultMollieMode } from "@/lib/mollie/client";
 import { upsertTenantMollieCredentials } from "@/lib/mollie/tenant-credentials";
@@ -18,6 +19,18 @@ type CliArgs = {
   slug: string;
   tenantId: string | null;
 };
+
+function assertTenantCredentialEncryptionConfigured(args: CliArgs) {
+  if (!args.eboekhoudenApiToken && !args.mollieApiKey) {
+    return;
+  }
+
+  if (!env.APP_ENCRYPTION_KEY) {
+    throw new Error(
+      "APP_ENCRYPTION_KEY is required before provisioning tenant provider credentials.",
+    );
+  }
+}
 
 function readFlag(args: string[], name: string) {
   const index = args.findIndex((value) => value === `--${name}`);
@@ -55,6 +68,7 @@ function parseArgs(args: string[]): CliArgs {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  assertTenantCredentialEncryptionConfigured(args);
   const tenantId = await provisionTenant({
     name: args.name,
     operatorEmail: args.operatorEmail,

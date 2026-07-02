@@ -24,6 +24,7 @@ Main env groups:
   - `APP_ENV`
   - `APP_URL`
   - `AUTH_URL`
+  - `APP_ENCRYPTION_KEY`
 - Authentication:
   - `AUTH_SECRET`
   - `AUTH_ADVANCED_EMAILS`
@@ -61,6 +62,9 @@ Do not extend product scope around those app-wide business credentials. The
 multi-tenant pilot foundation is actively replacing them with tenant-owned stored
 configuration, while platform env should remain for platform/runtime concerns
 such as auth, database, app URL, cron secrets, and shared SMTP.
+`APP_ENCRYPTION_KEY` is also a platform/runtime secret and now encrypts stored
+tenant Mollie and e-Boekhouden credentials. Keep it stable per environment, and
+rotate it with a credential re-encryption/backfill plan rather than ad hoc.
 
 ## Local Bootstrap
 
@@ -90,6 +94,8 @@ such as auth, database, app URL, cron secrets, and shared SMTP.
   invoice batch/retry controls. It does not create product access by itself and
   must not bypass tenant membership or tenant context.
 - `AUTH_SECRET` is required at runtime; the app now fails closed if it is missing.
+- `APP_ENCRYPTION_KEY` is required before writing or reading new-format tenant
+  provider credentials.
 - `APP_ENV=test` can use the test bypass flags for local verification without normal Google login.
 - In `APP_ENV=test`, live Mollie mode is disabled by design.
 
