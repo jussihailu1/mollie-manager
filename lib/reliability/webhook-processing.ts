@@ -143,11 +143,25 @@ export async function handleMollieWebhookRequest(
     topic: parsed.resourceType ?? "mollie-webhook",
   });
 
+  if (!existingResourceContext?.tenantId) {
+    const errorMessage = "Webhook is not linked to a managed local resource.";
+
+    await dependencies.markWebhookEventFailed({
+      errorMessage,
+      id: webhookEventId,
+    });
+
+    return {
+      body: "Webhook processing failed",
+      status: 500,
+    };
+  }
+
   try {
     const result = await dependencies.syncResource(
       parsed.resourceId,
-      existingResourceContext?.mode ?? null,
-      existingResourceContext?.tenantId ?? null,
+      existingResourceContext.mode,
+      existingResourceContext.tenantId,
     );
 
     await dependencies.markWebhookEventProcessed({

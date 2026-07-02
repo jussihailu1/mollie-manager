@@ -32,6 +32,8 @@ describe("mollie webhook scope", () => {
     assert.match(routeSource, /tenant_id as "tenantId"/);
     assert.match(routeSource, /insert into webhook_events \([\s\S]*tenant_id/);
     assert.match(processingSource, /tenantId: existingResourceContext\?\.tenantId \?\? null/);
+    assert.match(processingSource, /if \(!existingResourceContext\?\.tenantId\)/);
+    assert.match(processingSource, /Webhook is not linked to a managed local resource\./);
     assert.match(routeSource, /requireManagedResource: true/);
     assert.match(syncSource, /Payment webhook is not linked to a managed local resource\./);
     assert.match(syncSource, /Payment-link webhook is not linked to a managed local resource\./);

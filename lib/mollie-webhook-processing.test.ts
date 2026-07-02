@@ -177,12 +177,12 @@ describe("mollie webhook processing", () => {
     ]);
   });
 
-  it("uses test mode for stored events when no existing managed resource is found", async () => {
-    const { dependencies, inserted, synced } = createDependencies({
+  it("stores the event and fails closed when no existing managed resource is found", async () => {
+    const { dependencies, failed, inserted, synced } = createDependencies({
       findExistingResourceContext: async () => null,
     });
 
-    await handleMollieWebhookRequest(
+    const result = await handleMollieWebhookRequest(
       jsonRequest({
         id: "tr_unknown",
         resource: "payment",
@@ -190,10 +190,17 @@ describe("mollie webhook processing", () => {
       dependencies,
     );
 
+    assert.equal(result.status, 500);
+    assert.equal(result.body, "Webhook processing failed");
     assert.equal(inserted[0]?.mode, "test");
     assert.equal(inserted[0]?.tenantId, null);
-    assert.equal(synced[0]?.preferredMode, null);
-    assert.equal(synced[0]?.tenantId, null);
+    assert.equal(synced.length, 0);
+    assert.deepEqual(failed, [
+      {
+        errorMessage: "Webhook is not linked to a managed local resource.",
+        id: "webhook_event_test",
+      },
+    ]);
   });
 
   it("marks event failed with serialized error when sync fails", async () => {

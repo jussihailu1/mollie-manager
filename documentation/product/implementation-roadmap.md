@@ -231,8 +231,8 @@ Current bounded implementation slice:
   resend flows instead of global fallback
 - invoice delivery helper metadata reads and invoice-state writes now fence by
   tenant id instead of bare payment or schedule ids
-- webhook intake now resolves managed local tenant context before syncing
-  Mollie resources
+- managed webhook intake now requires resolved tenant-local resource context
+  before sync/provider calls
 - managed webhook_events now persist tenant ids, and replay and repair
   operator actions now require the current tenant when replaying failed
   webhooks or running targeted repair actions
