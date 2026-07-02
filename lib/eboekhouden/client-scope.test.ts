@@ -20,6 +20,8 @@ describe("e-Boekhouden client tenant credential scope", () => {
     assert.match(clientSource, /return await resolveTenantEboekhoudenConfig\(tenantId\);/);
     assert.match(clientSource, /error instanceof TenantEboekhoudenCredentialError/);
     assert.match(clientSource, /tenantId: string;/);
+    assert.doesNotMatch(clientSource, /LEGACY_DEFAULT_TENANT_ID/);
+    assert.doesNotMatch(clientSource, /getEboekhoudenConfig/);
     assert.match(
       clientSource,
       /export async function getEboekhoudenRelation\(id: number, tenantId: string\)/,
@@ -60,7 +62,7 @@ describe("e-Boekhouden client tenant credential scope", () => {
     );
   });
 
-  it("stores encrypted tenant e-Boekhouden tokens and only keeps explicit legacy-default env fallback", () => {
+  it("stores encrypted tenant e-Boekhouden tokens and fails closed without legacy-default env fallback", () => {
     assert.match(credentialSource, /export class TenantEboekhoudenCredentialError extends Error/);
     assert.match(credentialSource, /decryptTenantCredential,/);
     assert.match(credentialSource, /encryptTenantCredential,/);
@@ -74,8 +76,9 @@ describe("e-Boekhouden client tenant credential scope", () => {
     assert.match(credentialSource, /insert into tenant_eboekhouden_credentials/);
     assert.match(credentialSource, /function requireTenantId\(tenantId\?: string\)/);
     assert.match(credentialSource, /throw new TenantEboekhoudenCredentialError\(\s*"Explicit tenant context is required\."/);
-    assert.match(credentialSource, /if \(resolvedTenantId === LEGACY_DEFAULT_TENANT_ID\)/);
     assert.match(credentialSource, /Tenant e-Boekhouden credentials are missing\./);
+    assert.doesNotMatch(credentialSource, /LEGACY_DEFAULT_TENANT_ID/);
+    assert.doesNotMatch(credentialSource, /getEboekhoudenConfig/);
     assert.doesNotMatch(credentialSource, /if \(!tenantId\) \{\s*return getEboekhoudenConfig\(\);/);
   });
 });

@@ -198,8 +198,8 @@ Current bounded implementation slice:
   `tenant:provision` can seed those credentials, and relation search/detail plus
   billing-settings discovery now resolve e-Boekhouden credentials per tenant
 - e-Boekhouden client credential resolution now fails closed without explicit
-  tenant context, while the explicit `legacy-default` bootstrap tenant remains
-  readable through the env-backed fallback until a later backfill slice
+  tenant context for all tenants, including `legacy-default`, instead of
+  keeping the env-backed fallback readable
 - first-payment and recurring invoice create/reconcile flows, invoice PDF fetch
   paths, and onboarding relation patch flows now thread explicit tenant context
   into live e-Boekhouden invoice and relation reads/writes

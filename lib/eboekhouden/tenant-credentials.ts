@@ -3,12 +3,10 @@ import "server-only";
 import { sql } from "drizzle-orm";
 
 import { getDb, transaction } from "@/lib/db";
-import { getEboekhoudenConfig } from "@/lib/env";
 import {
   decryptTenantCredential,
   encryptTenantCredential,
 } from "@/lib/tenant-credential-encryption";
-import { LEGACY_DEFAULT_TENANT_ID } from "@/lib/tenants";
 
 const TENANT_EBOEKHOUDEN_CREDENTIAL_SCOPE =
   "mollie-manager:tenant-eboekhouden-credentials:";
@@ -123,10 +121,6 @@ export async function resolveTenantEboekhoudenConfig(tenantId?: string) {
       EBOEKHOUDEN_API_SOURCE: stored.apiSource,
       EBOEKHOUDEN_API_TOKEN: stored.apiToken,
     };
-  }
-
-  if (resolvedTenantId === LEGACY_DEFAULT_TENANT_ID) {
-    return getEboekhoudenConfig();
   }
 
   throw new TenantEboekhoudenCredentialError(
