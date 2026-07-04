@@ -170,6 +170,7 @@ export async function syncPaymentByMollieId(
       actor,
       customerId: resolvedCustomerId,
       mode,
+      tenantId: resolvedTenantId,
       trigger: "auto",
     });
   }

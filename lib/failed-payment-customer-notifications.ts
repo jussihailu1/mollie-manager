@@ -83,8 +83,8 @@ async function loadPaymentNotificationContext(
         c.email as "customerEmail",
         rbs.planned_collection_date::text as "plannedCollectionDate"
       from payments p
-      left join customers c on c.id = p.customer_id
-      left join recurring_billing_schedules rbs on rbs.payment_id = p.id
+      left join customers c on c.id = p.customer_id and c.tenant_id = p.tenant_id
+      left join recurring_billing_schedules rbs on rbs.payment_id = p.id and rbs.tenant_id = p.tenant_id
       where p.id = ${localPaymentId}
       limit 1
     `);

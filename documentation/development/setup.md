@@ -46,7 +46,6 @@ Main env groups:
 
 Current implementation debt still present in code today:
 
-- `AUTH_ALLOWED_EMAIL`
 - `MOLLIE_DEFAULT_MODE`
 - `MOLLIE_TEST_API_KEY`
 - `MOLLIE_LIVE_API_KEY`
@@ -89,9 +88,9 @@ rotate it with a credential re-encryption/backfill plan rather than ad hoc.
 - Target product authorization for the shared multi-tenant pilot is membership
   based: a signed-in operator must have tenant membership or a controlled
   platform-operator bootstrap path.
-- `AUTH_ALLOWED_EMAIL` is current implementation debt, not the desired product
-  access model. Do not build new product behavior on top of it while the
-  membership-based access slice is still being finished.
+- Older local env files may still contain `AUTH_ALLOWED_EMAIL`, but product
+  access now comes from tenant membership or platform-operator records. Do not
+  reintroduce product behavior that depends on a global email gate.
 - `AUTH_ADVANCED_EMAILS` is a comma-separated allowlist for technical settings
   controls such as diagnostics, repair, replay, reconciliation, SMTP tests, and
   invoice batch/retry controls. It does not create product access by itself and

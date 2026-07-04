@@ -14,6 +14,12 @@ as defined in `multi-tenant-pilot-scope.md`. This is earlier than broad SaaS
 administration and does not include self-serve signup, invites, platform
 billing, or a full role matrix.
 
+Current execution bias: reach that pilot as soon as possible without lowering
+the documented safety bar. When choosing between two valid slices, prefer the
+one that closes a pilot release gate sooner. Do not spend the active lane on
+non-blocking ops polish, broader platform administration, or advanced
+operator-only tooling unless the work is required for pilot readiness.
+
 ## Product Direction
 
 The app should default to a guided, plain-language workflow:
@@ -111,6 +117,16 @@ Goal:
 - make the app safely usable by multiple tenants in one shared deployment
   without cross-tenant leakage or provider-credential mixing.
 
+Pilot-fast-path rule:
+
+- treat this phase as the main launch track until the shared multi-tenant pilot
+  release gates are closed
+- keep advanced replay, repair, reconciliation, cron, and diagnostics work only
+  when it is required to satisfy tenant isolation, money-flow correctness, or
+  pilot verification
+- defer nicer advanced tooling, broader ops ergonomics, and non-blocking audit
+  polish until after the pilot unless they close a current release gate
+
 Scope:
 
 - tenant entity and tenant membership model
@@ -149,7 +165,7 @@ Current bounded implementation slice:
 - payment drawer invoice-trigger audit lookups now verify tenant-owned payment
   and recurring schedule rows before surfacing audit summaries
 - dashboard layout now blocks signed-in operators without tenant membership or
-  bootstrap platform-operator access
+  a controlled platform-operator bootstrap path
 - tenant-selection shell plumbing now persists the active tenant in a cookie,
   resolves it from the operator's accessible tenant list, and exposes a manual
   switcher in the dashboard menu
@@ -268,8 +284,8 @@ Current bounded implementation slice:
 Required behavior:
 
 - signing in alone does not grant product access
-- an operator may access tenant data only through explicit membership or a
-  controlled platform-operator bootstrap path
+- normal operator access is membership-led, and tenant data access requires
+  explicit tenant membership or a controlled platform-operator bootstrap path
 - one tenant is active for an authenticated operator workflow at a time
 - no tenant business flow may use an implicit app-wide default tenant
 - no tenant business flow may use one global provider account as payment or
@@ -535,3 +551,23 @@ Reason:
 
 If a later feature needs a Phase 0, Phase 0.5, or Phase 1-4 foundation, build
 the foundation first.
+
+## Pilot Launch Priority
+
+Until the shared multi-tenant pilot is ready, the active implementation order
+inside the broader roadmap is:
+
+1. close remaining Phase 0.5 release-gate gaps
+2. preserve Phase 0 failed-payment correctness where tenant scoping touches it
+3. run focused pilot verification
+4. only then widen into Phase 1-7 work that is not required for pilot launch
+
+For avoidance of doubt, the following are not active critical-path work unless a
+specific gap blocks a pilot release gate:
+
+- deeper replay or repair UX polish beyond safe advanced access
+- broader diagnostics ergonomics
+- retention apply tooling beyond accepted policy display and safe dry-run
+- broader subscription operations beyond the already-documented safe read-only
+  or pre-execution state slices
+- plan catalog, advanced overrides, or later platform-administration work

@@ -469,6 +469,7 @@ export async function createSubscriptionAction(formData: FormData) {
   }
 
   const session = await requireViewerSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
   const returnTo = updateActionPath(parsed.data.returnTo, {
     focus: parsed.data.customerId,
@@ -482,6 +483,7 @@ export async function createSubscriptionAction(formData: FormData) {
       },
       customerId: parsed.data.customerId,
       mode: selectedMode,
+      tenantId: tenantSelection.currentTenant.id,
       trigger: "manual",
     });
     const feedback = describeSubscriptionActivationResult(result);

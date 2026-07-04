@@ -44,7 +44,6 @@ const rawServerEnvSchema = z.object({
   APP_URL: optionalUrl,
   APP_ENCRYPTION_KEY: optionalString,
   AUTH_SECRET: optionalString,
-  AUTH_ALLOWED_EMAIL: optionalEmail,
   AUTH_GOOGLE_ID: optionalString,
   AUTH_GOOGLE_SECRET: optionalString,
   AUTH_ADVANCED_EMAILS: optionalString,
@@ -105,7 +104,6 @@ const postgresUrlSchema = z
   );
 
 const authConfigSchema = z.object({
-  AUTH_ALLOWED_EMAIL: z.string().email(),
   AUTH_GOOGLE_ID: z.string().min(1),
   AUTH_GOOGLE_SECRET: z.string().min(1),
   AUTH_SECRET: z.string().min(32),
@@ -169,7 +167,6 @@ export function getSetupStatus() {
     env.APP_ENCRYPTION_KEY ? null : "APP_ENCRYPTION_KEY is missing.",
   ].filter((value): value is string => value !== null);
   const authIssues = [
-    env.AUTH_ALLOWED_EMAIL ? null : "AUTH_ALLOWED_EMAIL is missing.",
     env.AUTH_GOOGLE_ID ? null : "AUTH_GOOGLE_ID is missing.",
     env.AUTH_GOOGLE_SECRET ? null : "AUTH_GOOGLE_SECRET is missing.",
     env.AUTH_SECRET ? null : "AUTH_SECRET is missing.",

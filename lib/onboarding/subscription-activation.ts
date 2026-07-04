@@ -12,7 +12,6 @@ import { deliverAlertEmail, openAlert, resolveAlertsForEntity } from "@/lib/reli
 import { subscriptionConsentPlanSnapshotSchema } from "@/lib/subscription-consent";
 import { toMollieInterval } from "@/lib/subscription-policy";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
-import { requireCustomerTenantId } from "@/lib/tenant-ownership";
 
 type ActivationActor =
   | {
@@ -115,7 +114,11 @@ function findPreferredDirectDebitMandate(mandates: ActivationMandate[]) {
   );
 }
 
-async function getActivationContext(customerId: string, mode: MollieMode) {
+async function getActivationContext(
+  customerId: string,
+  mode: MollieMode,
+  tenantId: string,
+) {
   const [customerResult, consentResult, paymentResult, mandateResult, subscriptionResult] =
     await Promise.all([
       getDb().execute<ActivationCustomer>(sql`
@@ -125,6 +128,7 @@ async function getActivationContext(customerId: string, mode: MollieMode) {
           archived_at as "archivedAt"
         from customers
         where id = ${customerId}
+          and tenant_id = ${tenantId}
           and mode = ${mode}
         limit 1
       `),
@@ -137,6 +141,7 @@ async function getActivationContext(customerId: string, mode: MollieMode) {
           soc.accepted_at as "acceptedAt"
         from subscription_onboarding_consents soc
         where soc.customer_id = ${customerId}
+          and soc.tenant_id = ${tenantId}
           and soc.mode = ${mode}
           and soc.accepted_at is not null
         order by soc.accepted_at desc
@@ -149,6 +154,7 @@ async function getActivationContext(customerId: string, mode: MollieMode) {
           paid_at as "paidAt"
         from payments
         where customer_id = ${customerId}
+          and tenant_id = ${tenantId}
           and mode = ${mode}
           and payment_type = 'first'
         order by created_at desc
@@ -161,6 +167,7 @@ async function getActivationContext(customerId: string, mode: MollieMode) {
           mollie_status as "mollieStatus"
         from mandates
         where customer_id = ${customerId}
+          and tenant_id = ${tenantId}
           and mode = ${mode}
         order by created_at desc
       `),
@@ -171,6 +178,7 @@ async function getActivationContext(customerId: string, mode: MollieMode) {
           metadata ->> 'consentId' as "consentId"
         from subscriptions
         where customer_id = ${customerId}
+          and tenant_id = ${tenantId}
           and mode = ${mode}
         order by created_at desc
       `),
@@ -189,9 +197,14 @@ export async function attemptSubscriptionActivation(input: {
   actor?: ActivationActor;
   customerId: string;
   mode: MollieMode;
+  tenantId: string;
   trigger: ActivationTrigger;
 }): Promise<SubscriptionActivationResult> {
-  const context = await getActivationContext(input.customerId, input.mode);
+  const context = await getActivationContext(
+    input.customerId,
+    input.mode,
+    input.tenantId,
+  );
   const customer = context.customer;
 
   if (!customer) {
@@ -276,7 +289,7 @@ export async function attemptSubscriptionActivation(input: {
     };
   }
 
-  const tenantId = await requireCustomerTenantId(customer.id);
+  const tenantId = input.tenantId;
   const consentLinkedSubscription = context.subscriptions.find(
     (subscription) => subscription.consentId === acceptedConsent.consentId,
   );

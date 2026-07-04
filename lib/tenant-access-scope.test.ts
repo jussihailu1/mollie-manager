@@ -20,6 +20,7 @@ describe("tenant access gate", () => {
     assert.match(tenantsSource, /export async function getTenantAccessForOperatorEmail/);
     assert.match(tenantsSource, /export async function requireTenantAccessForOperatorEmail/);
     assert.match(tenantContextSource, /requireTenantAccessForOperatorEmail\(session\.user\.email\)/);
+    assert.match(tenantContextSource, /redirect\("\/login\?error=AccessDenied"\)/);
     assert.match(layoutSource, /getCurrentTenantSelectionForViewer/);
   });
 });

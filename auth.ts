@@ -7,7 +7,6 @@ import { roleForEmail } from "@/lib/auth/permissions";
 
 const setupStatus = getSetupStatus();
 const authIsReady = setupStatus.auth.ready;
-const allowedEmail = env.AUTH_ALLOWED_EMAIL?.toLowerCase();
 const authSecret = env.AUTH_SECRET;
 
 if (!authSecret) {
@@ -34,13 +33,6 @@ const authConfig = {
   },
   trustHost: true,
   callbacks: {
-    async signIn({ user }) {
-      if (!allowedEmail) {
-        return false;
-      }
-
-      return user.email?.toLowerCase() === allowedEmail;
-    },
     async jwt({ token, user }) {
       if (user?.email) {
         token.email = user.email.toLowerCase();

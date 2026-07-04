@@ -12,6 +12,7 @@ describe("onboarding tenant scope", () => {
   });
 
   it("threads explicit tenant ids through onboarding helpers", () => {
+    const actionsSource = readFileSync("lib/onboarding/actions.ts", "utf8");
     const actionHelpers = readFileSync("lib/onboarding/action-helpers.ts", "utf8");
     const archiveFlow = readFileSync("lib/onboarding/customer-archive-flow.ts", "utf8");
     const billingRepair = readFileSync("lib/onboarding/customer-billing-repair.ts", "utf8");
@@ -55,6 +56,10 @@ describe("onboarding tenant scope", () => {
     assert.match(
       firstPaymentOnboarding,
       /const mollie = await getTenantMollieClient\(\s*input\.tenantId,\s*input\.selectedMode,\s*\);/,
+    );
+    assert.match(
+      actionsSource,
+      /attemptSubscriptionActivation\(\{[\s\S]*tenantId: tenantSelection\.currentTenant\.id,[\s\S]*trigger: "manual"/,
     );
   });
 });

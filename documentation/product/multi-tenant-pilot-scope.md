@@ -90,8 +90,8 @@ Authentication for the pilot:
 Authorization for the pilot:
 
 - signing in is not enough by itself
-- app access requires either a tenant membership or an explicit platform-operator
-  record used for controlled administration/bootstrap work
+- product access is membership-led for normal operators and platform-operator-led
+  for controlled administration/bootstrap work
 - normal operator actions run inside one active tenant context
 - `AUTH_ADVANCED_EMAILS` may continue to gate advanced technical controls, but it
   does not create product access on its own and does not bypass tenant context

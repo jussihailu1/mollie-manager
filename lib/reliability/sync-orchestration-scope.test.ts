@@ -29,6 +29,10 @@ describe("sync orchestration tenant scope", () => {
       syncSource,
       /syncMatchingPaymentLinkForPayment\([\s\S]*resolvedTenantId/,
     );
+    assert.match(
+      syncSource,
+      /attemptSubscriptionActivation\(\{[\s\S]*tenantId: resolvedTenantId,[\s\S]*trigger: "auto"/,
+    );
 
     assert.match(subscriptionSyncSource, /const tenantId = localSubscription\.tenantId;/);
     assert.match(

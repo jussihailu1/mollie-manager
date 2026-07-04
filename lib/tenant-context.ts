@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 import { requireViewerSession } from "@/lib/auth/session";
 import { tenantSelectionCookieName } from "@/lib/tenant-selection";
@@ -11,7 +12,18 @@ import {
 
 export async function getCurrentTenantSelectionForViewer() {
   const session = await requireViewerSession();
-  await requireTenantAccessForOperatorEmail(session.user.email);
+  try {
+    await requireTenantAccessForOperatorEmail(session.user.email);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "Tenant membership is required for operator access."
+    ) {
+      redirect("/login?error=AccessDenied");
+    }
+
+    throw error;
+  }
   const cookieStore = await cookies();
 
   return {
