@@ -278,8 +278,8 @@ Current bounded implementation slice:
 - alert open/resolve/email-sent helper writes now require tenant context, and
   unresolved alert uniqueness is now scoped by tenant-backed alert payload and
   linked entities
-- alerts, audit logs, replay/repair/cron follow-up, and broader live
-  e-Boekhouden mutation flows remain deferred follow-up inside Phase 0.5
+- broader live e-Boekhouden mutation flows remain deferred follow-up inside
+  Phase 0.5
 
 Required behavior:
 
