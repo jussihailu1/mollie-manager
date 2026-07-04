@@ -20,11 +20,12 @@ describe("reliability data tenant scope", () => {
     assert.doesNotMatch(source, /getSingleTenantIdOrThrow/);
   });
 
-  it("scopes alert inbox and snapshot reads to tenant-owned linked records", () => {
+  it("scopes alert inbox and snapshot reads to tenant-owned linked records or tenant-local alert payloads", () => {
     assert.match(source, /p\.tenant_id = \$\{tenantId\}/);
     assert.match(source, /s\.tenant_id = \$\{tenantId\}/);
     assert.match(source, /customer\.tenant_id = \$\{tenantId\}/);
     assert.match(source, /fallback_customer\.tenant_id = \$\{tenantId\}/);
+    assert.match(source, /coalesce\(a\.payload ->> 'tenantId', ''\) = \$\{tenantId\}/);
     assert.match(source, /or p\.id is not null/);
     assert.match(source, /or s\.id is not null/);
     assert.match(source, /from webhook_events[\s\S]*where \(?[\s\S]*tenant_id = \$\{tenantId\}/);
@@ -37,5 +38,6 @@ describe("reliability data tenant scope", () => {
     assert.match(source, /entity_type = 'tenant_recurring_billing_cron'/);
     assert.match(source, /webhook_events w/);
     assert.match(source, /alerts a/);
+    assert.match(source, /coalesce\(a\.payload ->> 'tenantId', ''\) = \$\{tenantId\}/);
   });
 });

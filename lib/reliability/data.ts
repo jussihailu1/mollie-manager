@@ -129,6 +129,8 @@ const listAlertInboxByMode = cache(async (mode: DashboardModeFilter, tenantId: s
         and c.tenant_id = ${tenantId}
       where (${modeParam}::mollie_mode is null or ${alertModeExpression} = ${modeParam})
         and (
+          coalesce(a.payload ->> 'tenantId', '') = ${tenantId}
+          or
           customer.id is not null
           or fallback_customer.id is not null
           or p.id is not null
@@ -228,6 +230,8 @@ const getReliabilitySnapshotByMode = cache(async (
           on c.id = coalesce(customer.id, fallback_customer.id)
           and c.tenant_id = ${tenantId}
         where (
+          coalesce(a.payload ->> 'tenantId', '') = ${tenantId}
+          or
           customer.id is not null
           or fallback_customer.id is not null
           or p.id is not null
@@ -376,6 +380,8 @@ const listRecentAuditActivityByMode = cache(async (
             where audit_logs.entity_type = 'alert'
               and a.id = audit_logs.entity_id
               and (
+                coalesce(a.payload ->> 'tenantId', '') = ${tenantId}
+                or
                 customer.id is not null
                 or fallback_customer.id is not null
                 or p.id is not null
