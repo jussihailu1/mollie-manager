@@ -212,8 +212,8 @@ Current bounded implementation slice:
   reliability snapshot
 - tenant-aware Mollie sync/reliability cross-mode lookup helpers now thread
   explicit tenant context through sync, replay, repair, and subscription-sync
-  lookups; global/bootstrap `/api/health` diagnostics and the shared
-  env-backed fallback remain intentionally deferred
+  lookups, while global/bootstrap `/api/health` diagnostics remain
+  intentionally non-tenant until an explicit `tenantId` is supplied
 - e-Boekhouden relation detail lookups now require active tenant context
 - tenant-owned e-Boekhouden credential storage now exists, manual
   `tenant:provision` can seed those credentials, and relation search/detail plus
@@ -232,7 +232,8 @@ Current bounded implementation slice:
   resolution now drives onboarding customer creation, first-payment payment-link
   creation, subscription activation, billing repair, with payment-link
   follow-up now threading explicit tenant context, payment-link sync, mandate
-  sync, and payment drawer live fetches
+  sync, and payment drawer live fetches without implicit or `legacy-default`
+  env-backed business fallback
 - tenant-owned Mollie and e-Boekhouden credential encryption now writes through
   dedicated `APP_ENCRYPTION_KEY` ciphertext while keeping legacy
   `AUTH_SECRET`-encrypted tenant rows readable until a later re-encryption or

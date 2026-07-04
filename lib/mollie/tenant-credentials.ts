@@ -4,13 +4,12 @@ import { randomUUID } from "node:crypto";
 
 import { sql } from "drizzle-orm";
 
-import { env, getMollieApiKey, type MollieMode } from "@/lib/env";
+import { env, type MollieMode } from "@/lib/env";
 import { getDb, transaction } from "@/lib/db";
 import {
   decryptTenantCredential,
   encryptTenantCredential,
 } from "@/lib/tenant-credential-encryption";
-import { LEGACY_DEFAULT_TENANT_ID } from "@/lib/tenants";
 
 const TENANT_MOLLIE_CREDENTIAL_SCOPE =
   "mollie-manager:tenant-mollie-credentials:";
@@ -24,6 +23,14 @@ export class TenantMollieCredentialError extends Error {
     super(message);
     this.name = "TenantMollieCredentialError";
   }
+}
+
+function requireTenantId(tenantId?: string) {
+  if (!tenantId) {
+    throw new TenantMollieCredentialError("Explicit tenant context is required.");
+  }
+
+  return tenantId;
 }
 
 export function encryptTenantMollieApiKey(apiKey: string) {
@@ -110,23 +117,12 @@ export async function resolveTenantMollieConfig(
   tenantId?: string,
   mode: MollieMode = env.MOLLIE_DEFAULT_MODE,
 ) {
-  if (!tenantId) {
-    return {
-      MOLLIE_API_KEY: getMollieApiKey(mode),
-    };
-  }
-
-  const stored = await getTenantMollieCredentials(tenantId, mode);
+  const resolvedTenantId = requireTenantId(tenantId);
+  const stored = await getTenantMollieCredentials(resolvedTenantId, mode);
 
   if (stored) {
     return {
       MOLLIE_API_KEY: stored.apiKey,
-    };
-  }
-
-  if (tenantId === LEGACY_DEFAULT_TENANT_ID) {
-    return {
-      MOLLIE_API_KEY: getMollieApiKey(mode),
     };
   }
 

@@ -50,10 +50,7 @@ export async function getTenantMollieClient(
   tenantId?: string,
   mode: MollieMode = getDefaultMollieMode(),
 ) {
-  if (!tenantId) {
-    return getMollieClient(mode);
-  }
-
+  const config = await resolveTenantMollieConfig(tenantId, mode);
   const cacheKey = `${tenantId}:${mode}`;
   const cached = tenantClientCache.get(cacheKey);
 
@@ -61,7 +58,6 @@ export async function getTenantMollieClient(
     return cached;
   }
 
-  const config = await resolveTenantMollieConfig(tenantId, mode);
   const client = createMollieClient({
     apiKey: config.MOLLIE_API_KEY,
   });

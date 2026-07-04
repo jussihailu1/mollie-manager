@@ -107,10 +107,10 @@ Provider ownership for the pilot is:
 - future tenant-specific SMTP overrides remain later scope
 
 Current global env-backed provider credentials remain implementation debt for
-live tenant business mutations. Tenant e-Boekhouden settings discovery and
-relation reads can now resolve tenant-owned credentials, but broader provider
-flows must still stop relying on the shared env-backed path before the shared
-multi-tenant pilot is considered ready.
+live tenant business mutations. Tenant business flows now fail closed without
+implicit or `legacy-default` env-backed Mollie or e-Boekhouden credential
+fallback, while global/bootstrap diagnostics remain separate and non-tenant
+until an explicit `tenantId` is supplied.
 
 ## Tenant-Owned Product Defaults
 
