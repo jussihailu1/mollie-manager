@@ -50,8 +50,6 @@ Platform/bootstrap env still present in code today:
 - `MOLLIE_TEST_API_KEY`
 - `MOLLIE_LIVE_API_KEY`
 - `MOLLIE_WEBHOOK_PUBLIC_BASE_URL`
-- `EBOEKHOUDEN_API_TOKEN`
-- `EBOEKHOUDEN_API_SOURCE`
 - `SUBSCRIPTION_CANCELLATION_EMAIL`
 - `SUBSCRIPTION_TERMS_URL`
 - `SUBSCRIPTION_PRIVACY_URL`
@@ -132,7 +130,7 @@ Expected flow:
 5. configure tenant billing/accounting settings
 6. configure tenant subscription policy defaults
 7. verify webhook/public URL assumptions
-8. run readiness checks in that tenant context before live customer usage
+8. run `npm run tenant:readiness -- --tenant-id <tenant-id>` before live customer usage
 
 No self-serve tenant signup or invite flow is required for the pilot.
 

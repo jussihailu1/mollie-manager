@@ -27,6 +27,7 @@ This is the current practical path in code today. It is intentionally manual.
   - tenant e-Boekhouden API source if it is not `Kify`
 - shared SMTP and cron secrets are configured if you expect invoice delivery,
   alerts, and cron automation to work
+- tenant go-live uses live Mollie mode only in the current pilot path
 
 ## Required If This Tenant Has Its Own Legal/Contact Defaults
 
@@ -84,11 +85,10 @@ npm run tenant:provision -- \
 
 ## Advised Before First Real Customer
 
-- if you need both Mollie modes, run `tenant:provision` again with the same
-  `--tenant-id` and the other `--mollie-mode`
+- run tenant readiness:
+  - `npm run tenant:readiness -- --tenant-id <tenant-id>`
 - open advanced health for the tenant:
-  - `/api/health?tenantId=<tenant-id>&mode=test`
-  - `/api/health?tenantId=<tenant-id>&mode=live`
+  - `/api/health?tenantId=<tenant-id>`
 - do one full tenant-context smoke test:
   - create customer
   - link e-Boekhouden relation
@@ -104,8 +104,6 @@ npm run tenant:provision -- \
 ## Extra
 
 - add a second operator membership before the tenant is used for anything real
-- keep a test-mode Mollie key stored even for live tenants so non-live checks
-  stay easier
 - record the tenant slug, tenant id, operator emails, and configured modes in
   your internal rollout notes
 
@@ -115,5 +113,6 @@ npm run tenant:provision -- \
   `npm run tenant:provision`, not through a normal UI
 - billing/accounting settings have a tenant UI on `/settings`; subscription
   policy defaults currently do not
-- some readiness tooling is still app-env-centric and should not be treated as
-  the only tenant go-live checklist
+- `npm run ops:invoice-readiness` is platform-only; use
+  `npm run tenant:readiness -- --tenant-id <tenant-id>` for tenant go-live
+  checks

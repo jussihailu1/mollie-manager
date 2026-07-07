@@ -1,12 +1,8 @@
 import process from "node:process";
 
-import { ensureTenantBillingSettings } from "@/lib/billing-settings";
-import { env } from "@/lib/env";
-import { upsertTenantEboekhoudenCredentials } from "@/lib/eboekhouden/tenant-credentials";
-import { getDefaultMollieMode } from "@/lib/mollie/client";
-import { upsertTenantMollieCredentials } from "@/lib/mollie/tenant-credentials";
-import { ensureTenantSubscriptionPolicyDefaults } from "@/lib/subscription-policy-defaults";
-import { provisionTenant } from "@/lib/tenants";
+import { loadEnvConfig } from "@next/env";
+
+loadEnvConfig(process.cwd());
 
 type CliArgs = {
   eboekhoudenApiSource: string | null;
@@ -20,12 +16,15 @@ type CliArgs = {
   tenantId: string | null;
 };
 
-function assertTenantCredentialEncryptionConfigured(args: CliArgs) {
+function assertTenantCredentialEncryptionConfigured(
+  args: CliArgs,
+  appEncryptionKey: string | null | undefined,
+) {
   if (!args.eboekhoudenApiToken && !args.mollieApiKey) {
     return;
   }
 
-  if (!env.APP_ENCRYPTION_KEY) {
+  if (!appEncryptionKey) {
     throw new Error(
       "APP_ENCRYPTION_KEY is required before provisioning tenant provider credentials.",
     );
@@ -67,8 +66,26 @@ function parseArgs(args: string[]): CliArgs {
 }
 
 async function main() {
+  const [
+    { ensureTenantBillingSettings },
+    { env },
+    { upsertTenantEboekhoudenCredentials },
+    { getDefaultMollieMode },
+    { upsertTenantMollieCredentials },
+    { ensureTenantSubscriptionPolicyDefaults },
+    { provisionTenant },
+  ] = await Promise.all([
+    import("@/lib/billing-settings"),
+    import("@/lib/env"),
+    import("@/lib/eboekhouden/tenant-credentials"),
+    import("@/lib/mollie/client"),
+    import("@/lib/mollie/tenant-credentials"),
+    import("@/lib/subscription-policy-defaults"),
+    import("@/lib/tenants"),
+  ]);
+
   const args = parseArgs(process.argv.slice(2));
-  assertTenantCredentialEncryptionConfigured(args);
+  assertTenantCredentialEncryptionConfigured(args, env.APP_ENCRYPTION_KEY);
   const tenantId = await provisionTenant({
     name: args.name,
     operatorEmail: args.operatorEmail,

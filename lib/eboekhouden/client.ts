@@ -72,7 +72,7 @@ export type EboekhoudenInvoice = {
 const sessionCacheByKey = new Map<string, SessionCache>();
 
 export class EboekhoudenConfigError extends Error {
-  constructor(message = "EBOEKHOUDEN_API_TOKEN is missing.") {
+  constructor(message = "Tenant e-Boekhouden credentials are missing.") {
     super(message);
     this.name = "EboekhoudenConfigError";
   }

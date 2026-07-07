@@ -71,9 +71,8 @@ company/account.
 - Resolve tenant context before relation lookup, relation linking, template
   discovery, ledger discovery, invoice creation, invoice retry, reconciliation,
   or PDF URL trust decisions
-- app-wide env may still exist for bootstrap defaults or older tooling, but
-  current tenant business flows must not fall back to one shared
-  e-Boekhouden token
+- there is no supported global e-Boekhouden token path for tenant business
+  flows; credentials must be stored per tenant
 
 ## Relevant Files
 
@@ -86,10 +85,8 @@ company/account.
 
 ## Relevant Env
 
-- `EBOEKHOUDEN_API_TOKEN`
-- `EBOEKHOUDEN_API_SOURCE`
 - `INVOICE_EMAIL_OVERRIDE_TO`
 - SMTP env values used by app-owned delivery
 
-These env values now describe bootstrap/default behavior and older tooling more
-than active tenant business flow credential resolution.
+Tenant e-Boekhouden credentials now live in tenant storage, not global env.
+The session source value is stored with those tenant credentials.

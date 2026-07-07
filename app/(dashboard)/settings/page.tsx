@@ -350,7 +350,7 @@ export default async function SettingsPage({
               </p>
             </div>
             <Button asChild variant="outline">
-              <Link href={`/api/health?mode=${selectedMode}`} target="_blank">
+              <Link href={`/api/health?tenantId=${tenantId}`} target="_blank">
                 Open advanced diagnostics
               </Link>
             </Button>

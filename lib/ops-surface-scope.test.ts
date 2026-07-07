@@ -27,6 +27,7 @@ describe("ops surface hardening", () => {
       /Shared reliability snapshot for \/settings and advanced \/api\/health/,
     );
     assert.match(source, /Open advanced diagnostics/);
+    assert.match(source, /href=\{`\/api\/health\?tenantId=\$\{tenantId\}`\}/);
     assert.match(source, /Failed webhook replay queue/);
     assert.match(source, /replayWebhookEventAction/);
     assert.match(source, /confirmMessage=\{`Replay failed/);

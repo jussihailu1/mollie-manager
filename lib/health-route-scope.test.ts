@@ -33,9 +33,21 @@ describe("health route scope", () => {
     assert.match(source, /const opsSnapshot = diagnosticsContext\.tenantId/);
     assert.match(
       source,
-      /Pass \?tenantId=<tenant-id> to read tenant-scoped reliability diagnostics\./,
+      /Pass \?tenantId=<tenant-id> to read tenant-scoped live readiness and reliability diagnostics\./,
     );
     assert.match(source, /invoiceAutomation: opsSnapshot\?\.invoiceAutomation \?\? null/);
     assert.match(source, /reliability: opsSnapshot\?\.reliability \?\? null/);
+  });
+
+  it("separates platform diagnostics from tenant live readiness", () => {
+    const source = readFileSync(resolve("app/api/health/route.ts"), "utf8");
+
+    assert.match(source, /const platform = getPlatformReadiness\(\)/);
+    assert.match(source, /const tenant =\s+diagnosticsContext\.tenantId !== null/);
+    assert.match(source, /const mode = diagnosticsContext\.tenantId \? "live" : resolveMode\(request\)/);
+    assert.match(source, /platform,/);
+    assert.match(source, /tenant,/);
+    assert.doesNotMatch(source, /isMollieConfigured/);
+    assert.doesNotMatch(source, /getSetupStatus\(\)/);
   });
 });

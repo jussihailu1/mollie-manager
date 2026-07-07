@@ -1,8 +1,10 @@
 import { checkDatabaseConnection } from "@/lib/db";
-import { env, getSetupStatus, type MollieMode } from "@/lib/env";
+import { env, type MollieMode } from "@/lib/env";
 import { getAcceptedCronSecrets, isBearerAuthorized } from "@/lib/cron-auth";
-import { isMollieConfigured } from "@/lib/mollie/client";
-import { notificationsAreConfigured } from "@/lib/notifications/email";
+import {
+  getPlatformReadiness,
+  getTenantReadiness,
+} from "@/lib/tenant-readiness";
 import { getViewerSession, hasAdvancedOperationsAccess } from "@/lib/auth/session";
 import { getReliabilityOpsSnapshot } from "@/lib/reliability/ops-snapshot";
 import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
@@ -44,10 +46,15 @@ async function resolveDiagnosticsContext(request: Request) {
   }
 
   const tenantSelection = await getCurrentTenantSelectionForViewer();
+  const tenantId = requestedTenantId
+    ? tenantSelection.accessibleTenants.find(
+        (tenant) => tenant.id === requestedTenantId,
+      )?.id ?? null
+    : null;
 
   return {
     authorized: true,
-    tenantId: tenantSelection.currentTenant.id,
+    tenantId,
   };
 }
 
@@ -62,8 +69,9 @@ export async function GET(request: Request) {
     });
   }
 
-  const mode = resolveMode(request);
-  const setupStatus = getSetupStatus();
+  const requestedTenantId = resolveRequestedTenantId(request);
+  const mode = diagnosticsContext.tenantId ? "live" : resolveMode(request);
+  const platform = getPlatformReadiness();
   const database = await checkDatabaseConnection();
   const opsSnapshot = diagnosticsContext.tenantId
     ? await getReliabilityOpsSnapshot({
@@ -71,6 +79,16 @@ export async function GET(request: Request) {
         tenantId: diagnosticsContext.tenantId,
       })
     : null;
+  const tenant =
+    diagnosticsContext.tenantId !== null
+      ? await getTenantReadiness(diagnosticsContext.tenantId)
+      : null;
+  const status =
+    database.ok &&
+    platform.pass &&
+    (requestedTenantId === null || Boolean(tenant?.pass))
+      ? "ok"
+      : "setup-pending";
 
   return Response.json({
     app: "Kify",
@@ -79,24 +97,19 @@ export async function GET(request: Request) {
     diagnosticsTenantScoped: Boolean(diagnosticsContext.tenantId),
     diagnosticsNotice: diagnosticsContext.tenantId
       ? null
-      : "Pass ?tenantId=<tenant-id> to read tenant-scoped reliability diagnostics.",
+      : "Pass ?tenantId=<tenant-id> to read tenant-scoped live readiness and reliability diagnostics.",
     phase: "reliability",
-    status:
-      database.ok && Object.values(setupStatus).every((section) => section.ready)
-        ? "ok"
-        : "setup-pending",
+    status,
     checks: {
       database,
-      mollieLiveConfigured: isMollieConfigured("live"),
-      notificationsConfigured: notificationsAreConfigured(),
-      mollieTestConfigured: isMollieConfigured("test"),
     },
     invoiceAutomation: opsSnapshot?.invoiceAutomation ?? null,
     invoiceAutomationCron: opsSnapshot?.invoiceAutomationCron ?? null,
     invoiceDeliveryQueue: opsSnapshot?.invoiceDeliveryQueue ?? null,
     opsSnapshot,
+    platform,
     reliability: opsSnapshot?.reliability ?? null,
-    setupStatus,
+    tenant,
     timestamp: new Date().toISOString(),
   });
 }

@@ -7,6 +7,7 @@ describe("tenant provisioning boundary", () => {
   it("keeps tenant setup explicit and threads both credential bootstrap paths through the script", () => {
     const tenantsSource = readFileSync(resolve("lib/tenants.ts"), "utf8");
     const scriptSource = readFileSync(resolve("scripts/provision-tenant.ts"), "utf8");
+    const packageSource = readFileSync(resolve("package.json"), "utf8");
     const provisionTenantSource =
       tenantsSource.match(
         /export async function provisionTenant\(input: ProvisionTenantInput\)[\s\S]*?return tenantId;\r?\n\}/,
@@ -20,16 +21,21 @@ describe("tenant provisioning boundary", () => {
     assert.doesNotMatch(provisionTenantSource, /getSingleTenantIdOrThrow/);
     assert.doesNotMatch(provisionTenantSource, /getTenantMollieClient/);
 
-    assert.match(scriptSource, /import { getDefaultMollieMode } from "@\/lib\/mollie\/client";/);
-    assert.match(scriptSource, /import { env } from "@\/lib\/env";/);
-    assert.match(scriptSource, /import { upsertTenantMollieCredentials } from "@\/lib\/mollie\/tenant-credentials";/);
+    assert.match(scriptSource, /import { loadEnvConfig } from "@next\/env";/);
+    assert.match(scriptSource, /loadEnvConfig\(process\.cwd\(\)\);/);
+    assert.match(scriptSource, /import\("@\/lib\/mollie\/client"\)/);
+    assert.match(scriptSource, /import\("@\/lib\/env"\)/);
+    assert.match(scriptSource, /import\("@\/lib\/mollie\/tenant-credentials"\)/);
     assert.match(scriptSource, /mollieApiKey: string \| null;/);
     assert.match(scriptSource, /mollieMode: "test" \| "live" \| null;/);
     assert.match(
       scriptSource,
       /APP_ENCRYPTION_KEY is required before provisioning tenant provider credentials\./,
     );
-    assert.match(scriptSource, /await ensureTenantSubscriptionPolicyDefaults\(tenantId\);/);
+    assert.match(
+      scriptSource,
+      /assertTenantCredentialEncryptionConfigured\(args, env\.APP_ENCRYPTION_KEY\);/,
+    );
     assert.match(scriptSource, /await ensureTenantBillingSettings\(tenantId\);/);
     assert.match(scriptSource, /await upsertTenantEboekhoudenCredentials\(/);
     assert.match(scriptSource, /await upsertTenantMollieCredentials\(/);
@@ -41,5 +47,9 @@ describe("tenant provisioning boundary", () => {
     assert.match(scriptSource, /await ensureTenantSubscriptionPolicyDefaults\(tenantId\);/);
     assert.match(scriptSource, /await ensureTenantBillingSettings\(tenantId\);/);
     assert.match(scriptSource, /hasEboekhoudenCredentials: Boolean\(args\.eboekhoudenApiToken\)/);
+    assert.match(
+      packageSource,
+      /"tenant:provision": "node --conditions=react-server --import tsx scripts\/provision-tenant\.ts"/,
+    );
   });
 });

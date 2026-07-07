@@ -29,17 +29,22 @@ Audience: product and engineering
     customers until there is a controlled way to set those values correctly per
     tenant
 
-## Fix Soon Because It Can Mislead Operators
+## Fixed In Current Repo State
 
-- `scripts/invoice-automation-readiness.mjs` still checks app-wide env such as
-  `EBOEKHOUDEN_API_TOKEN` and `MOLLIE_DEFAULT_MODE` instead of tenant-owned
-  stored credentials
-  - that makes it a poor tenant go-live gate in the multi-tenant pilot
-- `/api/health` still reports setup status from app-wide env checks such as
-  global Mollie configuration, even though tenant business flows now use
-  tenant-owned credentials
-  - useful for platform/runtime diagnostics
-  - not sufficient by itself as a tenant readiness decision
+- `npm run ops:invoice-readiness` is now explicitly platform-only
+  - it checks app URL, cron auth, SMTP, and scheduler wiring
+  - it no longer expects a global e-Boekhouden token or default tenant mode
+- `npm run tenant:readiness -- --tenant-id <tenant-id>` now checks tenant-owned
+  live readiness directly
+  - tenant row exists
+  - live Mollie credentials exist for that tenant
+  - tenant e-Boekhouden credentials exist
+  - billing/accounting settings are complete
+  - tenant subscription-policy defaults exist
+- `/api/health` now keeps platform diagnostics separate from tenant diagnostics
+  - plain `/api/health` remains a platform/runtime view
+  - `/api/health?tenantId=<tenant-id>` adds tenant-scoped live readiness and
+    reliability diagnostics
 
 ## Fine For The Pilot, But Operationally Rough
 
@@ -48,10 +53,6 @@ Audience: product and engineering
 - tenant billing/accounting settings have a UI, but tenant credential rotation
   and tenant subscription-policy default edits do not
 - there is no dedicated tenant-specific readiness command that checks:
-  - tenant membership
-  - tenant-owned provider credentials
-  - billing/accounting completeness
-  - live/test mode coverage
   - first-customer smoke readiness
 
 ## Likely Later Risk

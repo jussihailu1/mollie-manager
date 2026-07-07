@@ -60,7 +60,9 @@ Invoice creation truth remains upstream:
 - public requests get a minimal liveness payload only
 - detailed diagnostics require either an advanced operator session or `Authorization: Bearer <INVOICE_CRON_SHARED_SECRET>` / `Authorization: Bearer <CRON_SECRET>`
 
-Authenticated `/api/health?mode=<test|live>` includes:
+Authenticated `/api/health` includes platform diagnostics. Authenticated
+`/api/health?tenantId=<tenant-id>` adds tenant-scoped live readiness and
+reliability diagnostics, including:
 
 - `invoiceAutomationCron.lastCronRunAt`
 - `invoiceAutomationCron.lastCronRunOutcome`
@@ -112,20 +114,30 @@ Required env for this command:
 
 Before rollout, check environment/config readiness with:
 
-`npm run ops:invoice-readiness -- <mode>`
+`npm run ops:invoice-readiness`
 
 Example:
 
-`npm run ops:invoice-readiness -- live`
+`npm run ops:invoice-readiness`
 
 This verifies:
 
 - app base URL env
 - cron auth secret env
 - SMTP env
-- e-Boekhouden token env
-- default Mollie mode alignment
 - scheduler config presence in `vercel.json`
+
+For tenant go-live readiness, use:
+
+`npm run tenant:readiness -- --tenant-id <tenant-id>`
+
+This verifies:
+
+- tenant exists
+- tenant live Mollie credentials exist
+- tenant e-Boekhouden credentials exist
+- tenant billing/accounting settings are complete
+- tenant subscription-policy defaults exist
 
 ## Backlog Report Command
 
