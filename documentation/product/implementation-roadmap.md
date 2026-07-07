@@ -279,8 +279,10 @@ Current bounded implementation slice:
 - alert open/resolve/email-sent helper writes now require tenant context, and
   unresolved alert uniqueness is now scoped by tenant-backed alert payload and
   linked entities
-- broader live e-Boekhouden mutation flows remain deferred follow-up inside
-  Phase 0.5
+- live e-Boekhouden mutation seams that are in current pilot scope now thread
+  explicit tenant context through relation patch, invoice create/reconcile, and
+  tenant-owned credential resolution; global/bootstrap diagnostics remain
+  intentionally non-tenant unless an explicit `tenantId` is supplied
 
 Required behavior:
 

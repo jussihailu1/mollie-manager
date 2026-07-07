@@ -16,8 +16,8 @@ app-wide Mollie account.
 ## Mode Model
 
 - Supported modes: `test` and `live`
-- Default mode may still bootstrap from `MOLLIE_DEFAULT_MODE` during current
-  implementation debt, but target live operation is tenant-aware
+- `MOLLIE_DEFAULT_MODE` still selects the default runtime mode when a request or
+  operator has not chosen one explicitly
 - The operator-selected mode is stored in the `mollie_manager_mode` cookie
 - In `APP_ENV=test`, the app forces `test` mode and blocks live mode
 - Persisted records keep their own `mode` column
@@ -47,9 +47,9 @@ Mollie.
 
 ## Webhooks
 
-- Webhook URL may still be built from `MOLLIE_WEBHOOK_PUBLIC_BASE_URL` while the
-  current code remains env-backed, but webhook follow-up must resolve tenant
-  context from local state before tenant business processing continues
+- Webhook URL is still built from `MOLLIE_WEBHOOK_PUBLIC_BASE_URL`
+- webhook follow-up must resolve tenant context from local state before tenant
+  business processing continues
 - Webhook URLs do not include shared secrets
 - Webhook events are stored locally before processing
 - Processing re-fetches current Mollie state instead of trusting the webhook payload blindly
@@ -70,8 +70,8 @@ Mollie.
 - Repair and reconciliation flows must not silently change invoice truth in e-Boekhouden.
 - Tenant-owned Mollie credentials must be used consistently in onboarding,
   subscription creation, sync, replay, repair, and webhook follow-up flows.
-- Current global env-backed Mollie credentials are implementation debt to remove
-  during the multi-tenant pilot foundation.
+- app-wide Mollie env may still exist for runtime/bootstrap concerns, but active
+  tenant business flows must not fall back to one shared Mollie account.
 
 ## Relevant Env
 
@@ -82,6 +82,5 @@ Mollie.
 - `MOLLIE_PROFILE_ID`
 - `MOLLIE_WEBHOOK_PUBLIC_BASE_URL`
 
-These env values describe current implementation/bootstrap behavior. They are
-not the desired long-term live credential model for the shared multi-tenant
-pilot.
+These env values now describe mode/runtime/bootstrap concerns more than the
+active tenant business credential model.

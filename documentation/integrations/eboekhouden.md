@@ -22,12 +22,12 @@ app-wide e-Boekhouden token.
 
 ## Authentication Model
 
-- Current code starts a session with `EBOEKHOUDEN_API_TOKEN`
+- current tenant business flows resolve tenant-owned e-Boekhouden credentials
+  before starting a session
 - `EBOEKHOUDEN_API_SOURCE` is sent with the session request
-- Session tokens are cached in memory and renewed when needed
-- The multi-tenant pilot foundation must replace the app-wide token assumption
-  with tenant-owned credential/session resolution
-- Any e-Boekhouden session cache must be tenant-aware
+- session tokens are cached in memory and renewed when needed
+- session cache is tenant-aware
+- tenant business flows fail closed without explicit tenant context
 
 Main implementation:
 
@@ -71,8 +71,9 @@ company/account.
 - Resolve tenant context before relation lookup, relation linking, template
   discovery, ledger discovery, invoice creation, invoice retry, reconciliation,
   or PDF URL trust decisions
-- Current global env-backed e-Boekhouden credentials are implementation debt to
-  remove during the multi-tenant pilot foundation
+- app-wide env may still exist for bootstrap defaults or older tooling, but
+  current tenant business flows must not fall back to one shared
+  e-Boekhouden token
 
 ## Relevant Files
 
@@ -90,6 +91,5 @@ company/account.
 - `INVOICE_EMAIL_OVERRIDE_TO`
 - SMTP env values used by app-owned delivery
 
-These env values describe current implementation/bootstrap behavior. They are
-not the desired long-term live credential model for the shared multi-tenant
-pilot.
+These env values now describe bootstrap/default behavior and older tooling more
+than active tenant business flow credential resolution.

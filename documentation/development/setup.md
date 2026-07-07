@@ -44,7 +44,7 @@ Main env groups:
 - Invoice automation:
   - `INVOICE_CRON_SHARED_SECRET`
 
-Current implementation debt still present in code today:
+Platform/bootstrap env still present in code today:
 
 - `MOLLIE_DEFAULT_MODE`
 - `MOLLIE_TEST_API_KEY`
@@ -58,12 +58,13 @@ Current implementation debt still present in code today:
 - `SUBSCRIPTION_TERMS_VERSION`
 
 Do not extend product scope around those app-wide business credentials. The
-multi-tenant pilot foundation is actively replacing them with tenant-owned stored
-configuration, while platform env should remain for platform/runtime concerns
-such as auth, database, app URL, cron secrets, and shared SMTP.
-Current e-Boekhouden business flows now fail closed without explicit tenant
-context; the env-backed e-Boekhouden token remains only as an explicit
-`legacy-default` bootstrap fallback until a later backfill slice.
+multi-tenant pilot now uses tenant-owned stored Mollie and e-Boekhouden
+credentials for active tenant business flows, while platform env remains for
+platform/runtime concerns such as auth, database, app URL, cron secrets, shared
+SMTP, bootstrap defaults, and older readiness tooling that still assumes some
+env-backed checks.
+Current tenant business flows fail closed without explicit tenant context and do
+not fall back to app-wide Mollie or e-Boekhouden credentials.
 `APP_ENCRYPTION_KEY` is also a platform/runtime secret and now encrypts stored
 tenant Mollie and e-Boekhouden credentials. Keep it stable per environment, and
 rotate it with a credential re-encryption/backfill plan rather than ad hoc.
@@ -143,8 +144,9 @@ Current implementation note:
 - a legacy `legacy-default` tenant row is created by migration only to keep the
   current single-context deployment bootable during the foundation work
 - provision real tenants with `npm run tenant:provision -- --slug <slug> --name <name> --operator-email <email>`
-- full tenant-scoped auth/session resolution and tenant-scoped core business
-  tables are still required before the shared multi-tenant pilot is ready
+- tenant-scoped auth/session resolution and tenant-scoped core business tables
+  are already in place; remaining pilot work is mostly tenant-specific go-live
+  verification and a few operational/tooling follow-up seams
 
 ## Database Notes
 
