@@ -13,11 +13,12 @@ import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 async function getLinkedRelationIds(tenantId: string) {
   const selectedMode = await getSelectedMollieMode();
   const result = await getDb().execute<{ relationId: number }>(sql`
-      select eboekhouden_relation_id as "relationId"
-      from customers
+      select provider_customer_id::int as "relationId"
+      from customer_accounting_links
       where tenant_id = ${tenantId}
         and mode = ${selectedMode}
-        and eboekhouden_relation_id is not null
+        and provider = 'eboekhouden'
+        and provider_customer_id is not null
     `);
 
   return new Set(result.rows.map((row) => row.relationId));

@@ -5,10 +5,10 @@ export type FirstPaymentInvoiceDeliveryInput = {
   actor: SyncActor;
   customerEmail: string | null;
   customerId: string | null;
-  eboekhoudenInvoiceId: string | null;
-  eboekhoudenInvoiceNumber: string | null;
-  eboekhoudenInvoicePdfUrl: string | null;
   entityId: string;
+  invoiceDocumentUrl: string | null;
+  invoiceId: string | null;
+  invoiceNumber: string | null;
   mode: MollieMode;
   subscriptionId: string | null;
   tenantId: string;
@@ -19,10 +19,11 @@ export function buildFirstPaymentInvoiceDelivery(input: FirstPaymentInvoiceDeliv
     actor: input.actor,
     customerEmail: input.customerEmail,
     customerId: input.customerId,
-    eboekhoudenInvoiceId: input.eboekhoudenInvoiceId,
-    eboekhoudenInvoiceNumber: input.eboekhoudenInvoiceNumber,
-    eboekhoudenInvoicePdfUrl: input.eboekhoudenInvoicePdfUrl,
     entityId: input.entityId,
+    invoiceDocumentUrl: input.invoiceDocumentUrl,
+    invoiceId: input.invoiceId,
+    invoiceNumber: input.invoiceNumber,
+    invoiceProvider: "eboekhouden" as const,
     invoiceType: "first_payment" as const,
     mode: input.mode,
     subscriptionId: input.subscriptionId,

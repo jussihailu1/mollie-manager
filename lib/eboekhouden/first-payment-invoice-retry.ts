@@ -38,8 +38,13 @@ function buildFailedFirstPaymentRetryFilter(mode: MollieMode, tenantId?: string)
     and p.tenant_id = ${tenantId}
     and p.payment_type = 'first'
     and p.invoice_state = 'invoice_failed'
-    and p.eboekhouden_invoice_id is null
-    and p.eboekhouden_invoice_number is null
+    and not exists (
+      select 1
+      from invoices i
+      where i.tenant_id = p.tenant_id
+        and i.owner_type = 'payment'
+        and i.owner_id = p.id
+    )
   `;
 }
 

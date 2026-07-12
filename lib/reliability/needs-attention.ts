@@ -325,31 +325,42 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.id as "entityId",
         'customer' as "type",
         case
-          when c.eboekhouden_link_status in ('needs_review', 'sync_error')
+          when cal.link_status in ('needs_review', 'sync_error')
             then 'critical'
           else 'warning'
         end as "severity",
         'eboekhouden_relation_problem' as "itemType",
         case
-          when c.eboekhouden_link_status = 'sync_error'
+          when cal.link_status = 'sync_error'
             then 'e-Boekhouden relation sync failed'
-          when c.eboekhouden_link_status = 'needs_review'
+          when cal.link_status = 'needs_review'
             then 'e-Boekhouden relation needs review'
           else 'Missing e-Boekhouden relation'
         end as "title",
         'This customer needs a verified e-Boekhouden relation before invoice automation can proceed safely.' as "summary",
         'Open the customer and link or repair the e-Boekhouden relation before creating invoices.',
-        coalesce(c.eboekhouden_synced_at, c.updated_at, c.created_at) as "createdAt",
+        coalesce(cal.synced_at, c.updated_at, c.created_at) as "createdAt",
         c.id as "customerId",
         coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail",
         concat('/customers?focus=', c.id) as "href"
       from customers c
+      left join customer_accounting_links cal
+        on cal.customer_id = c.id
+        and cal.tenant_id = c.tenant_id
+        and cal.mode = c.mode
+        and cal.provider = 'eboekhouden'
       where
         c.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or c.mode = ${modeParam})
         and c.archived_at is null
-        and c.eboekhouden_link_status in ('unlinked', 'needs_review', 'sync_error')
+        and exists (
+          select 1
+          from tenant_billing_settings tbs
+          where tbs.tenant_id = c.tenant_id
+            and tbs.active_invoice_provider = 'eboekhouden'
+        )
+        and coalesce(cal.link_status, 'unlinked') in ('unlinked', 'needs_review', 'sync_error')
         and (
           exists (
             select 1

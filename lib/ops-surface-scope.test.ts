@@ -51,7 +51,7 @@ describe("ops surface hardening", () => {
     assert.match(settingsSource, /hasAdvancedOperationsAccess/);
     assert.match(settingsSource, /DeveloperSettingsToggle/);
     assert.match(settingsSource, /Billing and accounting configuration/);
-    assert.match(settingsSource, /Recurring invoice accounting/);
+    assert.match(settingsSource, /Invoice provider settings/);
     assert.match(reliabilityActionsSource, /requireAdvancedOperationsSession/);
     assert.match(reliabilityActionsSource, /repairReliabilityTarget\(\{/);
     assert.match(billingActionsSource, /requireViewerSession/);

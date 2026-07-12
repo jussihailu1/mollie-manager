@@ -39,7 +39,11 @@ export async function getFirstPaymentInvoiceCandidate(
       p.created_at as "paymentCreatedAt",
       p.amount_value::text as "amountValue",
       c.email as "customerEmail",
-      c.eboekhouden_relation_id as "eboekhoudenRelationId",
+      case
+        when cal.provider_customer_id ~ '^[0-9]+$'
+          then cal.provider_customer_id::int
+        else null
+      end as "eboekhoudenRelationId",
       dm.first_payment_mode as "firstPaymentMode",
       dm.payment_link_id as "paymentLinkId",
       dm.consent_id as "consentId",
@@ -51,6 +55,11 @@ export async function getFirstPaymentInvoiceCandidate(
       on c.id = p.customer_id
       and c.mode = p.mode
       and c.tenant_id = p.tenant_id
+    left join customer_accounting_links cal
+      on cal.customer_id = c.id
+      and cal.tenant_id = c.tenant_id
+      and cal.mode = c.mode
+      and cal.provider = 'eboekhouden'
     where p.id = ${paymentId}
       and p.tenant_id = ${tenantId}
     limit 1

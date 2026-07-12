@@ -54,20 +54,24 @@ const listCustomerInvoiceLinksByMode = cache(async (
         p.id as "ownerId",
         'payment' as "ownerType",
         p.invoice_state::text as "invoiceState",
-        p.eboekhouden_invoice_id as "eboekhoudenInvoiceId",
-        p.eboekhouden_invoice_number as "eboekhoudenInvoiceNumber",
+        i.provider_invoice_id as "eboekhoudenInvoiceId",
+        i.provider_invoice_number as "eboekhoudenInvoiceNumber",
         coalesce(
-          nullif(p.metadata ->> 'invoiceDocumentUrl', ''),
-          nullif(p.metadata #>> '{eboekhoudenInvoice,urlPdfFile}', '')
+          nullif(i.provider_document_url, ''),
+          nullif(p.metadata ->> 'invoiceDocumentUrl', '')
         ) as "candidateInvoicePdfUrl",
         p.invoice_created_at as "createdAt",
         null::text as "plannedCollectionDate"
       from payments p
+      inner join invoices i
+        on i.owner_type = 'payment'
+        and i.owner_id = p.id
+        and i.tenant_id = p.tenant_id
+        and i.mode = p.mode
       where p.customer_id = ${customerId}
         and p.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
         and p.invoice_state in ('invoice_created', 'invoice_sent')
-        and (p.eboekhouden_invoice_id is not null or p.eboekhouden_invoice_number is not null)
 
       union all
 
@@ -75,15 +79,20 @@ const listCustomerInvoiceLinksByMode = cache(async (
         rbs.id as "ownerId",
         'recurring_schedule' as "ownerType",
         rbs.invoice_state::text as "invoiceState",
-        rbs.eboekhouden_invoice_id as "eboekhoudenInvoiceId",
-        rbs.eboekhouden_invoice_number as "eboekhoudenInvoiceNumber",
+        i.provider_invoice_id as "eboekhoudenInvoiceId",
+        i.provider_invoice_number as "eboekhoudenInvoiceNumber",
         coalesce(
-          nullif(rbs.metadata ->> 'invoiceDocumentUrl', ''),
-          nullif(rbs.metadata #>> '{eboekhoudenInvoice,urlPdfFile}', '')
+          nullif(i.provider_document_url, ''),
+          nullif(rbs.metadata ->> 'invoiceDocumentUrl', '')
         ) as "candidateInvoicePdfUrl",
         rbs.invoice_created_at as "createdAt",
         rbs.planned_collection_date::text as "plannedCollectionDate"
       from recurring_billing_schedules rbs
+      inner join invoices i
+        on i.owner_type = 'recurring_schedule'
+        and i.owner_id = rbs.id
+        and i.tenant_id = rbs.tenant_id
+        and i.mode = rbs.mode
       inner join subscriptions s
         on s.id = rbs.subscription_id
         and s.mode = rbs.mode
@@ -92,10 +101,6 @@ const listCustomerInvoiceLinksByMode = cache(async (
         and rbs.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or rbs.mode = ${modeParam})
         and rbs.invoice_state in ('invoice_created', 'invoice_sent')
-        and (
-          rbs.eboekhouden_invoice_id is not null
-          or rbs.eboekhouden_invoice_number is not null
-        )
     ) invoices
     order by coalesce("createdAt", "plannedCollectionDate"::timestamptz) desc nulls last
     limit ${normalizedLimit}

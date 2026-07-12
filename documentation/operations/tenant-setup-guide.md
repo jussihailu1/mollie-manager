@@ -22,8 +22,11 @@ This is the current practical path in code today. It is intentionally manual.
 - you know the tenant slug and display name
 - you know at least one operator email that should be able to use the tenant
 - if the tenant should run billing immediately, you have:
-  - tenant Mollie API key for the mode you want to use
-  - tenant e-Boekhouden API token
+  - active invoice provider selected for this tenant
+  - tenant Mollie API key for live mode if the active provider is `Mollie`
+  - Mollie Invoicing activated in the Mollie Dashboard if the active provider is
+    `Mollie`
+  - tenant e-Boekhouden API token if the active provider is `e-Boekhouden`
   - tenant e-Boekhouden API source if it is not `Kify`
 - shared SMTP and cron secrets are configured if you expect invoice delivery,
   alerts, and cron automation to work
@@ -65,8 +68,9 @@ npm run tenant:provision -- \
 4. Sign in with the operator or platform-operator account.
 5. Switch to the new tenant in the dashboard shell.
 6. Open `/settings` and complete the tenant billing/accounting settings:
-   - invoice template
-   - revenue ledger
+   - active invoice provider
+   - invoice template and revenue ledger if the active provider is
+     `e-Boekhouden`
    - VAT code and related accounting settings
 7. Confirm the tenant subscription-policy defaults are acceptable for that
    tenant before any live customer onboarding.
@@ -87,6 +91,10 @@ npm run tenant:provision -- \
 
 - run tenant readiness:
   - `npm run tenant:readiness -- --tenant-id <tenant-id>`
+  - this now validates the active invoice provider, not both providers at once
+  - if `Mollie` is active, it also checks read-only access to the Sales
+    Invoices API and will fail until Mollie Invoicing is activated in the
+    Mollie Dashboard
 - open advanced health for the tenant:
   - `/api/health?tenantId=<tenant-id>`
 - do one full tenant-context smoke test:

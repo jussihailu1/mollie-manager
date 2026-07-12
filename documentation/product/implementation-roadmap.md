@@ -41,7 +41,7 @@ and explicit tenant isolation, while broad tenant administration remains later.
 These rules prevent repeating previous cleanup and hardening mistakes:
 
 - define money, legal, privacy, or lifecycle policy before code changes that depend on it
-- keep Mollie payment truth separate from e-Boekhouden invoice truth
+- keep Mollie payment truth separate from provider-owned invoice truth
 - do not create duplicate invoices for one billing period
 - do not automatically pause, cancel, dun, penalize, or escalate a customer after failed payment detection unless a documented policy explicitly allows it
 - model state transitions explicitly; do not hide new product state only in untyped JSONB metadata
@@ -172,6 +172,9 @@ Current bounded implementation slice:
 - billing settings and advanced invoice automation actions now resolve the
   current tenant before mutating tenant-owned billing state or running batch
   invoice actions
+- tenant billing settings now carry an explicit active invoice provider, and
+  stored invoice/customer-link data is provider-neutral so provider switching is
+  forward-only for new invoices
 - alert status actions on the operator notifications surface now resolve the
   current tenant before acknowledging or reopening tenant-linked alerts
 - subscription operation request actions now resolve the current tenant before

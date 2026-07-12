@@ -1,6 +1,6 @@
 import { writeAuditLog } from "@/lib/audit";
 import type { MollieMode } from "@/lib/env";
-import { createEboekhoudenInvoiceForFirstPayment } from "@/lib/eboekhouden/first-payment-invoices";
+import { createInvoiceForFirstPayment } from "@/lib/eboekhouden/first-payment-invoices";
 import type { SyncActor } from "@/lib/reliability/sync-persistence";
 
 export async function runFirstPaymentInvoiceCreationFollowUp(input: {
@@ -11,7 +11,7 @@ export async function runFirstPaymentInvoiceCreationFollowUp(input: {
   tenantId: string;
 }) {
   try {
-    await createEboekhoudenInvoiceForFirstPayment(input.paymentId, {
+    await createInvoiceForFirstPayment(input.paymentId, {
       actor: input.actor,
       tenantId: input.tenantId,
     });

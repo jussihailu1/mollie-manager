@@ -37,9 +37,13 @@ Audience: product and engineering
 - `npm run tenant:readiness -- --tenant-id <tenant-id>` now checks tenant-owned
   live readiness directly
   - tenant row exists
-  - live Mollie credentials exist for that tenant
-  - tenant e-Boekhouden credentials exist
-  - billing/accounting settings are complete
+  - one active invoice provider is selected for new invoices
+  - only the active provider is treated as required
+  - `Mollie` readiness includes a read-only Sales Invoices API probe, so it
+    fails clearly until Mollie Invoicing is activated in the Mollie Dashboard
+  - `e-Boekhouden` readiness still requires tenant credentials plus invoice
+    template and revenue ledger
+  - billing/accounting settings are complete for the active provider
   - tenant subscription-policy defaults exist
 - `/api/health` now keeps platform diagnostics separate from tenant diagnostics
   - plain `/api/health` remains a platform/runtime view

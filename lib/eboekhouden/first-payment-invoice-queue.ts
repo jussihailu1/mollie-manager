@@ -49,16 +49,26 @@ export async function listDueFirstPaymentInvoiceCandidates(
       on c.id = p.customer_id
       and c.tenant_id = p.tenant_id
       and c.mode = p.mode
+    left join customer_accounting_links cal
+      on cal.customer_id = c.id
+      and cal.tenant_id = c.tenant_id
+      and cal.mode = c.mode
+      and cal.provider = 'eboekhouden'
     where p.tenant_id = ${resolvedTenantId}
       and p.mode = ${mode}
       and p.payment_type = 'first'
       and p.mollie_status = 'paid'
       and dm.consent_accepted_at is not null
       and dm.first_payment_mode = 'real_installment'
-      and c.eboekhouden_relation_id is not null
+      and cal.provider_customer_id is not null
       and p.invoice_state = 'pending_invoice'
-      and p.eboekhouden_invoice_id is null
-      and p.eboekhouden_invoice_number is null
+      and not exists (
+        select 1
+        from invoices i
+        where i.tenant_id = p.tenant_id
+          and i.owner_type = 'payment'
+          and i.owner_id = p.id
+      )
     order by coalesce(p.paid_at, p.created_at) asc, p.created_at asc
     limit ${Math.max(1, limit)}
   `);
@@ -135,8 +145,8 @@ export async function getDueFirstPaymentInvoiceQueueSummary(
   }>(sql`
     ${buildDeterministicMatchCte({ mode, tenantId: resolvedTenantId })}
     select
-      count(*) filter (where c.eboekhouden_relation_id is not null) as "actionableCount",
-      count(*) filter (where c.eboekhouden_relation_id is null) as "blockedCount",
+      count(*) filter (where cal.provider_customer_id is not null) as "actionableCount",
+      count(*) filter (where cal.provider_customer_id is null) as "blockedCount",
       count(*) as "dueCount"
     from payments p
     inner join deterministic_matches dm on dm.payment_id = p.id
@@ -144,14 +154,24 @@ export async function getDueFirstPaymentInvoiceQueueSummary(
       on c.id = p.customer_id
       and c.tenant_id = p.tenant_id
       and c.mode = p.mode
+    left join customer_accounting_links cal
+      on cal.customer_id = c.id
+      and cal.tenant_id = c.tenant_id
+      and cal.mode = c.mode
+      and cal.provider = 'eboekhouden'
     where p.tenant_id = ${resolvedTenantId}
       and p.mode = ${mode}
       and p.payment_type = 'first'
       and p.mollie_status = 'paid'
       and dm.consent_accepted_at is not null
       and dm.first_payment_mode = 'real_installment'
-      and p.eboekhouden_invoice_id is null
-      and p.eboekhouden_invoice_number is null
+      and not exists (
+        select 1
+        from invoices i
+        where i.tenant_id = p.tenant_id
+          and i.owner_type = 'payment'
+          and i.owner_id = p.id
+      )
       and p.invoice_state not in (
         ${TERMINAL_OR_IN_PROGRESS_STATES[0]},
         ${TERMINAL_OR_IN_PROGRESS_STATES[1]},

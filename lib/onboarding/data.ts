@@ -221,10 +221,14 @@ const listCustomersByMode = cache(async (
         c.id,
         c.mode,
         c.mollie_customer_id as "mollieCustomerId",
-        c.eboekhouden_relation_id as "eboekhoudenRelationId",
-        c.eboekhouden_relation_code as "eboekhoudenRelationCode",
-        c.eboekhouden_link_status as "eboekhoudenLinkStatus",
-        c.eboekhouden_synced_at as "eboekhoudenSyncedAt",
+        case
+          when eboekhouden_link.provider_customer_id ~ '^[0-9]+$'
+            then eboekhouden_link.provider_customer_id::int
+          else null
+        end as "eboekhoudenRelationId",
+        eboekhouden_link.provider_customer_code as "eboekhoudenRelationCode",
+        coalesce(eboekhouden_link.link_status, 'unlinked') as "eboekhoudenLinkStatus",
+        eboekhouden_link.synced_at as "eboekhoudenSyncedAt",
         c.full_name as "fullName",
         ${customerBusinessNameSelect} as "businessName",
         ${customerContactNameSelect} as "contactName",
@@ -281,6 +285,19 @@ const listCustomersByMode = cache(async (
         ) as "lastSyncedAt",
         coalesce(subscription_counts.total, 0)::int as "subscriptionCount"
       from customers c
+      left join lateral (
+        select
+          cal.provider_customer_id,
+          cal.provider_customer_code,
+          cal.link_status,
+          cal.synced_at
+        from customer_accounting_links cal
+        where cal.customer_id = c.id
+          and cal.tenant_id = c.tenant_id
+          and cal.mode = c.mode
+          and cal.provider = 'eboekhouden'
+        limit 1
+      ) eboekhouden_link on true
       left join lateral (
         select p.*
         from payments p
@@ -379,10 +396,14 @@ export const getCustomerDetail = cache(async (
             c.id,
             c.mode,
             c.mollie_customer_id as "mollieCustomerId",
-            c.eboekhouden_relation_id as "eboekhoudenRelationId",
-            c.eboekhouden_relation_code as "eboekhoudenRelationCode",
-            c.eboekhouden_link_status as "eboekhoudenLinkStatus",
-            c.eboekhouden_synced_at as "eboekhoudenSyncedAt",
+            case
+              when eboekhouden_link.provider_customer_id ~ '^[0-9]+$'
+                then eboekhouden_link.provider_customer_id::int
+              else null
+            end as "eboekhoudenRelationId",
+            eboekhouden_link.provider_customer_code as "eboekhoudenRelationCode",
+            coalesce(eboekhouden_link.link_status, 'unlinked') as "eboekhoudenLinkStatus",
+            eboekhouden_link.synced_at as "eboekhoudenSyncedAt",
             c.full_name as "fullName",
             ${customerBusinessNameSelect} as "businessName",
             ${customerContactNameSelect} as "contactName",
@@ -439,6 +460,19 @@ export const getCustomerDetail = cache(async (
             ) as "lastSyncedAt",
             coalesce(subscription_counts.total, 0)::int as "subscriptionCount"
           from customers c
+          left join lateral (
+            select
+              cal.provider_customer_id,
+              cal.provider_customer_code,
+              cal.link_status,
+              cal.synced_at
+            from customer_accounting_links cal
+            where cal.customer_id = c.id
+              and cal.tenant_id = c.tenant_id
+              and cal.mode = c.mode
+              and cal.provider = 'eboekhouden'
+            limit 1
+          ) eboekhouden_link on true
           left join lateral (
             select p.*
             from payments p

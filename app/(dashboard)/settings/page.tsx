@@ -165,6 +165,9 @@ export default async function SettingsPage({
       !ledgers.some((ledger) => ledger.id === billingSettings.revenueLedgerId),
   );
   const billingSettingsComplete = billingSettingsAreComplete(billingSettings);
+  const activeInvoiceProvider = billingSettings?.activeInvoiceProvider ?? "mollie";
+  const activeInvoiceProviderLabel =
+    activeInvoiceProvider === "eboekhouden" ? "e-Boekhouden" : "Mollie";
 
   if (!canManageAdvancedOperations) {
     return (
@@ -209,28 +212,32 @@ export default async function SettingsPage({
         <Card>
           <CardHeader>
             <div className="flex items-start justify-between gap-4">
-              <CardTitle className="text-lg">Recurring invoice accounting</CardTitle>
-              <form>
-                <Button
-                  type="submit"
-                  variant="ghost"
-                  size="icon-sm"
-                  title="Refresh invoice templates and ledger accounts from e-Boekhouden."
-                >
-                  <RefreshCw className="size-4" />
-                  <span className="sr-only">Refresh e-Boekhouden billing data</span>
-                </Button>
-              </form>
+              <CardTitle className="text-lg">Invoice provider settings</CardTitle>
+              {activeInvoiceProvider === "eboekhouden" ? (
+                <form>
+                  <Button
+                    type="submit"
+                    variant="ghost"
+                    size="icon-sm"
+                    title="Refresh invoice templates and ledger accounts from e-Boekhouden."
+                  >
+                    <RefreshCw className="size-4" />
+                    <span className="sr-only">Refresh e-Boekhouden billing data</span>
+                  </Button>
+                </form>
+              ) : null}
             </div>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-              e-Boekhouden will be the invoice and bookkeeping source. This app will
-              not ask e-Boekhouden to email invoices; customer invoice delivery is
-              handled by the app SMTP flow.
+              New invoices use the active provider. Existing invoices stay owned by the
+              provider that created them. Customer delivery stays app-owned for both
+              providers.
             </div>
 
-            {billingDiscovery && "error" in billingDiscovery ? (
+            {activeInvoiceProvider === "eboekhouden" &&
+            billingDiscovery &&
+            "error" in billingDiscovery ? (
               <Alert variant="destructive">
                 <AlertTitle>Discovery failed</AlertTitle>
                 <AlertDescription>{billingDiscovery.error}</AlertDescription>
@@ -238,6 +245,7 @@ export default async function SettingsPage({
             ) : null}
 
             <BillingSettingsForm
+              defaultActiveInvoiceProvider={activeInvoiceProvider}
               defaultInvoiceTemplateId={billingSettings?.invoiceTemplateId}
               defaultRevenueLedgerId={billingSettings?.revenueLedgerId}
               hasSavedLedgerOutsideDiscovery={hasSavedLedgerOutsideDiscovery}
@@ -739,11 +747,16 @@ export default async function SettingsPage({
               <div className="space-y-1">
                 <p className="text-sm font-medium">Create due first-payment invoices</p>
                 <p className="text-sm text-muted-foreground">
-                  Current mode: {selectedMode}. Ready now: {dueFirstPaymentInvoiceSummary.actionableCount}. Blocked by missing e-Boekhouden customer link: {dueFirstPaymentInvoiceSummary.blockedCount}.
+                  Current mode: {selectedMode}. Active provider: {activeInvoiceProviderLabel}. Ready now: {dueFirstPaymentInvoiceSummary.actionableCount}.{" "}
+                  {activeInvoiceProvider === "eboekhouden"
+                    ? `Blocked by missing e-Boekhouden customer link: ${dueFirstPaymentInvoiceSummary.blockedCount}.`
+                    : "No bookkeeping customer-link block applies for the current provider."}
                 </p>
                 {!billingSettingsComplete ? (
                   <p className="text-sm text-muted-foreground">
-                    Finish the invoice template and revenue ledger settings before creating invoices.
+                    {activeInvoiceProvider === "eboekhouden"
+                      ? "Finish the invoice template and revenue ledger settings before creating invoices."
+                      : "Finish the active provider setup before creating invoices."}
                   </p>
                 ) : null}
               </div>
@@ -768,11 +781,16 @@ export default async function SettingsPage({
               <div className="space-y-1">
                 <p className="text-sm font-medium">Create due recurring invoices</p>
                 <p className="text-sm text-muted-foreground">
-                  Current mode: {selectedMode}. Ready now: {dueInvoiceSummary.actionableCount}. Blocked by missing e-Boekhouden customer link: {dueInvoiceSummary.blockedCount}.
+                  Current mode: {selectedMode}. Active provider: {activeInvoiceProviderLabel}. Ready now: {dueInvoiceSummary.actionableCount}.{" "}
+                  {activeInvoiceProvider === "eboekhouden"
+                    ? `Blocked by missing e-Boekhouden customer link: ${dueInvoiceSummary.blockedCount}.`
+                    : "No bookkeeping customer-link block applies for the current provider."}
                 </p>
                 {!billingSettingsComplete ? (
                   <p className="text-sm text-muted-foreground">
-                    Finish the invoice template and revenue ledger settings before creating invoices.
+                    {activeInvoiceProvider === "eboekhouden"
+                      ? "Finish the invoice template and revenue ledger settings before creating invoices."
+                      : "Finish the active provider setup before creating invoices."}
                   </p>
                 ) : null}
               </div>
@@ -793,7 +811,10 @@ export default async function SettingsPage({
             <div className="space-y-3">
               <p className="text-sm font-medium">Queue controlled retry for failed first-payment invoices</p>
               <p className="text-sm text-muted-foreground">
-                Current mode: {selectedMode}. Failed rows: {failedFirstPaymentRetrySummary.totalFailedCount}. Retry-safe rows: {failedFirstPaymentRetrySummary.retryableCount} (safe retry codes: FACT_014, FACT_VERWERK_004).
+                Current mode: {selectedMode}. Active provider: {activeInvoiceProviderLabel}. Failed rows: {failedFirstPaymentRetrySummary.totalFailedCount}.{" "}
+                {activeInvoiceProvider === "eboekhouden"
+                  ? `Retry-safe rows: ${failedFirstPaymentRetrySummary.retryableCount} (safe retry codes: FACT_014, FACT_VERWERK_004).`
+                  : `Retryable rows without a stored invoice: ${failedFirstPaymentRetrySummary.retryableCount}.`}
               </p>
               <form action={queueFailedFirstPaymentInvoiceRetriesAction} className="space-y-3">
                 <input type="hidden" name="returnTo" value="/settings" />
@@ -820,7 +841,10 @@ export default async function SettingsPage({
             <div className="space-y-3">
               <p className="text-sm font-medium">Queue controlled retry for failed recurring invoices</p>
               <p className="text-sm text-muted-foreground">
-                Current mode: {selectedMode}. Failed rows: {failedRecurringRetrySummary.totalFailedCount}. Retry-safe rows: {failedRecurringRetrySummary.retryableCount} (safe retry codes: FACT_014, FACT_VERWERK_004).
+                Current mode: {selectedMode}. Active provider: {activeInvoiceProviderLabel}. Failed rows: {failedRecurringRetrySummary.totalFailedCount}.{" "}
+                {activeInvoiceProvider === "eboekhouden"
+                  ? `Retry-safe rows: ${failedRecurringRetrySummary.retryableCount} (safe retry codes: FACT_014, FACT_VERWERK_004).`
+                  : `Retryable rows without a stored invoice: ${failedRecurringRetrySummary.retryableCount}.`}
               </p>
               <form action={queueFailedRecurringInvoiceRetriesAction} className="space-y-3">
                 <input type="hidden" name="returnTo" value="/settings" />

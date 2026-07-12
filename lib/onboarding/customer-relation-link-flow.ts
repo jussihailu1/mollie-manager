@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 
 import { writeAuditLog } from "@/lib/audit";
+import { upsertCustomerAccountingLink } from "@/lib/customer-accounting-links";
 import { normalizeCustomerNoteBody } from "@/lib/customer-note-policy";
 import { transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
@@ -77,11 +78,6 @@ export async function linkCustomerToEboekhoudenRelation(
     await client.execute(sql`
       update customers
       set
-        eboekhouden_relation_id = ${linkedRelation.id},
-        eboekhouden_relation_code = ${linkedRelation.code ?? null},
-        eboekhouden_link_status = 'linked',
-        eboekhouden_synced_at = now(),
-        eboekhouden_relation_snapshot = ${JSON.stringify(linkedRelation)}::jsonb,
         full_name = ${input.fields.businessName},
         email = ${input.fields.email},
         metadata = metadata || ${JSON.stringify({
@@ -95,6 +91,21 @@ export async function linkCustomerToEboekhoudenRelation(
       where id = ${customer.id}
         and mode = ${input.mode}
     `);
+
+    await upsertCustomerAccountingLink(
+      {
+        customerId: customer.id,
+        linkStatus: "linked",
+        mode: input.mode,
+        provider: "eboekhouden",
+        providerCustomerCode: linkedRelation.code ?? null,
+        providerCustomerId: String(linkedRelation.id),
+        providerSnapshot: linkedRelation as Record<string, unknown>,
+        syncedAt: new Date().toISOString(),
+        tenantId,
+      },
+      client,
+    );
 
     if (normalizedNote) {
       await client.execute(sql`

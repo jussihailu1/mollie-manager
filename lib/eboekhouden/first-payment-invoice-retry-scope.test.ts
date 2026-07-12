@@ -27,17 +27,7 @@ describe("first-payment invoice retry module boundary", () => {
       /export async function queueRetryForFailedFirstPaymentInvoicesBatch/,
     );
     assert.doesNotMatch(retrySource, /getSingleTenantIdOrThrow/);
-    assert.doesNotMatch(
-      firstPaymentSource,
-      /export async function queueRetryForSafeFailedFirstPaymentInvoicesBatch/,
-    );
-    assert.doesNotMatch(
-      firstPaymentSource,
-      /export async function getFailedFirstPaymentInvoiceRetrySummary/,
-    );
-    assert.doesNotMatch(
-      firstPaymentSource,
-      /export async function queueRetryForFailedFirstPaymentInvoicesBatch/,
-    );
+    assert.match(firstPaymentSource, /getTenantActiveInvoiceProvider/);
+    assert.match(firstPaymentSource, /first-payment-invoice-retry/);
   });
 });

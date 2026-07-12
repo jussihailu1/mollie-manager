@@ -90,20 +90,22 @@ export async function assertRelationIsAvailable(
   const existing = await transaction(async (client) => {
     const result = excludeCustomerId
       ? await client.execute<{ id: string }>(sql`
-          select id
-          from customers
+          select customer_id as id
+          from customer_accounting_links
           where tenant_id = ${resolvedTenantId}
             and mode = ${mode}
-            and eboekhouden_relation_id = ${relationId}
-            and id <> ${excludeCustomerId}
+            and provider = 'eboekhouden'
+            and provider_customer_id = ${String(relationId)}
+            and customer_id <> ${excludeCustomerId}
           limit 1
         `)
       : await client.execute<{ id: string }>(sql`
-        select id
-        from customers
+        select customer_id as id
+        from customer_accounting_links
         where tenant_id = ${resolvedTenantId}
           and mode = ${mode}
-          and eboekhouden_relation_id = ${relationId}
+          and provider = 'eboekhouden'
+          and provider_customer_id = ${String(relationId)}
         limit 1
       `);
 

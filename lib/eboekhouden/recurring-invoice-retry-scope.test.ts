@@ -27,17 +27,7 @@ describe("recurring invoice retry module boundary", () => {
       /export async function queueRetryForSafeFailedRecurringInvoicesBatch/,
     );
     assert.doesNotMatch(retrySource, /getSingleTenantIdOrThrow/);
-    assert.doesNotMatch(
-      recurringSource,
-      /export async function getFailedRecurringInvoiceRetrySummary/,
-    );
-    assert.doesNotMatch(
-      recurringSource,
-      /export async function queueRetryForFailedRecurringInvoicesBatch/,
-    );
-    assert.doesNotMatch(
-      recurringSource,
-      /export async function queueRetryForSafeFailedRecurringInvoicesBatch/,
-    );
+    assert.match(recurringSource, /getTenantActiveInvoiceProvider/);
+    assert.match(recurringSource, /recurring-invoice-retry/);
   });
 });

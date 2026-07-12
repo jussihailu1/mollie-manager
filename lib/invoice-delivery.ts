@@ -6,48 +6,26 @@ import { writeAuditLog } from "@/lib/audit";
 import { getDb, transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { env } from "@/lib/env";
-import { getEboekhoudenInvoice } from "@/lib/eboekhouden/client";
+import { getStoredInvoiceByOwner } from "@/lib/invoices";
 import {
   getNextRetryAtIso,
   MAX_DELIVERY_ATTEMPTS,
   toInvoiceDeliveryAttemptCount,
 } from "@/lib/invoice-delivery-retry";
+import type {
+  DeliveryInput,
+  InvoiceActor,
+  InvoiceDeliveryBatchResult,
+  RetryDeliveryCandidate,
+} from "@/lib/invoice-delivery-batch";
+import { retryInvoiceDeliveryEmailsBatchWithDependencies } from "@/lib/invoice-delivery-batch";
+import { getInvoiceProviderAdapterById } from "@/lib/invoicing/provider-resolver";
 import {
   buildTrustedInvoicePdfAttachment,
   normalizeTrustedInvoicePdfUrl,
 } from "@/lib/invoice-pdf";
-import { retryInvoiceDeliveryEmailsBatchWithDependencies } from "@/lib/invoice-delivery-batch";
 import { sendEmailTo } from "@/lib/notifications/email";
 import { deliverAlertEmail, openAlert } from "@/lib/reliability/alerts";
-
-type InvoiceActor = {
-  email?: string | null;
-  kind: "system" | "user";
-};
-
-type DeliveryInput = {
-  actor: InvoiceActor;
-  customerEmail: string | null;
-  customerId: string | null;
-  eboekhoudenInvoiceId: string | null;
-  eboekhoudenInvoiceNumber: string | null;
-  eboekhoudenInvoicePdfUrl?: string | null;
-  entityId: string;
-  invoiceType: "first_payment" | "recurring";
-  mode: MollieMode;
-  plannedCollectionDate?: string | null;
-  subscriptionId: string | null;
-  tenantId: string;
-};
-
-type RetryDeliveryCandidate = Omit<DeliveryInput, "actor">;
-
-type InvoiceDeliveryBatchResult = {
-  attemptedCount: number;
-  failedCount: number;
-  sentCount: number;
-  skippedCount: number;
-};
 
 export type InvoiceDeliveryQueueSummary = {
   dueRetryFirstPaymentCount: number;
@@ -67,8 +45,10 @@ async function resolveTenantId(tenantId?: string) {
 type FirstPaymentDeliveryCandidate = {
   customerEmail: string | null;
   customerId: string | null;
-  eboekhoudenInvoiceId: string | null;
-  eboekhoudenInvoiceNumber: string | null;
+  invoiceDocumentUrl: string | null;
+  invoiceId: string | null;
+  invoiceNumber: string | null;
+  invoiceProvider: "eboekhouden" | "mollie";
   metadata: Record<string, unknown>;
   mode: MollieMode;
   paymentId: string;
@@ -79,8 +59,10 @@ type FirstPaymentDeliveryCandidate = {
 type RecurringDeliveryCandidate = {
   customerEmail: string | null;
   customerId: string | null;
-  eboekhoudenInvoiceId: string | null;
-  eboekhoudenInvoiceNumber: string | null;
+  invoiceDocumentUrl: string | null;
+  invoiceId: string | null;
+  invoiceNumber: string | null;
+  invoiceProvider: "eboekhouden" | "mollie";
   metadata: Record<string, unknown>;
   mode: MollieMode;
   plannedCollectionDate: string;
@@ -154,29 +136,39 @@ function deliveryFailureAlertTitle(input: {
   return `${prefix} (${entityLabel}:${input.entityId.slice(0, 8)})`;
 }
 
+function toInvoiceOwnerType(invoiceType: "first_payment" | "recurring") {
+  return invoiceType === "first_payment" ? "payment" : "recurring_schedule";
+}
+
 async function resolveInvoicePdfUrl(input: {
-  eboekhoudenInvoiceId: string | null;
-  eboekhoudenInvoicePdfUrl?: string | null;
+  entityId: string;
+  invoiceDocumentUrl?: string | null;
+  invoiceType: "first_payment" | "recurring";
   tenantId: string;
 }) {
   const trustedMetadataUrl = normalizeTrustedInvoicePdfUrl(
-    input.eboekhoudenInvoicePdfUrl,
+    input.invoiceDocumentUrl,
   );
   if (trustedMetadataUrl) {
     return trustedMetadataUrl;
   }
 
-  if (!input.eboekhoudenInvoiceId) {
+  const storedInvoice = await getStoredInvoiceByOwner({
+    ownerId: input.entityId,
+    ownerType: toInvoiceOwnerType(input.invoiceType),
+    tenantId: input.tenantId,
+  });
+
+  if (!storedInvoice) {
     return null;
   }
 
-  const numericInvoiceId = Number(input.eboekhoudenInvoiceId);
-  if (!Number.isInteger(numericInvoiceId) || numericInvoiceId <= 0) {
-    return null;
-  }
-
-  const invoice = await getEboekhoudenInvoice(numericInvoiceId, input.tenantId);
-  return normalizeTrustedInvoicePdfUrl(invoice.urlPdfFile ?? null);
+  const provider = getInvoiceProviderAdapterById(storedInvoice.provider);
+  const documentUrl = await provider.getInvoiceDocument({
+    invoice: storedInvoice,
+    tenantId: input.tenantId,
+  });
+  return normalizeTrustedInvoicePdfUrl(documentUrl);
 }
 
 async function storeDeliverySuccess(input: {
@@ -456,7 +448,7 @@ export async function deliverCustomerInvoiceEmail(input: DeliveryInput) {
   }
 
   const invoiceNumber =
-    input.eboekhoudenInvoiceNumber ?? input.eboekhoudenInvoiceId ?? null;
+    input.invoiceNumber ?? input.invoiceId ?? null;
   if (!invoiceNumber) {
     return {
       reason: "Invoice identifier missing.",
@@ -465,8 +457,9 @@ export async function deliverCustomerInvoiceEmail(input: DeliveryInput) {
   }
 
   const invoicePdfUrl = await resolveInvoicePdfUrl({
-    eboekhoudenInvoiceId: input.eboekhoudenInvoiceId,
-    eboekhoudenInvoicePdfUrl: input.eboekhoudenInvoicePdfUrl,
+    entityId: input.entityId,
+    invoiceDocumentUrl: input.invoiceDocumentUrl,
+    invoiceType: input.invoiceType,
     tenantId: input.tenantId,
   });
   const attachmentResult = await buildTrustedInvoicePdfAttachment({
@@ -543,18 +536,24 @@ async function listCreatedUnsentFirstPaymentInvoiceDeliveries(
       p.tenant_id as "tenantId",
       p.customer_id as "customerId",
       p.subscription_id as "subscriptionId",
-      p.eboekhouden_invoice_id as "eboekhoudenInvoiceId",
-      p.eboekhouden_invoice_number as "eboekhoudenInvoiceNumber",
+      i.provider as "invoiceProvider",
+      i.provider_invoice_id as "invoiceId",
+      i.provider_invoice_number as "invoiceNumber",
+      i.provider_document_url as "invoiceDocumentUrl",
       p.metadata,
       c.email as "customerEmail"
     from payments p
     left join customers c on c.id = p.customer_id and c.mode = p.mode and c.tenant_id = p.tenant_id
+    inner join invoices i
+      on i.owner_type = 'payment'
+      and i.owner_id = p.id
+      and i.tenant_id = p.tenant_id
+      and i.mode = p.mode
     where p.mode = ${mode}
       and p.tenant_id = ${tenantId}
       and p.payment_type = 'first'
       and p.invoice_state = 'invoice_created'
       and p.invoice_sent_at is null
-      and (p.eboekhouden_invoice_id is not null or p.eboekhouden_invoice_number is not null)
       and (
         case
           when lower(coalesce(p.metadata ->> 'invoiceDeliveryPermanentFailure', '')) in ('true', 'false')
@@ -583,12 +582,14 @@ async function listCreatedUnsentFirstPaymentInvoiceDeliveries(
   return result.rows.map<RetryDeliveryCandidate>((row) => ({
     customerEmail: row.customerEmail,
     customerId: row.customerId,
-    eboekhoudenInvoiceId: row.eboekhoudenInvoiceId,
-    eboekhoudenInvoiceNumber: row.eboekhoudenInvoiceNumber,
+    entityId: row.paymentId,
+    invoiceDocumentUrl: row.invoiceDocumentUrl,
+    invoiceId: row.invoiceId,
+    invoiceNumber: row.invoiceNumber,
+    invoiceProvider: row.invoiceProvider,
+    invoiceType: "first_payment",
     mode: row.mode,
     plannedCollectionDate: null,
-    entityId: row.paymentId,
-    invoiceType: "first_payment",
     subscriptionId: row.subscriptionId,
     tenantId: row.tenantId,
   }));
@@ -606,19 +607,25 @@ async function listCreatedUnsentRecurringInvoiceDeliveries(
       rbs.tenant_id as "tenantId",
       rbs.subscription_id as "subscriptionId",
       rbs.planned_collection_date::text as "plannedCollectionDate",
-      rbs.eboekhouden_invoice_id as "eboekhoudenInvoiceId",
-      rbs.eboekhouden_invoice_number as "eboekhoudenInvoiceNumber",
+      i.provider as "invoiceProvider",
+      i.provider_invoice_id as "invoiceId",
+      i.provider_invoice_number as "invoiceNumber",
+      i.provider_document_url as "invoiceDocumentUrl",
       rbs.metadata,
       s.customer_id as "customerId",
       c.email as "customerEmail"
     from recurring_billing_schedules rbs
     inner join subscriptions s on s.id = rbs.subscription_id and s.tenant_id = rbs.tenant_id
     inner join customers c on c.id = s.customer_id and c.mode = rbs.mode and c.tenant_id = rbs.tenant_id
+    inner join invoices i
+      on i.owner_type = 'recurring_schedule'
+      and i.owner_id = rbs.id
+      and i.tenant_id = rbs.tenant_id
+      and i.mode = rbs.mode
     where rbs.mode = ${mode}
       and rbs.tenant_id = ${tenantId}
       and rbs.invoice_state = 'invoice_created'
       and rbs.invoice_sent_at is null
-      and (rbs.eboekhouden_invoice_id is not null or rbs.eboekhouden_invoice_number is not null)
       and (
         case
           when lower(coalesce(rbs.metadata ->> 'invoiceDeliveryPermanentFailure', '')) in ('true', 'false')
@@ -647,12 +654,14 @@ async function listCreatedUnsentRecurringInvoiceDeliveries(
   return result.rows.map<RetryDeliveryCandidate>((row) => ({
     customerEmail: row.customerEmail,
     customerId: row.customerId,
-    eboekhoudenInvoiceId: row.eboekhoudenInvoiceId,
-    eboekhoudenInvoiceNumber: row.eboekhoudenInvoiceNumber,
+    entityId: row.scheduleId,
+    invoiceDocumentUrl: row.invoiceDocumentUrl,
+    invoiceId: row.invoiceId,
+    invoiceNumber: row.invoiceNumber,
+    invoiceProvider: row.invoiceProvider,
+    invoiceType: "recurring",
     mode: row.mode,
     plannedCollectionDate: row.plannedCollectionDate,
-    entityId: row.scheduleId,
-    invoiceType: "recurring",
     subscriptionId: row.subscriptionId,
     tenantId: row.tenantId,
   }));

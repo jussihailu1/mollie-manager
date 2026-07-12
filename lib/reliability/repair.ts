@@ -191,10 +191,10 @@ async function listCustomerCandidates(
       select
         c.id,
         c.mode,
-        c.eboekhouden_link_status as "eboekhoudenLinkStatus",
+        coalesce(cal.link_status, 'unlinked') as "eboekhoudenLinkStatus",
         c.last_synced_at as "lastSyncedAt",
         case
-          when c.eboekhouden_link_status in ('needs_review', 'sync_error') then 0
+          when cal.link_status in ('needs_review', 'sync_error') then 0
           when c.last_synced_at is null
             or c.last_synced_at < ${buildCandidateThresholdExpression()} then 1
           when exists (
@@ -216,12 +216,17 @@ async function listCustomerCandidates(
           else 2
         end as priority
       from customers c
+      left join customer_accounting_links cal
+        on cal.customer_id = c.id
+        and cal.tenant_id = c.tenant_id
+        and cal.mode = c.mode
+        and cal.provider = 'eboekhouden'
       where c.mode = ${mode}
         and c.tenant_id = ${tenantId}
         and c.archived_at is null
         and c.mollie_customer_id is not null
         and (
-          c.eboekhouden_link_status in ('needs_review', 'sync_error')
+          cal.link_status in ('needs_review', 'sync_error')
           or c.last_synced_at is null
           or c.last_synced_at < ${buildCandidateThresholdExpression()}
           or exists (

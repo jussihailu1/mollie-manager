@@ -42,7 +42,8 @@ describe("recurring invoice query helpers", () => {
     assert.match(filter, /rbs\.mode = live/);
     assert.match(filter, /rbs\.invoice_state = pending_invoice/);
     assert.match(filter, /rbs\.invoice_send_due_date <= current_date/);
-    assert.match(filter, /rbs\.eboekhouden_invoice_id is null/);
+    assert.match(filter, /from invoices i/);
+    assert.match(filter, /i\.owner_type = 'recurring_schedule'/);
   });
 
   it("builds the recurring failed filter", () => {
@@ -50,6 +51,7 @@ describe("recurring invoice query helpers", () => {
 
     assert.match(filter, /rbs\.mode = test/);
     assert.match(filter, /rbs\.invoice_state = invoice_failed/);
-    assert.match(filter, /rbs\.eboekhouden_invoice_number is null/);
+    assert.match(filter, /from invoices i/);
+    assert.match(filter, /i\.owner_id = rbs\.id/);
   });
 });

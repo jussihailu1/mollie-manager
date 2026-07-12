@@ -14,7 +14,9 @@ It is not the product backlog. For release target and sequencing, use:
 ## System Roles
 
 - Mollie: payment collection and mandate source of truth
-- e-Boekhouden: invoice and accounting source of truth
+- Invoice provider truth: each stored invoice belongs to the provider that
+  created it (`eboekhouden` or `mollie`)
+- e-Boekhouden: bookkeeping integration plus one supported invoice provider
 - PostgreSQL: local operational state, sync state, tenant-scoped business data,
   alerts, audit logs, invoice queues, and consent evidence
 - App server: authentication, tenant context resolution, onboarding, operator UI,
@@ -68,7 +70,8 @@ There is no acceptable implicit app-wide tenant for tenant business flows.
 4. Alerts and audit logs are written with tenant scope for important transitions
    and failures.
 5. Invoice automation uses tenant-scoped local billing rows plus the tenant's
-   e-Boekhouden integration to create and deliver invoices safely.
+   active invoice provider setting to create invoices, while app-owned delivery
+   continues to send and track customer email delivery.
 
 ## Main App Surfaces
 
@@ -114,6 +117,8 @@ credentials.
 - `lib/mollie/*`: tenant-aware Mollie client resolution and webhook helpers
 - `lib/eboekhouden/*`: tenant-aware e-Boekhouden client/session resolution,
   relation linking, invoice creation, reconcile, and retry logic
+- `lib/invoicing/*`: provider adapters and active-provider resolution
+- `lib/invoices.ts`: provider-neutral stored invoice reads and writes
 - `lib/onboarding/*`: onboarding actions and data reads
 - `lib/operations/*`: operator actions around subscriptions and workflows
 - `lib/reliability/*`: sync, alerts, repairs, and reporting
@@ -155,7 +160,7 @@ include tenant scope where relevant.
 ## Operational Design Rules
 
 - Persist local state for safety, repair, and auditability.
-- Keep Mollie payment truth separate from e-Boekhouden invoice truth.
+- Keep Mollie payment truth separate from provider-owned invoice truth.
 - Resolve tenant context before provider lookup, business-data query, or
   background follow-up work.
 - Use claim-before-upstream-call patterns for invoice creation to prevent
@@ -164,7 +169,7 @@ include tenant scope where relevant.
 - Keep webhook callback URLs secret-free; intake should validate that resources
   resolve to managed local state and a single tenant context.
 - Keep test and live mode separation explicit at both env and record level.
-- Treat invoice document URLs as hints; only trusted e-Boekhouden PDF hosts
+- Treat invoice document URLs as hints; only trusted provider document hosts
   should be displayed or fetched.
 - Do not fall back to one platform-global Mollie or e-Boekhouden account for a
   tenant business action.

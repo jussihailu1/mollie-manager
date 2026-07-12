@@ -47,7 +47,7 @@ test("needs attention query exposes stable typed sources without raw webhook pay
   assert.match(source, /invoice_state = 'invoice_failed'/);
   assert.match(source, /invoiceDeliveryStatus/);
   assert.match(source, /last_synced_at/);
-  assert.match(source, /eboekhouden_link_status/);
+  assert.match(source, /cal\.link_status/);
   assert.match(source, /w\.tenant_id = \$\{tenantId\}/);
   assert.doesNotMatch(source, /\bw\.payload\b/);
   assert.doesNotMatch(source, /secret|token|authorization/i);

@@ -14,7 +14,7 @@ describe("invoice delivery scope", () => {
     assert.match(source, /tenantId: input\.tenantId/);
     assert.match(
       source,
-      /getEboekhoudenInvoice\(numericInvoiceId, input\.tenantId\)/,
+      /getInvoiceProviderAdapterById\(storedInvoice\.provider\)/,
     );
     assert.match(
       source,

@@ -9,6 +9,7 @@ import {
   buildInvoiceCreationSuccessMetadata,
 } from "@/lib/eboekhouden/invoice-creation-metadata";
 import { serializeInvoiceErrorMessage } from "@/lib/eboekhouden/invoice-flow-helpers";
+import { saveStoredInvoice } from "@/lib/invoices";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { deliverAlertEmail, openAlert } from "@/lib/reliability/alerts";
 
@@ -58,8 +59,13 @@ export async function claimScheduleForInvoice(input: {
       and tenant_id = ${input.tenantId}
       and mode = ${input.mode}
       and invoice_state = 'pending_invoice'
-      and eboekhouden_invoice_id is null
-      and eboekhouden_invoice_number is null
+      and not exists (
+        select 1
+        from invoices i
+        where i.tenant_id = recurring_billing_schedules.tenant_id
+          and i.owner_type = 'recurring_schedule'
+          and i.owner_id = recurring_billing_schedules.id
+      )
     returning id
   `);
 
@@ -80,8 +86,6 @@ export async function storeRecurringInvoiceCreationSuccess(input: {
       update recurring_billing_schedules
       set
         invoice_state = 'invoice_created',
-        eboekhouden_invoice_id = ${invoiceId},
-        eboekhouden_invoice_number = ${invoiceNumber},
         invoice_created_at = now(),
         invoice_failed_at = null,
         metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(
@@ -92,6 +96,23 @@ export async function storeRecurringInvoiceCreationSuccess(input: {
         and tenant_id = ${input.candidate.tenantId}
         and invoice_state = 'invoice_creating'
     `);
+
+    await saveStoredInvoice(
+      {
+        mode: input.candidate.mode,
+        ownerId: input.candidate.scheduleId,
+        ownerType: "recurring_schedule",
+        provider: "eboekhouden",
+        providerCustomerId: null,
+        providerDocumentUrl: input.invoice.urlPdfFile ?? null,
+        providerInvoiceId: invoiceId,
+        providerInvoiceNumber: invoiceNumber,
+        providerSnapshot: input.invoice as Record<string, unknown>,
+        syncedAt: new Date().toISOString(),
+        tenantId: input.candidate.tenantId,
+      },
+      tx,
+    );
 
     await writeAuditLog(
       {

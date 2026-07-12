@@ -4,8 +4,9 @@ import type Payment from "@mollie/api-client/dist/types/data/payments/Payment";
 
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
-import { getEboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import { normalizeTrustedInvoicePdfUrl } from "@/lib/invoice-pdf";
+import { getStoredInvoiceByOwner } from "@/lib/invoices";
+import { getInvoiceProviderAdapterById } from "@/lib/invoicing/provider-resolver";
 import { getTenantMollieClient } from "@/lib/mollie/client";
 import type { PaymentDrawerData } from "@/lib/payment-details";
 import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
@@ -16,10 +17,12 @@ type LocalPaymentLookup = {
   eboekhoudenInvoiceId: string | null;
   eboekhoudenInvoiceNumber: string | null;
   id: string;
+  invoiceDocumentUrl: string | null;
   invoiceState: PaymentDrawerData["invoiceState"];
   invoiceCreatedAt: string | null;
   invoiceDeliveryIntendedRecipient: string | null;
   invoiceDeliveryRecipient: string | null;
+  invoiceProvider: "eboekhouden" | "mollie" | null;
   invoiceRecipientOverridden: boolean;
   invoiceSentAt: string | null;
   invoiceSource: string | null;
@@ -119,23 +122,34 @@ async function resolveInvoicePdfUrl(
   localPayment: LocalPaymentLookup,
   tenantId: string,
 ) {
-  const metadataUrl = extractInvoicePdfUrl(localPayment.invoiceMetadata);
+  const metadataUrl =
+    normalizeTrustedInvoicePdfUrl(localPayment.invoiceDocumentUrl) ??
+    extractInvoicePdfUrl(localPayment.invoiceMetadata);
   if (metadataUrl) {
     return metadataUrl;
   }
 
-  if (!localPayment.eboekhoudenInvoiceId) {
+  if (!localPayment.invoiceOwnerId || !localPayment.invoiceOwnerType) {
     return null;
   }
 
-  const invoiceId = Number(localPayment.eboekhoudenInvoiceId);
-  if (!Number.isInteger(invoiceId) || invoiceId <= 0) {
+  const storedInvoice = await getStoredInvoiceByOwner({
+    ownerId: localPayment.invoiceOwnerId,
+    ownerType: localPayment.invoiceOwnerType,
+    tenantId,
+  });
+
+  if (!storedInvoice) {
     return null;
   }
 
   try {
-    const invoice = await getEboekhoudenInvoice(invoiceId, tenantId);
-    return normalizeTrustedInvoicePdfUrl(invoice.urlPdfFile ?? null);
+    const provider = getInvoiceProviderAdapterById(storedInvoice.provider);
+    const invoiceDocumentUrl = await provider.getInvoiceDocument({
+      invoice: storedInvoice,
+      tenantId,
+    });
+    return normalizeTrustedInvoicePdfUrl(invoiceDocumentUrl);
   } catch {
     return null;
   }
@@ -280,16 +294,6 @@ export async function GET(request: NextRequest) {
           end as invoice_sent_at,
           case
             when p.payment_type = 'recurring' and rbs.id is not null
-              then rbs.eboekhouden_invoice_id
-            else p.eboekhouden_invoice_id
-          end as eboekhouden_invoice_id,
-          case
-            when p.payment_type = 'recurring' and rbs.id is not null
-              then rbs.eboekhouden_invoice_number
-            else p.eboekhouden_invoice_number
-          end as eboekhouden_invoice_number,
-          case
-            when p.payment_type = 'recurring' and rbs.id is not null
               then rbs.metadata
             else p.metadata
           end as invoice_metadata,
@@ -303,6 +307,10 @@ export async function GET(request: NextRequest) {
               then 'recurring_schedule'
             else 'payment'
           end as invoice_owner_type,
+          i.provider as invoice_provider,
+          i.provider_invoice_id as provider_invoice_id,
+          i.provider_invoice_number as provider_invoice_number,
+          i.provider_document_url as provider_document_url,
           case
             when p.payment_type = 'recurring' and rbs.id is not null
               then rbs.metadata ->> 'source'
@@ -327,6 +335,14 @@ export async function GET(request: NextRequest) {
         left join recurring_billing_schedules rbs
           on rbs.payment_id = p.id
           and rbs.tenant_id = p.tenant_id
+        left join invoices i
+          on i.tenant_id = p.tenant_id
+          and i.mode = p.mode
+          and (
+            (p.payment_type = 'recurring' and rbs.id is not null and i.owner_type = 'recurring_schedule' and i.owner_id = rbs.id)
+            or
+            ((p.payment_type <> 'recurring' or rbs.id is null) and i.owner_type = 'payment' and i.owner_id = p.id)
+          )
         where p.tenant_id = ${tenantId}
           and p.mode = ${selectedMode}
           and (
@@ -344,11 +360,13 @@ export async function GET(request: NextRequest) {
         ic.invoice_state as "invoiceState",
         ic.invoice_created_at as "invoiceCreatedAt",
         ic.invoice_sent_at as "invoiceSentAt",
-        ic.eboekhouden_invoice_id as "eboekhoudenInvoiceId",
-        ic.eboekhouden_invoice_number as "eboekhoudenInvoiceNumber",
+        ic.provider_invoice_id as "eboekhoudenInvoiceId",
+        ic.provider_invoice_number as "eboekhoudenInvoiceNumber",
+        ic.provider_document_url as "invoiceDocumentUrl",
         ic.invoice_metadata as "invoiceMetadata",
         ic.invoice_owner_id as "invoiceOwnerId",
         ic.invoice_owner_type as "invoiceOwnerType",
+        ic.invoice_provider as "invoiceProvider",
         ic.invoice_source as "invoiceSource",
         ic.invoice_delivery_recipient as "invoiceDeliveryRecipient",
         ic.invoice_delivery_intended_recipient as "invoiceDeliveryIntendedRecipient",

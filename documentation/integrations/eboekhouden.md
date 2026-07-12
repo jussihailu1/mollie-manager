@@ -5,7 +5,8 @@ Audience: developers
 
 ## Role
 
-e-Boekhouden is the invoice and accounting source of truth for this app.
+e-Boekhouden is one supported invoice provider plus the bookkeeping integration
+for tenants that use it.
 
 The app uses e-Boekhouden for:
 
@@ -36,26 +37,25 @@ Main implementation:
 ## Customer Relation Linking
 
 - Operators can search and import relations from e-Boekhouden
-- Local customers store:
-  - `eboekhouden_relation_id`
-  - `eboekhouden_relation_code`
-  - `eboekhouden_link_status`
-  - sync timestamp and snapshot metadata
+- Local provider links now live in `customer_accounting_links`, keyed by
+  tenant, customer, mode, and provider
 - Linking is mode-aware and prevents duplicate local linking in the same mode
 - Linking must run against the active tenant's e-Boekhouden account and must not
   mix relations across tenants
 
 ## Invoice Model
 
-- e-Boekhouden owns invoice truth
+- The provider that created an invoice owns invoice truth for that stored
+  invoice row
 - The app owns invoice delivery behavior when configured for SMTP delivery
 - The app must not rely on e-Boekhouden to email customers in the normal app-owned delivery path
 
 Current invoice areas:
 
-- first-payment invoice tracking on `payments`
-- recurring invoice tracking on `recurring_billing_schedules`
-- tenant accounting defaults in `tenant_billing_settings`
+- stored invoices now live in the provider-neutral `invoices` table
+- e-Boekhouden-only invoice defaults live in `tenant_eboekhouden_invoice_settings`
+- tenant-wide generic invoice defaults, including the explicit active provider,
+  live in `tenant_billing_settings`
 
 Invoice template discovery, revenue-ledger discovery, invoice creation, and
 invoice reconciliation must all run against the active tenant's e-Boekhouden
@@ -64,7 +64,7 @@ company/account.
 ## Safety Rules
 
 - Claim rows before calling the upstream invoice API
-- Store returned invoice id and number locally on success
+- Store returned provider invoice id and number in the provider-neutral invoice table on success
 - Write audit logs for success and failure
 - Open operator alerts for important failures
 - Do not treat `mandate_only` EUR 0.01 flows as normal recurring invoice events

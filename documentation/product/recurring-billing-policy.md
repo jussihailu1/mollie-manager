@@ -23,8 +23,8 @@ Use this split:
 
 Do not treat accounting configuration as policy. The following belong in tenant billing settings, not here:
 
+- active invoice provider
 - e-Boekhouden `templateId`
-- e-Boekhouden `emailTemplateId`
 - ledger or product mappings
 - VAT configuration
 - invoice numbering preferences
@@ -44,14 +44,14 @@ Do not treat accounting configuration as policy. The following belong in tenant 
 ## Locked Product Decisions
 
 - Mollie remains the collection engine and payment source of truth.
-- e-Boekhouden is the invoice and accounting engine.
+- One explicit active invoice provider is selected per tenant for new invoices.
 - V1 recurring invoices are sent only for recurring subscriptions, not for one-off invoices.
 - V1 recurring invoices are sent before automatic collection.
 - V1 uses the invoice email as the customer-facing pre-notification for the upcoming direct debit.
 - V1 default pre-notification lead time is 5 calendar days before the debit due date.
 - The shorter-than-default SEPA pre-notification timeline must be agreed with the customer in the terms and consent flow.
 - V1 invoice wording must clearly state that the amount will be collected automatically on the stated date.
-- e-Boekhouden remains the bookkeeping source for recurring invoices; customer email delivery may be app-owned and must not change invoice/accounting truth.
+- The provider that created a recurring invoice owns invoice truth for that invoice row; customer email delivery may be app-owned and must not change invoice truth.
 - `real_installment` remains the default first-payment mode.
 - `mandate_only` remains available only for mandate setup before recurring charges start.
 - The EUR 0.01 `mandate_only` payment is not a normal subscription installment and is not a recurring invoice event.

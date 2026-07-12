@@ -155,6 +155,20 @@
       "when": 1782903600000,
       "tag": "0021_webhook_event_tenant_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1783684800000,
+      "tag": "0022_invoice_provider_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1783684800001,
+      "tag": "0023_remove_legacy_invoice_columns",
+      "breakpoints": true
     }
   ]
 }

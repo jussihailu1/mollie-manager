@@ -150,11 +150,7 @@ const listCustomerActivityTimelineByMode = cache(async (
           when p.invoice_state = 'invoice_failed' then 'First-payment invoice failed'
           else 'First-payment invoice updated'
         end as title,
-        case
-          when p.eboekhouden_invoice_number is not null
-            then concat('e-Boekhouden invoice ', p.eboekhouden_invoice_number, ' is ', replace(p.invoice_state::text, '_', ' '), '.')
-          else concat('First-payment invoice is ', replace(p.invoice_state::text, '_', ' '), '.')
-        end as summary,
+        concat('First-payment invoice is ', replace(p.invoice_state::text, '_', ' '), '.') as summary,
         coalesce(p.invoice_sent_at, p.invoice_created_at, p.invoice_failed_at, p.updated_at, p.created_at) as "occurredAt",
         'payment' as "entityType",
         p.id as "entityId",
@@ -228,19 +224,19 @@ const listCustomerActivityTimelineByMode = cache(async (
               sor.requested_effective_at::date::text,
               ' and preserves service through ',
               sor.paid_period_end_at::date::text,
-              '.',
+              '.'
             )
           when sor.operation = 'cancel'
             then concat(
               'Cancellation review request targets ',
               sor.requested_effective_at::date::text,
-              ' with immediate service end policy.',
+              ' with immediate service end policy.'
             )
           else concat(
             initcap(sor.operation::text),
             ' review request targets ',
             sor.requested_effective_at::date::text,
-            '.',
+            '.'
           )
         end as summary,
         coalesce(sor.withdrawn_at, sor.created_at) as "occurredAt",
@@ -284,7 +280,7 @@ const listCustomerActivityTimelineByMode = cache(async (
       select
         concat('alert:', a.id) as id,
         'alert_opened' as "itemType",
-        a.severity,
+        a.severity::text as severity,
         a.title,
         a.message as summary,
         a.created_at as "occurredAt",
@@ -367,8 +363,8 @@ const listCustomerActivityTimelineByMode = cache(async (
         al.created_at as "occurredAt",
         'audit_log' as "entityType",
         al.id as "entityId",
-        ${customerId} as "customerId",
-        concat('/customers?focus=', ${customerId}) as href
+        ${customerId}::text as "customerId",
+        concat('/customers?focus=', ${customerId}::text) as href
       from audit_logs al
       left join payments p
         on al.entity_type = 'payment'

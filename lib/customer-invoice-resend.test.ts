@@ -21,9 +21,11 @@ describe("customer invoice resend flow", () => {
           return {
             customerEmail: "customer@example.com",
             customerId: input.customerId,
-            eboekhoudenInvoiceId: "123",
-            eboekhoudenInvoiceNumber: "INV-123",
             entityId: input.ownerId,
+            invoiceDocumentUrl: null,
+            invoiceId: "123",
+            invoiceNumber: "INV-123",
+            invoiceProvider: "eboekhouden",
             invoiceType: "first_payment",
             mode: "test",
             plannedCollectionDate: null,
@@ -32,7 +34,7 @@ describe("customer invoice resend flow", () => {
           };
         },
         async deliverCustomerInvoiceEmail(input) {
-          calls.push(`deliver:${input.entityId}:${input.eboekhoudenInvoiceNumber}`);
+          calls.push(`deliver:${input.entityId}:${input.invoiceNumber}`);
           return { status: "sent" };
         },
       },

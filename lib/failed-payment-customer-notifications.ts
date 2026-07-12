@@ -77,12 +77,17 @@ async function loadPaymentNotificationContext(
         p.subscription_id as "subscriptionId",
         p.amount_value::text as "amountValue",
         p.amount_currency as "amountCurrency",
-        p.eboekhouden_invoice_number as "invoiceNumber",
+        i.provider_invoice_number as "invoiceNumber",
         p.metadata ->> 'firstPaymentMode' as "firstPaymentMode",
         coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail",
         rbs.planned_collection_date::text as "plannedCollectionDate"
       from payments p
+      left join invoices i
+        on i.owner_type = 'payment'
+        and i.owner_id = p.id
+        and i.tenant_id = p.tenant_id
+        and i.mode = p.mode
       left join customers c on c.id = p.customer_id and c.tenant_id = p.tenant_id
       left join recurring_billing_schedules rbs on rbs.payment_id = p.id and rbs.tenant_id = p.tenant_id
       where p.id = ${localPaymentId}

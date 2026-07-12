@@ -19,11 +19,24 @@ import {
 
 export const mollieModeEnum = pgEnum("mollie_mode", ["test", "live"]);
 
-export const eboekhoudenLinkStatusEnum = pgEnum("eboekhouden_link_status", [
-  "linked",
-  "unlinked",
-  "needs_review",
-  "sync_error",
+export const customerAccountingLinkStatusEnum = pgEnum(
+  "customer_accounting_link_status",
+  [
+    "linked",
+    "unlinked",
+    "needs_review",
+    "sync_error",
+  ],
+);
+
+export const invoiceProviderEnum = pgEnum("invoice_provider", [
+  "eboekhouden",
+  "mollie",
+]);
+
+export const invoiceOwnerTypeEnum = pgEnum("invoice_owner_type", [
+  "payment",
+  "recurring_schedule",
 ]);
 
 export const subscriptionLifecycleStateEnum = pgEnum(
@@ -238,21 +251,6 @@ export const customers = pgTable(
     tenantId: text("tenant_id").notNull(),
     mode: mollieModeEnum("mode").notNull(),
     mollieCustomerId: text("mollie_customer_id"),
-    eboekhoudenRelationId: integer("eboekhouden_relation_id"),
-    eboekhoudenRelationCode: text("eboekhouden_relation_code"),
-    eboekhoudenLinkStatus: eboekhoudenLinkStatusEnum(
-      "eboekhouden_link_status",
-    )
-      .notNull()
-      .default("unlinked"),
-    eboekhoudenSyncedAt: timestamp("eboekhouden_synced_at", {
-      mode: "string",
-      withTimezone: true,
-    }),
-    eboekhoudenRelationSnapshot: jsonb("eboekhouden_relation_snapshot")
-      .$type<Record<string, unknown>>()
-      .notNull()
-      .default(sql`'{}'::jsonb`),
     fullName: text("full_name"),
     email: text("email").notNull(),
     locale: text("locale").notNull().default("nl_NL"),
@@ -293,20 +291,10 @@ export const customers = pgTable(
       table.mode,
       table.mollieCustomerId,
     ),
-    unique("customers_mode_eboekhouden_relation_id_key").on(
-      table.tenantId,
-      table.mode,
-      table.eboekhoudenRelationId,
-    ),
     index("customers_tenant_mode_email_idx").on(
       table.tenantId,
       table.mode,
       table.email,
-    ),
-    index("customers_mode_eboekhouden_link_status_idx").on(
-      table.tenantId,
-      table.mode,
-      table.eboekhoudenLinkStatus,
     ),
     index("customers_tenant_mode_archived_at_idx").on(
       table.tenantId,
@@ -610,11 +598,9 @@ export const tenantBillingSettings = pgTable(
   {
     id: text("id").primaryKey(),
     tenantId: text("tenant_id").notNull(),
-    invoiceTemplateId: integer("invoice_template_id"),
-    revenueLedgerId: integer("revenue_ledger_id"),
-    revenueLedgerName: text("revenue_ledger_name")
+    activeInvoiceProvider: invoiceProviderEnum("active_invoice_provider")
       .notNull()
-      .default("Omzet abonnementen"),
+      .default("mollie"),
     vatCode: text("vat_code").notNull().default("HOOG_VERK_21"),
     vatPercentage: numeric("vat_percentage", {
       precision: 5,
@@ -650,6 +636,41 @@ export const tenantBillingSettings = pgTable(
       name: "tenant_billing_settings_tenant_id_fkey",
     }).onDelete("cascade"),
     unique("tenant_billing_settings_tenant_id_key").on(table.tenantId),
+  ],
+);
+
+export const tenantEboekhoudenInvoiceSettings = pgTable(
+  "tenant_eboekhouden_invoice_settings",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    invoiceTemplateId: integer("invoice_template_id"),
+    revenueLedgerId: integer("revenue_ledger_id"),
+    revenueLedgerName: text("revenue_ledger_name")
+      .notNull()
+      .default("Omzet abonnementen"),
+    createdAt: timestamp("created_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+      name: "tenant_eboekhouden_invoice_settings_tenant_id_fkey",
+    }).onDelete("cascade"),
+    unique("tenant_eboekhouden_invoice_settings_tenant_id_key").on(
+      table.tenantId,
+    ),
   ],
 );
 
@@ -716,6 +737,128 @@ export const tenantMollieCredentials = pgTable(
   ],
 );
 
+export const customerAccountingLinks = pgTable(
+  "customer_accounting_links",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    customerId: text("customer_id").notNull(),
+    mode: mollieModeEnum("mode").notNull(),
+    provider: invoiceProviderEnum("provider").notNull(),
+    providerCustomerId: text("provider_customer_id"),
+    providerCustomerCode: text("provider_customer_code"),
+    linkStatus: customerAccountingLinkStatusEnum("link_status")
+      .notNull()
+      .default("unlinked"),
+    syncedAt: timestamp("synced_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    providerSnapshot: jsonb("provider_snapshot")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+      name: "customer_accounting_links_tenant_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.customerId],
+      foreignColumns: [customers.id],
+      name: "customer_accounting_links_customer_id_fkey",
+    }).onDelete("cascade"),
+    unique("customer_accounting_links_customer_provider_key").on(
+      table.tenantId,
+      table.customerId,
+      table.mode,
+      table.provider,
+    ),
+    uniqueIndex("customer_accounting_links_provider_customer_id_key").on(
+      table.tenantId,
+      table.mode,
+      table.provider,
+      table.providerCustomerId,
+    ),
+    index("customer_accounting_links_status_idx").on(
+      table.tenantId,
+      table.mode,
+      table.provider,
+      table.linkStatus,
+    ),
+  ],
+);
+
+export const invoices = pgTable(
+  "invoices",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    mode: mollieModeEnum("mode").notNull(),
+    ownerType: invoiceOwnerTypeEnum("owner_type").notNull(),
+    ownerId: text("owner_id").notNull(),
+    provider: invoiceProviderEnum("provider").notNull(),
+    providerInvoiceId: text("provider_invoice_id"),
+    providerInvoiceNumber: text("provider_invoice_number"),
+    providerCustomerId: text("provider_customer_id"),
+    providerDocumentUrl: text("provider_document_url"),
+    providerSnapshot: jsonb("provider_snapshot")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    syncedAt: timestamp("synced_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    createdAt: timestamp("created_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+      name: "invoices_tenant_id_fkey",
+    }).onDelete("cascade"),
+    unique("invoices_owner_key").on(table.tenantId, table.ownerType, table.ownerId),
+    uniqueIndex("invoices_provider_invoice_id_key").on(
+      table.tenantId,
+      table.mode,
+      table.provider,
+      table.providerInvoiceId,
+    ),
+    index("invoices_provider_invoice_number_idx").on(
+      table.tenantId,
+      table.mode,
+      table.provider,
+      table.providerInvoiceNumber,
+    ),
+  ],
+);
+
 export const payments = pgTable(
   "payments",
   {
@@ -760,8 +903,6 @@ export const payments = pgTable(
     invoiceState: paymentInvoiceStateEnum("invoice_state")
       .notNull()
       .default("not_applicable"),
-    eboekhoudenInvoiceId: text("eboekhouden_invoice_id"),
-    eboekhoudenInvoiceNumber: text("eboekhouden_invoice_number"),
     invoiceCreatedAt: timestamp("invoice_created_at", {
       mode: "string",
       withTimezone: true,
@@ -876,8 +1017,6 @@ export const recurringBillingSchedules = pgTable(
     }).notNull(),
     amountCurrency: char("amount_currency", { length: 3 }).notNull(),
     billingPeriodIndex: integer("billing_period_index"),
-    eboekhoudenInvoiceId: text("eboekhouden_invoice_id"),
-    eboekhoudenInvoiceNumber: text("eboekhouden_invoice_number"),
     invoiceCreatedAt: timestamp("invoice_created_at", {
       mode: "string",
       withTimezone: true,

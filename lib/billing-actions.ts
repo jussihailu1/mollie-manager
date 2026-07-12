@@ -22,6 +22,7 @@ import {
 import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
 const billingSettingsSchema = z.object({
+  activeInvoiceProvider: z.enum(["eboekhouden", "mollie"]).default("mollie"),
   invoiceEmailDeliveryMode: z
     .enum(["app_smtp", "eboekhouden", "none"])
     .default("app_smtp"),
@@ -98,6 +99,7 @@ function serializeError(error: unknown) {
 
 export async function updateBillingSettingsAction(formData: FormData) {
   const parsed = billingSettingsSchema.safeParse({
+    activeInvoiceProvider: formData.get("activeInvoiceProvider") || undefined,
     invoiceEmailDeliveryMode:
       formData.get("invoiceEmailDeliveryMode") || undefined,
     invoiceTemplateId: formData.get("invoiceTemplateId") ?? "",
@@ -116,6 +118,7 @@ export async function updateBillingSettingsAction(formData: FormData) {
 
   try {
     const settings = await updateTenantBillingSettings({
+      activeInvoiceProvider: parsed.data.activeInvoiceProvider,
       invoiceEmailDeliveryMode: parsed.data.invoiceEmailDeliveryMode,
       invoiceTemplateId: parsed.data.invoiceTemplateId,
       revenueLedgerId: parsed.data.revenueLedgerId,
@@ -125,6 +128,7 @@ export async function updateBillingSettingsAction(formData: FormData) {
       {
         action: "tenant_billing_settings.update",
         details: {
+          activeInvoiceProvider: settings?.activeInvoiceProvider ?? null,
           invoiceEmailDeliveryMode: settings?.invoiceEmailDeliveryMode ?? null,
           invoiceTemplateId: settings?.invoiceTemplateId ?? null,
           revenueLedgerId: settings?.revenueLedgerId ?? null,

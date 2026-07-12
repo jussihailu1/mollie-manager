@@ -10,8 +10,13 @@ function buildRecurringBaseFilters(
   const filters = [
     sql`rbs.mode = ${mode}`,
     sql`rbs.invoice_state = ${state}`,
-    sql`rbs.eboekhouden_invoice_id is null`,
-    sql`rbs.eboekhouden_invoice_number is null`,
+    sql`not exists (
+      select 1
+      from invoices i
+      where i.tenant_id = rbs.tenant_id
+        and i.owner_type = 'recurring_schedule'
+        and i.owner_id = rbs.id
+    )`,
   ];
 
   if (tenantId) {

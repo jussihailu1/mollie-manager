@@ -2,6 +2,7 @@ import { Locale } from "@mollie/api-client";
 import { sql } from "drizzle-orm";
 
 import { writeAuditLog } from "@/lib/audit";
+import { upsertCustomerAccountingLink } from "@/lib/customer-accounting-links";
 import { normalizeCustomerNoteBody } from "@/lib/customer-note-policy";
 import { transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
@@ -75,11 +76,6 @@ export async function createCustomerFlow(input: {
         tenant_id,
         mode,
         mollie_customer_id,
-        eboekhouden_relation_id,
-        eboekhouden_relation_code,
-        eboekhouden_link_status,
-        eboekhouden_synced_at,
-        eboekhouden_relation_snapshot,
         full_name,
         email,
         locale,
@@ -92,11 +88,6 @@ export async function createCustomerFlow(input: {
         ${tenantId},
         ${input.mode},
         ${createdCustomer.id},
-        ${linkedRelation?.id ?? null},
-        ${linkedRelation?.code ?? null},
-        ${linkedRelation ? "linked" : "unlinked"}::eboekhouden_link_status,
-        ${linkedRelation ? sql`now()` : null},
-        ${JSON.stringify(linkedRelation ?? {})}::jsonb,
         ${input.input.businessName},
         ${input.input.email},
         ${createdCustomer.locale ?? "nl_NL"},
@@ -112,6 +103,21 @@ export async function createCustomerFlow(input: {
         now()
       )
     `);
+
+    await upsertCustomerAccountingLink(
+      {
+        customerId: localCustomerId,
+        linkStatus: linkedRelation ? "linked" : "unlinked",
+        mode: input.mode,
+        provider: "eboekhouden",
+        providerCustomerCode: linkedRelation?.code ?? null,
+        providerCustomerId: linkedRelation?.id ? String(linkedRelation.id) : null,
+        providerSnapshot: (linkedRelation ?? {}) as Record<string, unknown>,
+        syncedAt: linkedRelation ? new Date().toISOString() : null,
+        tenantId,
+      },
+      client,
+    );
 
     if (normalizedNote) {
       await client.execute(sql`

@@ -1,4 +1,5 @@
 import type { MollieMode } from "@/lib/env";
+import type { InvoiceProvider } from "@/lib/invoices";
 
 export type InvoiceActor = {
   email?: string | null;
@@ -9,10 +10,11 @@ export type DeliveryInput = {
   actor: InvoiceActor;
   customerEmail: string | null;
   customerId: string | null;
-  eboekhoudenInvoiceId: string | null;
-  eboekhoudenInvoiceNumber: string | null;
-  eboekhoudenInvoicePdfUrl?: string | null;
   entityId: string;
+  invoiceDocumentUrl?: string | null;
+  invoiceId: string | null;
+  invoiceNumber: string | null;
+  invoiceProvider: InvoiceProvider;
   invoiceType: "first_payment" | "recurring";
   mode: MollieMode;
   plannedCollectionDate?: string | null;

@@ -32,7 +32,11 @@ export async function getScheduledInvoiceCandidate(
       s.customer_id as "customerId",
       s.description as "subscriptionDescription",
       c.email as "customerEmail",
-      c.eboekhouden_relation_id as "eboekhoudenRelationId"
+      case
+        when cal.provider_customer_id ~ '^[0-9]+$'
+          then cal.provider_customer_id::int
+        else null
+      end as "eboekhoudenRelationId"
     from recurring_billing_schedules rbs
     inner join subscriptions s
       on s.id = rbs.subscription_id
@@ -41,6 +45,11 @@ export async function getScheduledInvoiceCandidate(
       on c.id = s.customer_id
       and c.mode = rbs.mode
       and c.tenant_id = rbs.tenant_id
+    left join customer_accounting_links cal
+      on cal.customer_id = c.id
+      and cal.tenant_id = c.tenant_id
+      and cal.mode = c.mode
+      and cal.provider = 'eboekhouden'
     where rbs.id = ${scheduleId}
       and rbs.tenant_id = ${tenantId}
     limit 1

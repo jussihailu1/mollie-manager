@@ -9,6 +9,7 @@ import {
 import { getDb } from "@/lib/db";
 import { getTenantEboekhoudenCredentials } from "@/lib/eboekhouden/tenant-credentials";
 import { env, getSetupStatus } from "@/lib/env";
+import { getInvoiceProviderAdapterById } from "@/lib/invoicing/provider-resolver";
 import { getTenantMollieCredentials } from "@/lib/mollie/tenant-credentials";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { getTenantSubscriptionPolicyDefaults } from "@/lib/subscription-policy-defaults";
@@ -104,6 +105,21 @@ export async function getTenantReadiness(tenantId: string) {
           getTenantEboekhoudenCredentials(tenantId),
           getTenantBillingSettings(tenantId),
         ]);
+  const activeInvoiceProvider = billingSettings?.activeInvoiceProvider ?? null;
+  const activeProviderValidation =
+    tenant === null || billingSettings === null || activeInvoiceProvider === null
+      ? {
+          ok: false,
+          reason:
+            tenant === null
+              ? "Tenant does not exist."
+              : "Tenant billing settings are missing.",
+        }
+      : await getInvoiceProviderAdapterById(activeInvoiceProvider).validateTenantSetup({
+          mode: "live",
+          settings: billingSettings,
+          tenantId,
+        });
 
   let subscriptionPolicyDefaultsReady = false;
   let subscriptionPolicyDefaultsIssue: string | null = null;
@@ -135,24 +151,45 @@ export async function getTenantReadiness(tenantId: string) {
       details: {
         mode: "live",
         present: mollieCredentials !== null,
+        required: activeInvoiceProvider === "mollie",
       },
       name: "tenant_mollie_live_configured",
-      pass: mollieCredentials !== null,
+      pass: activeInvoiceProvider === "mollie" ? mollieCredentials !== null : true,
     },
     {
       details: {
         present: eboekhoudenCredentials !== null,
+        required: activeInvoiceProvider === "eboekhouden",
       },
       name: "tenant_eboekhouden_configured",
-      pass: eboekhoudenCredentials !== null,
+      pass:
+        activeInvoiceProvider === "eboekhouden"
+          ? eboekhoudenCredentials !== null
+          : true,
     },
     {
       details: {
+        activeInvoiceProvider,
+      },
+      name: "tenant_active_invoice_provider_selected",
+      pass: activeInvoiceProvider !== null,
+    },
+    {
+      details: {
+        activeInvoiceProvider,
         invoiceTemplateId: billingSettings?.invoiceTemplateId ?? null,
         revenueLedgerId: billingSettings?.revenueLedgerId ?? null,
       },
       name: "tenant_billing_settings_complete",
       pass: billingSettingsAreComplete(billingSettings),
+    },
+    {
+      details: {
+        activeInvoiceProvider,
+        issue: activeProviderValidation.reason ?? null,
+      },
+      name: "tenant_active_invoice_provider_ready",
+      pass: activeProviderValidation.ok,
     },
     {
       details: {
