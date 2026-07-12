@@ -19,7 +19,10 @@ without cross-tenant data leakage, credential mixing, or ambiguous operator acce
 The pilot must still preserve the existing product direction:
 
 - Mollie remains the payment and mandate source of truth
-- e-Boekhouden remains the invoice and accounting source of truth
+- invoice truth is per stored invoice row and belongs to the provider that
+  created that invoice
+- one active invoice provider is selected explicitly per tenant for new invoice
+  creation
 - no duplicate invoice may be created for one billing period
 - normal operators should use guided workflows, not raw provider internals
 - destructive or high-risk lifecycle automation remains explicit, manual, or
@@ -90,8 +93,8 @@ Authentication for the pilot:
 Authorization for the pilot:
 
 - signing in is not enough by itself
-- app access requires either a tenant membership or an explicit platform-operator
-  record used for controlled administration/bootstrap work
+- product access is membership-led for normal operators and platform-operator-led
+  for controlled administration/bootstrap work
 - normal operator actions run inside one active tenant context
 - `AUTH_ADVANCED_EMAILS` may continue to gate advanced technical controls, but it
   does not create product access on its own and does not bypass tenant context
@@ -106,8 +109,11 @@ Provider ownership for the pilot is:
 - platform SMTP may remain shared for the pilot
 - future tenant-specific SMTP overrides remain later scope
 
-Current global env-backed provider credentials are implementation debt that must
-be replaced before the shared multi-tenant pilot is considered ready.
+Current global env-backed provider credentials remain implementation debt for
+live tenant business mutations. Tenant business flows now fail closed without
+implicit or `legacy-default` env-backed Mollie or e-Boekhouden credential
+fallback, while global/bootstrap diagnostics remain separate and non-tenant
+until an explicit `tenantId` is supplied.
 
 ## Tenant-Owned Product Defaults
 
@@ -120,6 +126,7 @@ The following are tenant-owned defaults in the pilot:
 - default cancellation effect
 - invoice template selection
 - revenue ledger selection
+- active invoice provider
 - VAT/invoice accounting defaults
 
 Past customer consent must remain tied to the exact tenant-owned terms shown at

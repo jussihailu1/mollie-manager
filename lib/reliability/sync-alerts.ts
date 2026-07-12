@@ -19,6 +19,7 @@ export async function handlePaymentAlerts(input: {
   localPaymentId: string;
   payment: Payment;
   subscriptionId: string | null;
+  tenantId: string;
 }) {
   const paymentType = resolvePaymentSyncType(input.payment);
   const recurringCollectionState = derivePaymentRecurringCollectionState(input.payment);
@@ -40,6 +41,7 @@ export async function handlePaymentAlerts(input: {
         },
         severity: "critical",
         subscriptionId: input.subscriptionId,
+        tenantId: input.tenantId,
         title: "Recurring collection reversed",
       });
 
@@ -48,6 +50,7 @@ export async function handlePaymentAlerts(input: {
           alertId: alert.id,
           message:
             "A recurring SEPA direct debit was reversed or disputed. Review Mollie, the invoice, and the subscription before taking action.",
+          tenantId: input.tenantId,
           title: "Recurring collection reversed",
         });
       }
@@ -68,6 +71,7 @@ export async function handlePaymentAlerts(input: {
         },
         severity: "critical",
         subscriptionId: input.subscriptionId,
+        tenantId: input.tenantId,
         title: "Recurring mandate problem",
       });
 
@@ -76,6 +80,7 @@ export async function handlePaymentAlerts(input: {
           alertId: alert.id,
           message:
             "A recurring collection failed with a possible mandate problem. Review the customer before retrying automatic collection.",
+          tenantId: input.tenantId,
           title: "Recurring mandate problem",
         });
       }
@@ -98,6 +103,7 @@ export async function handlePaymentAlerts(input: {
         },
         severity: "warning",
         subscriptionId: input.subscriptionId,
+        tenantId: input.tenantId,
         title: "Recurring collection failed",
       });
 
@@ -106,6 +112,7 @@ export async function handlePaymentAlerts(input: {
           alertId: alert.id,
           message:
             "A recurring collection failed. Keep the existing invoice open and review manually; do not create a duplicate invoice or auto-cancel.",
+          tenantId: input.tenantId,
           title: "Recurring collection failed",
         });
       }
@@ -116,6 +123,7 @@ export async function handlePaymentAlerts(input: {
     if (recurringCollectionState === "settled") {
       await resolveAlertsForEntity({
         paymentId: input.localPaymentId,
+        tenantId: input.tenantId,
       });
       return;
     }
@@ -129,6 +137,7 @@ export async function handlePaymentAlerts(input: {
       paymentId: input.localPaymentId,
       severity: "critical",
       subscriptionId: input.subscriptionId,
+      tenantId: input.tenantId,
       title: "Disputed payment",
     });
 
@@ -137,6 +146,7 @@ export async function handlePaymentAlerts(input: {
         alertId: alert.id,
         message:
           "A payment was marked as charged back or disputed during synchronization. Open Mollie Manager and review the payment immediately.",
+        tenantId: input.tenantId,
         title: "Disputed payment",
       });
     }
@@ -156,6 +166,7 @@ export async function handlePaymentAlerts(input: {
       paymentId: input.localPaymentId,
       severity: "warning",
       subscriptionId: input.subscriptionId,
+      tenantId: input.tenantId,
       title: alertTitle,
     });
 
@@ -166,6 +177,7 @@ export async function handlePaymentAlerts(input: {
           input.payment.status === "failed"
             ? "A payment failed during synchronization. Open Mollie Manager to review the payment and the affected customer."
             : "A Mollie checkout expired before completion. Open Mollie Manager to decide whether to issue a new payment.",
+        tenantId: input.tenantId,
         title: alertTitle,
       });
     }
@@ -175,6 +187,7 @@ export async function handlePaymentAlerts(input: {
 
   await resolveAlertsForEntity({
     paymentId: input.localPaymentId,
+    tenantId: input.tenantId,
   });
 }
 
@@ -182,6 +195,7 @@ export async function handleSubscriptionAlerts(input: {
   customerId: string;
   localSubscriptionId: string;
   localStatus: string;
+  tenantId: string;
 }) {
   if (input.localStatus === "payment_action_required") {
     const alert = await openAlert({
@@ -190,6 +204,7 @@ export async function handleSubscriptionAlerts(input: {
         "The subscription is suspended or waiting for a payment-related intervention in Mollie.",
       severity: "warning",
       subscriptionId: input.localSubscriptionId,
+      tenantId: input.tenantId,
       title: "Subscription needs payment action",
     });
 
@@ -198,6 +213,7 @@ export async function handleSubscriptionAlerts(input: {
         alertId: alert.id,
         message:
           "A subscription entered a payment-action-required state. Open Mollie Manager to inspect the latest payment and subscription details.",
+        tenantId: input.tenantId,
         title: "Subscription needs payment action",
       });
     }
@@ -212,6 +228,7 @@ export async function handleSubscriptionAlerts(input: {
         "The local subscription state no longer matches the latest Mollie state.",
       severity: "critical",
       subscriptionId: input.localSubscriptionId,
+      tenantId: input.tenantId,
       title: "Subscription out of sync",
     });
 
@@ -220,6 +237,7 @@ export async function handleSubscriptionAlerts(input: {
         alertId: alert.id,
         message:
           "A subscription appears out of sync with Mollie. Open Mollie Manager and run a sync or reconciliation pass.",
+        tenantId: input.tenantId,
         title: "Subscription out of sync",
       });
     }
@@ -229,5 +247,6 @@ export async function handleSubscriptionAlerts(input: {
 
   await resolveAlertsForEntity({
     subscriptionId: input.localSubscriptionId,
+    tenantId: input.tenantId,
   });
 }

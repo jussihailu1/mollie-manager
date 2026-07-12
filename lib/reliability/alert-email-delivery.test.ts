@@ -39,6 +39,7 @@ describe("alert email delivery integration", () => {
       {
         alertId: "alert_123",
         message: "A payment failed and needs review.",
+        tenantId: "tenant_123",
         title: "Failed payment",
       },
       {

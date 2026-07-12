@@ -47,9 +47,11 @@ export type PaymentFollowUpQueueItem = {
 export async function listPaymentFollowUpQueue(options: {
   limit?: number;
   mode: MollieMode;
+  tenantId: string;
 }): Promise<PaymentFollowUpQueueItem[]> {
   const limit = Math.max(1, Math.min(options.limit ?? 50, 100));
   const mode = options.mode;
+  const tenantId = options.tenantId;
   const result = await getDb().execute<PaymentFollowUpRow>(sql`
     with candidate_payments as (
       select
@@ -58,7 +60,8 @@ export async function listPaymentFollowUpQueue(options: {
         p.mode,
         coalesce(p.disputed_at, p.failed_at, p.created_at) as follow_up_created_at
       from payments p
-      where p.mode = ${mode}
+      where p.tenant_id = ${tenantId}
+        and p.mode = ${mode}
         and (
           p.disputed_at is not null
           or p.mollie_status in ('failed', 'canceled', 'expired', 'charged_back')
@@ -71,6 +74,12 @@ export async function listPaymentFollowUpQueue(options: {
             select 1
             from alerts candidate_alert
             where candidate_alert.payment_id = p.id
+              and exists (
+                select 1
+                from payments p2
+                where p2.id = candidate_alert.payment_id
+                  and p2.tenant_id = ${tenantId}
+              )
               and candidate_alert.payload ->> 'notificationPolicy'
                 = 'failed_payment_customer_notification'
           )
@@ -101,7 +110,13 @@ export async function listPaymentFollowUpQueue(options: {
         ) as position
       from candidate_payments candidate
       inner join alerts a on a.payment_id = candidate.id
-      where a.payload ->> 'notificationPolicy'
+      where exists (
+        select 1
+        from payments p2
+        where p2.id = a.payment_id
+          and p2.tenant_id = ${tenantId}
+      )
+        and a.payload ->> 'notificationPolicy'
         = 'failed_payment_customer_notification'
     )
     select
@@ -117,7 +132,10 @@ export async function listPaymentFollowUpQueue(options: {
       cpn.sent_at as "sentAt",
       cpn.failed_at as "failedAt"
     from candidate_payments p
-    left join customers c on c.id = p.customer_id and c.mode = p.mode
+    left join customers c
+      on c.id = p.customer_id
+      and c.tenant_id = ${tenantId}
+      and c.mode = p.mode
     left join ranked_alerts follow_up_alert
       on follow_up_alert.payment_id = p.id
       and follow_up_alert.position = 1

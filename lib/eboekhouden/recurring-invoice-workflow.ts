@@ -50,17 +50,20 @@ function buildReference(candidate: ScheduledInvoiceCandidate) {
 
 export async function createEboekhoudenInvoiceForSchedule(
   scheduleId: string,
-  options?: {
+  options: {
     actor?: RecurringInvoiceActor;
+    tenantId: string;
     settings?: TenantBillingSettings | null;
   },
 ): Promise<CreateScheduleInvoiceResult> {
-  const actor = options?.actor ?? {
+  const actor = options.actor ?? {
     kind: "system",
   };
   const [settings, candidate] = await Promise.all([
-    options?.settings ? Promise.resolve(options.settings) : getTenantBillingSettings(),
-    getScheduledInvoiceCandidate(scheduleId),
+    options.settings
+      ? Promise.resolve(options.settings)
+      : getTenantBillingSettings(options.tenantId),
+    getScheduledInvoiceCandidate(scheduleId, options.tenantId),
   ]);
 
   if (!billingSettingsAreComplete(settings)) {
@@ -86,6 +89,7 @@ export async function createEboekhoudenInvoiceForSchedule(
     actor,
     mode: candidate.mode,
     scheduleId,
+    tenantId: options.tenantId,
   });
 
   if (!claimedScheduleId) {
@@ -103,6 +107,7 @@ export async function createEboekhoudenInvoiceForSchedule(
       date: candidate.invoiceSendDueDate,
       reference,
       relationId: candidate.eboekhoudenRelationId,
+      tenantId: candidate.tenantId,
     });
 
     if (existing.status === "ambiguous") {
@@ -122,14 +127,16 @@ export async function createEboekhoudenInvoiceForSchedule(
         actor,
         customerEmail: candidate.customerEmail,
         customerId: candidate.customerId,
-        eboekhoudenInvoiceId: storedRecoveredInvoice.invoiceId,
-        eboekhoudenInvoiceNumber: storedRecoveredInvoice.invoiceNumber,
-        eboekhoudenInvoicePdfUrl: existing.invoice.urlPdfFile ?? null,
         entityId: candidate.scheduleId,
+        invoiceDocumentUrl: existing.invoice.urlPdfFile ?? null,
+        invoiceId: storedRecoveredInvoice.invoiceId,
+        invoiceNumber: storedRecoveredInvoice.invoiceNumber,
+        invoiceProvider: "eboekhouden",
         invoiceType: "recurring",
         mode: candidate.mode,
         plannedCollectionDate: candidate.plannedCollectionDate,
         subscriptionId: candidate.subscriptionId,
+        tenantId: candidate.tenantId,
       });
 
       return {
@@ -140,7 +147,7 @@ export async function createEboekhoudenInvoiceForSchedule(
       };
     }
 
-    const invoice = await createEboekhoudenInvoice({
+    const invoiceInput: Parameters<typeof createEboekhoudenInvoice>[0] = {
       date: candidate.invoiceSendDueDate,
       inExVat: "EX",
       items: [
@@ -160,7 +167,11 @@ export async function createEboekhoudenInvoiceForSchedule(
         candidate.invoiceSendDueDate,
         candidate.plannedCollectionDate,
       ),
-    });
+    };
+    const invoice = await createEboekhoudenInvoice(
+      invoiceInput,
+      candidate.tenantId,
+    );
     const storedInvoice = await storeRecurringInvoiceCreationSuccess({
       actor,
       candidate,
@@ -170,14 +181,16 @@ export async function createEboekhoudenInvoiceForSchedule(
       actor,
       customerEmail: candidate.customerEmail,
       customerId: candidate.customerId,
-      eboekhoudenInvoiceId: storedInvoice.invoiceId,
-      eboekhoudenInvoiceNumber: storedInvoice.invoiceNumber,
-      eboekhoudenInvoicePdfUrl: invoice.urlPdfFile ?? null,
       entityId: candidate.scheduleId,
+      invoiceDocumentUrl: invoice.urlPdfFile ?? null,
+      invoiceId: storedInvoice.invoiceId,
+      invoiceNumber: storedInvoice.invoiceNumber,
+      invoiceProvider: "eboekhouden",
       invoiceType: "recurring",
       mode: candidate.mode,
       plannedCollectionDate: candidate.plannedCollectionDate,
       subscriptionId: candidate.subscriptionId,
+      tenantId: candidate.tenantId,
     });
 
     return {
@@ -192,6 +205,7 @@ export async function createEboekhoudenInvoiceForSchedule(
         date: candidate.invoiceSendDueDate,
         reference,
         relationId: candidate.eboekhoudenRelationId,
+        tenantId: candidate.tenantId,
       });
 
       if (existing.status === "found") {
@@ -205,14 +219,16 @@ export async function createEboekhoudenInvoiceForSchedule(
           actor,
           customerEmail: candidate.customerEmail,
           customerId: candidate.customerId,
-          eboekhoudenInvoiceId: storedRecoveredInvoice.invoiceId,
-          eboekhoudenInvoiceNumber: storedRecoveredInvoice.invoiceNumber,
-          eboekhoudenInvoicePdfUrl: existing.invoice.urlPdfFile ?? null,
           entityId: candidate.scheduleId,
+          invoiceDocumentUrl: existing.invoice.urlPdfFile ?? null,
+          invoiceId: storedRecoveredInvoice.invoiceId,
+          invoiceNumber: storedRecoveredInvoice.invoiceNumber,
+          invoiceProvider: "eboekhouden",
           invoiceType: "recurring",
           mode: candidate.mode,
           plannedCollectionDate: candidate.plannedCollectionDate,
           subscriptionId: candidate.subscriptionId,
+          tenantId: candidate.tenantId,
         });
 
         return {

@@ -5,13 +5,13 @@ import {
   toPublicEboekhoudenError,
 } from "@/lib/eboekhouden/client";
 import { relationToLocalFields } from "@/lib/eboekhouden/relation-mapping";
-import { requireViewerSession } from "@/lib/auth/session";
+import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  await requireViewerSession();
+  const { currentTenant } = await getCurrentTenantSelectionForViewer();
 
   const { id } = await params;
   const relationId = Number(id);
@@ -24,7 +24,7 @@ export async function GET(
   }
 
   try {
-    const relation = await getEboekhoudenRelation(relationId);
+    const relation = await getEboekhoudenRelation(relationId, currentTenant.id);
 
     return Response.json({
       localFields: relationToLocalFields(relation),

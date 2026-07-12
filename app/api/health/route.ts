@@ -1,10 +1,13 @@
 import { checkDatabaseConnection } from "@/lib/db";
-import { env, getSetupStatus, type MollieMode } from "@/lib/env";
+import { env, type MollieMode } from "@/lib/env";
 import { getAcceptedCronSecrets, isBearerAuthorized } from "@/lib/cron-auth";
-import { isMollieConfigured } from "@/lib/mollie/client";
-import { notificationsAreConfigured } from "@/lib/notifications/email";
+import {
+  getPlatformReadiness,
+  getTenantReadiness,
+} from "@/lib/tenant-readiness";
 import { getViewerSession, hasAdvancedOperationsAccess } from "@/lib/auth/session";
 import { getReliabilityOpsSnapshot } from "@/lib/reliability/ops-snapshot";
+import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
 function resolveMode(request: Request): MollieMode {
   const mode = new URL(request.url).searchParams.get("mode");
@@ -15,24 +18,50 @@ function resolveMode(request: Request): MollieMode {
   return env.MOLLIE_DEFAULT_MODE;
 }
 
-async function isDiagnosticsAuthorized(request: Request) {
+function resolveRequestedTenantId(request: Request) {
+  const tenantId = new URL(request.url).searchParams.get("tenantId")?.trim();
+  return tenantId ? tenantId : null;
+}
+
+async function resolveDiagnosticsContext(request: Request) {
   const secrets = getAcceptedCronSecrets({
     cronSecret: process.env.CRON_SECRET ?? null,
     invoiceCronSharedSecret: env.INVOICE_CRON_SHARED_SECRET,
   });
+  const requestedTenantId = resolveRequestedTenantId(request);
 
   if (isBearerAuthorized(request.headers.get("authorization"), secrets)) {
-    return true;
+    return {
+      authorized: true,
+      tenantId: requestedTenantId,
+    };
   }
 
   const session = await getViewerSession();
-  return hasAdvancedOperationsAccess(session);
+  if (!hasAdvancedOperationsAccess(session)) {
+    return {
+      authorized: false,
+      tenantId: null,
+    };
+  }
+
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
+  const tenantId = requestedTenantId
+    ? tenantSelection.accessibleTenants.find(
+        (tenant) => tenant.id === requestedTenantId,
+      )?.id ?? null
+    : null;
+
+  return {
+    authorized: true,
+    tenantId,
+  };
 }
 
 export async function GET(request: Request) {
-  const diagnosticsAuthorized = await isDiagnosticsAuthorized(request);
+  const diagnosticsContext = await resolveDiagnosticsContext(request);
 
-  if (!diagnosticsAuthorized) {
+  if (!diagnosticsContext.authorized) {
     return Response.json({
       app: "Kify",
       status: "ok",
@@ -40,33 +69,47 @@ export async function GET(request: Request) {
     });
   }
 
-  const mode = resolveMode(request);
-  const setupStatus = getSetupStatus();
-  const [database, opsSnapshot] = await Promise.all([
-    checkDatabaseConnection(),
-    getReliabilityOpsSnapshot({ mode }),
-  ]);
+  const requestedTenantId = resolveRequestedTenantId(request);
+  const mode = diagnosticsContext.tenantId ? "live" : resolveMode(request);
+  const platform = getPlatformReadiness();
+  const database = await checkDatabaseConnection();
+  const opsSnapshot = diagnosticsContext.tenantId
+    ? await getReliabilityOpsSnapshot({
+        mode,
+        tenantId: diagnosticsContext.tenantId,
+      })
+    : null;
+  const tenant =
+    diagnosticsContext.tenantId !== null
+      ? await getTenantReadiness(diagnosticsContext.tenantId)
+      : null;
+  const status =
+    database.ok &&
+    platform.pass &&
+    (requestedTenantId === null || Boolean(tenant?.pass))
+      ? "ok"
+      : "setup-pending";
 
   return Response.json({
     app: "Kify",
     currentMode: mode,
+    diagnosticsTenantId: diagnosticsContext.tenantId,
+    diagnosticsTenantScoped: Boolean(diagnosticsContext.tenantId),
+    diagnosticsNotice: diagnosticsContext.tenantId
+      ? null
+      : "Pass ?tenantId=<tenant-id> to read tenant-scoped live readiness and reliability diagnostics.",
     phase: "reliability",
-    status:
-      database.ok && Object.values(setupStatus).every((section) => section.ready)
-        ? "ok"
-        : "setup-pending",
+    status,
     checks: {
       database,
-      mollieLiveConfigured: isMollieConfigured("live"),
-      notificationsConfigured: notificationsAreConfigured(),
-      mollieTestConfigured: isMollieConfigured("test"),
     },
-    invoiceAutomation: opsSnapshot.invoiceAutomation,
-    invoiceAutomationCron: opsSnapshot.invoiceAutomationCron,
-    invoiceDeliveryQueue: opsSnapshot.invoiceDeliveryQueue,
+    invoiceAutomation: opsSnapshot?.invoiceAutomation ?? null,
+    invoiceAutomationCron: opsSnapshot?.invoiceAutomationCron ?? null,
+    invoiceDeliveryQueue: opsSnapshot?.invoiceDeliveryQueue ?? null,
     opsSnapshot,
-    reliability: opsSnapshot.reliability,
-    setupStatus,
+    platform,
+    reliability: opsSnapshot?.reliability ?? null,
+    tenant,
     timestamp: new Date().toISOString(),
   });
 }

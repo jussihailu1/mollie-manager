@@ -2,8 +2,6 @@
 
 import { readFileSync, existsSync } from "node:fs";
 
-const mode = process.argv[2] === "live" ? "live" : "test";
-
 function hasValue(name) {
   const value = process.env[name];
   return typeof value === "string" && value.trim().length > 0;
@@ -89,23 +87,6 @@ function run() {
   });
 
   pushCheck(checks, {
-    details: {
-      hasToken: hasValue("EBOEKHOUDEN_API_TOKEN"),
-    },
-    name: "eboekhouden_token_configured",
-    pass: hasValue("EBOEKHOUDEN_API_TOKEN"),
-  });
-
-  pushCheck(checks, {
-    details: {
-      MOLLIE_DEFAULT_MODE: process.env.MOLLIE_DEFAULT_MODE ?? null,
-      mode,
-    },
-    name: "mollie_default_mode_matches_target",
-    pass: (process.env.MOLLIE_DEFAULT_MODE ?? "test") === mode,
-  });
-
-  pushCheck(checks, {
     details: cronConfig,
     name: "scheduler_config_present",
     pass:
@@ -117,8 +98,8 @@ function run() {
   const pass = checks.every((check) => check.pass);
   const report = {
     checks,
-    mode,
     pass,
+    scope: "platform",
     timestamp: new Date().toISOString(),
   };
 

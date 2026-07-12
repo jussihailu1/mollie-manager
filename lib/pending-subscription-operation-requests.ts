@@ -27,6 +27,7 @@ export type PendingSubscriptionOperationRequest = {
 
 const listPendingSubscriptionOperationRequestsCached = cache(async (
   mode: MollieMode,
+  tenantId: string,
   customerId: string | null,
   limit: number,
 ) => {
@@ -69,11 +70,16 @@ const listPendingSubscriptionOperationRequestsCached = cache(async (
     from subscription_operation_requests sor
     inner join subscriptions s
       on s.id = sor.subscription_id
+      and s.tenant_id = sor.tenant_id
       and s.mode = sor.mode
     inner join customers c
       on c.id = s.customer_id
+      and c.tenant_id = s.tenant_id
       and c.mode = s.mode
-    where sor.mode = ${mode}
+    where sor.tenant_id = ${tenantId}
+      and s.tenant_id = ${tenantId}
+      and c.tenant_id = ${tenantId}
+      and sor.mode = ${mode}
       and sor.status in ('pending', 'scheduled', 'processing')
       and (${customerId}::text is null or c.id = ${customerId})
     order by sor.created_at desc, sor.id desc
@@ -87,9 +93,12 @@ export async function listPendingSubscriptionOperationRequests(options: {
   customerId?: string;
   limit?: number;
   mode: MollieMode;
+  tenantId: string;
 }) {
+  const tenantId = options.tenantId;
   return listPendingSubscriptionOperationRequestsCached(
     options.mode,
+    tenantId,
     options.customerId ?? null,
     options.limit ?? 25,
   );

@@ -8,6 +8,7 @@ type ReconcileInput = {
   date: string;
   reference: string;
   relationId: number;
+  tenantId: string;
 };
 
 type ReconcileResult =
@@ -30,6 +31,7 @@ export async function findExistingEboekhoudenInvoiceByReference(
     date: input.date,
     limit: 500,
     relationId: input.relationId,
+    tenantId: input.tenantId,
   });
   const matches = filterMatchingInvoicesByReference(response.items ?? [], input);
 

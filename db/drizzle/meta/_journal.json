@@ -113,6 +113,62 @@
       "when": 1782254400000,
       "tag": "0015_subscription_cancellation_request_consistency",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1782340800000,
+      "tag": "0016_tenant_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1782563251874,
+      "tag": "0017_tenant_scoped_business_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1782813600000,
+      "tag": "0018_alert_tenant_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1782900000000,
+      "tag": "0019_tenant_eboekhouden_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1782900000001,
+      "tag": "0020_tenant_mollie_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1782903600000,
+      "tag": "0021_webhook_event_tenant_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1783684800000,
+      "tag": "0022_invoice_provider_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1783684800001,
+      "tag": "0023_remove_legacy_invoice_columns",
+      "breakpoints": true
     }
   ]
 }

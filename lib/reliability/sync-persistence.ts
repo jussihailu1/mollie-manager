@@ -33,6 +33,7 @@ type PersistSyncedPaymentInput = {
   payment: Payment;
   paymentType: PaymentSyncType;
   recurringCollectionState: RecurringCollectionState;
+  tenantId: string;
 };
 
 export async function persistSyncedPayment(
@@ -42,7 +43,9 @@ export async function persistSyncedPayment(
   const existingPayment = await client.execute<LocalPaymentRow>(sql`
       select id
       from payments
-      where mode = ${input.mode} and mollie_payment_id = ${input.payment.id}
+      where tenant_id = ${input.tenantId}
+        and mode = ${input.mode}
+        and mollie_payment_id = ${input.payment.id}
       limit 1
     `);
   const localPaymentId = existingPayment.rows[0]?.id ?? crypto.randomUUID();
@@ -50,6 +53,7 @@ export async function persistSyncedPayment(
   await client.execute(sql`
       insert into payments (
         id,
+        tenant_id,
         customer_id,
         subscription_id,
         mandate_id,
@@ -74,6 +78,7 @@ export async function persistSyncedPayment(
         last_synced_at
       ) values (
         ${localPaymentId},
+        ${input.tenantId},
         ${input.customerId},
         ${input.localSubscriptionId},
         ${input.localMandateId},
@@ -102,7 +107,7 @@ export async function persistSyncedPayment(
         now(),
         now()
       )
-      on conflict (mode, mollie_payment_id)
+      on conflict (tenant_id, mode, mollie_payment_id)
       do update set
         customer_id = excluded.customer_id,
         subscription_id = excluded.subscription_id,

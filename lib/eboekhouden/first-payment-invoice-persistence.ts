@@ -4,6 +4,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { getDb, transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { openAlert } from "@/lib/reliability/alerts";
+import { saveStoredInvoice } from "@/lib/invoices";
 import {
   buildInvoiceCreationClaimMetadata,
   buildInvoiceCreationFailureMetadata,
@@ -25,6 +26,7 @@ export type FirstPaymentInvoicePersistenceCandidate = {
   paymentId: string;
   paymentLinkId: string;
   subscriptionId: string | null;
+  tenantId: string;
 };
 
 type AlertResult = {
@@ -43,6 +45,7 @@ export async function claimFirstPaymentInvoiceForCreation(input: {
   actor: FirstPaymentInvoiceActor;
   mode: MollieMode;
   paymentId: string;
+  tenantId: string;
 }) {
   const result = await getDb().execute<{ id: string }>(sql`
     update payments
@@ -56,12 +59,18 @@ export async function claimFirstPaymentInvoiceForCreation(input: {
         }),
       )}::jsonb
     where id = ${input.paymentId}
+      and tenant_id = ${input.tenantId}
       and mode = ${input.mode}
       and payment_type = 'first'
       and mollie_status = 'paid'
       and invoice_state = 'pending_invoice'
-      and eboekhouden_invoice_id is null
-      and eboekhouden_invoice_number is null
+      and not exists (
+        select 1
+        from invoices i
+        where i.tenant_id = payments.tenant_id
+          and i.owner_type = 'payment'
+          and i.owner_id = payments.id
+      )
     returning id
   `);
 
@@ -82,8 +91,6 @@ export async function storeFirstPaymentInvoiceCreationSuccess(input: {
       update payments
       set
         invoice_state = 'invoice_created',
-        eboekhouden_invoice_id = ${invoiceId},
-        eboekhouden_invoice_number = ${invoiceNumber},
         invoice_created_at = now(),
         invoice_failed_at = null,
         metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(
@@ -91,8 +98,26 @@ export async function storeFirstPaymentInvoiceCreationSuccess(input: {
         )}::jsonb,
         updated_at = now()
       where id = ${input.candidate.paymentId}
+        and tenant_id = ${input.candidate.tenantId}
         and invoice_state = 'invoice_creating'
     `);
+
+    await saveStoredInvoice(
+      {
+        mode: input.candidate.mode,
+        ownerId: input.candidate.paymentId,
+        ownerType: "payment",
+        provider: "eboekhouden",
+        providerCustomerId: null,
+        providerDocumentUrl: input.invoice.urlPdfFile ?? null,
+        providerInvoiceId: invoiceId,
+        providerInvoiceNumber: invoiceNumber,
+        providerSnapshot: input.invoice as Record<string, unknown>,
+        syncedAt: new Date().toISOString(),
+        tenantId: input.candidate.tenantId,
+      },
+      tx,
+    );
 
     await writeAuditLog(
       {
@@ -128,6 +153,7 @@ export async function storeFirstPaymentInvoiceCreationSuccess(input: {
       where status = 'open'
         and payment_id = ${input.candidate.paymentId}
         and payload ->> 'kind' = 'first_payment_invoice_creation_failed'
+        and payload ->> 'tenantId' = ${input.candidate.tenantId}
     `);
 
     return openAlert(
@@ -149,6 +175,7 @@ export async function storeFirstPaymentInvoiceCreationSuccess(input: {
         },
         severity: "info",
         subscriptionId: input.candidate.subscriptionId,
+        tenantId: input.candidate.tenantId,
         title:
           source === "created"
             ? "First-payment invoice created"
@@ -182,6 +209,7 @@ export async function storeFirstPaymentInvoiceCreationFailure(input: {
         )}::jsonb,
         updated_at = now()
       where id = ${input.candidate.paymentId}
+        and tenant_id = ${input.candidate.tenantId}
         and invoice_state = 'invoice_creating'
     `);
 
@@ -220,6 +248,7 @@ export async function storeFirstPaymentInvoiceCreationFailure(input: {
         },
         severity: "warning",
         subscriptionId: input.candidate.subscriptionId,
+        tenantId: input.candidate.tenantId,
         title: "First-payment invoice creation failed",
       },
       tx,

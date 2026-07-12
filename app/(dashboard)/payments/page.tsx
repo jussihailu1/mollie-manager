@@ -2,6 +2,7 @@ import { PaymentsWorkspace } from "@/components/payments-workspace";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { getSingleSearchParam } from "@/lib/format";
 import { listCustomers, listPayments } from "@/lib/onboarding/data";
+import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 import { toUiCustomerRecord, toUiPaymentRecord } from "@/lib/ui-data";
 
 export default async function PaymentsPage({
@@ -9,11 +10,13 @@ export default async function PaymentsPage({
 }: Readonly<{
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
+  const { currentTenant } = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
+  const tenantId = currentTenant.id;
   const [resolvedSearchParams, customersResult, paymentsResult] = await Promise.all([
     searchParams,
-    listCustomers({ mode: selectedMode }),
-    listPayments({ mode: selectedMode }),
+    listCustomers({ mode: selectedMode, tenantId }),
+    listPayments({ mode: selectedMode, tenantId }),
   ]);
 
   return (

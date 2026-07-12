@@ -15,11 +15,13 @@ const uiSource = readFileSync(resolve("components/customer-flow-dialogs.tsx"), "
 
 describe("customer notification history scope", () => {
   it("loads typed history only for the authenticated customer and selected mode", () => {
-    assert.match(routeSource, /requireViewerSession/);
-    assert.match(routeSource, /getCustomerDetail\(customerId, selectedMode\)/);
+    assert.match(routeSource, /getCurrentTenantSelectionForViewer/);
+    assert.match(routeSource, /getCustomerDetail\(customerId, selectedMode, tenantId\)/);
     assert.match(routeSource, /listCustomerNotificationHistory/);
     assert.match(querySource, /where cpn\.mode = \$\{options\.mode\}/);
     assert.match(querySource, /coalesce\(cpn\.customer_id, p\.customer_id\) = \$\{options\.customerId\}/);
+    assert.doesNotMatch(querySource, /getSingleTenantIdOrThrow/);
+    assert.match(querySource, /tenantId: string;/);
   });
 
   it("excludes recipient, error, lease, payload, and metadata fields", () => {

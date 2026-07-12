@@ -39,6 +39,12 @@ describe("customer activity timeline source", () => {
     assert.doesNotMatch(source, /authorization|secret/i);
   });
 
+  it("requires explicit tenant input and does not fall back to a single tenant", () => {
+    assert.match(source, /tenantId: string;/);
+    assert.doesNotMatch(source, /tenantId\?: string;/);
+    assert.doesNotMatch(source, /getSingleTenantIdOrThrow/);
+  });
+
   it("records withdrawn subscription requests as timeline-safe history", () => {
     assert.match(source, /Cancellation request withdrawn/);
     assert.match(source, /Subscription operation request was withdrawn before any provider change/);

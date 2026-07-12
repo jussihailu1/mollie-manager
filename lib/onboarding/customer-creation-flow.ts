@@ -2,10 +2,11 @@ import { Locale } from "@mollie/api-client";
 import { sql } from "drizzle-orm";
 
 import { writeAuditLog } from "@/lib/audit";
+import { upsertCustomerAccountingLink } from "@/lib/customer-accounting-links";
 import { normalizeCustomerNoteBody } from "@/lib/customer-note-policy";
 import { transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
-import { getMollieClient } from "@/lib/mollie/client";
+import { getTenantMollieClient } from "@/lib/mollie/client";
 import { assertRelationIsAvailable, updateRelationFromLocalFields } from "@/lib/onboarding/action-helpers";
 import { toCustomerRelationFields } from "@/lib/onboarding/customer-relation-fields";
 
@@ -24,7 +25,14 @@ type CreateCustomerFlowInput = {
 export async function createCustomerFlow(input: {
   input: CreateCustomerFlowInput;
   mode: MollieMode;
+  tenantId?: string;
 }) {
+  const tenantId = input.tenantId;
+
+  if (!tenantId) {
+    throw new Error("Tenant id is required.");
+  }
+
   const localCustomerId = crypto.randomUUID();
   const relationFields = toCustomerRelationFields(input.input);
   const relationIdToLink =
@@ -34,15 +42,19 @@ export async function createCustomerFlow(input: {
   const normalizedNote = normalizeCustomerNoteBody(input.input.notes ?? "");
 
   if (relationIdToLink) {
-    await assertRelationIsAvailable(relationIdToLink, input.mode);
+    await assertRelationIsAvailable(relationIdToLink, input.mode, undefined, tenantId);
   }
 
   const linkedRelation =
     relationIdToLink
-      ? await updateRelationFromLocalFields(relationIdToLink, relationFields)
+      ? await updateRelationFromLocalFields(
+          relationIdToLink,
+          relationFields,
+          tenantId,
+        )
       : null;
 
-  const mollie = getMollieClient(input.mode);
+  const mollie = await getTenantMollieClient(tenantId, input.mode);
   const createdCustomer = await mollie.customers.create({
     email: input.input.email,
     idempotencyKey: crypto.randomUUID(),
@@ -61,13 +73,9 @@ export async function createCustomerFlow(input: {
     await client.execute(sql`
       insert into customers (
         id,
+        tenant_id,
         mode,
         mollie_customer_id,
-        eboekhouden_relation_id,
-        eboekhouden_relation_code,
-        eboekhouden_link_status,
-        eboekhouden_synced_at,
-        eboekhouden_relation_snapshot,
         full_name,
         email,
         locale,
@@ -77,13 +85,9 @@ export async function createCustomerFlow(input: {
         last_synced_at
       ) values (
         ${localCustomerId},
+        ${tenantId},
         ${input.mode},
         ${createdCustomer.id},
-        ${linkedRelation?.id ?? null},
-        ${linkedRelation?.code ?? null},
-        ${linkedRelation ? "linked" : "unlinked"}::eboekhouden_link_status,
-        ${linkedRelation ? sql`now()` : null},
-        ${JSON.stringify(linkedRelation ?? {})}::jsonb,
         ${input.input.businessName},
         ${input.input.email},
         ${createdCustomer.locale ?? "nl_NL"},
@@ -100,16 +104,33 @@ export async function createCustomerFlow(input: {
       )
     `);
 
+    await upsertCustomerAccountingLink(
+      {
+        customerId: localCustomerId,
+        linkStatus: linkedRelation ? "linked" : "unlinked",
+        mode: input.mode,
+        provider: "eboekhouden",
+        providerCustomerCode: linkedRelation?.code ?? null,
+        providerCustomerId: linkedRelation?.id ? String(linkedRelation.id) : null,
+        providerSnapshot: (linkedRelation ?? {}) as Record<string, unknown>,
+        syncedAt: linkedRelation ? new Date().toISOString() : null,
+        tenantId,
+      },
+      client,
+    );
+
     if (normalizedNote) {
       await client.execute(sql`
         insert into customer_notes (
           id,
+          tenant_id,
           mode,
           customer_id,
           body,
           source
         ) values (
           ${crypto.randomUUID()},
+          ${tenantId},
           ${input.mode},
           ${localCustomerId},
           ${normalizedNote},

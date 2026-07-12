@@ -53,17 +53,20 @@ function buildReference(candidate: FirstPaymentInvoiceCandidate) {
 
 export async function createEboekhoudenInvoiceForFirstPayment(
   paymentId: string,
-  options?: {
+  options: {
     actor?: FirstPaymentInvoiceActor;
+    tenantId: string;
     settings?: TenantBillingSettings | null;
   },
 ): Promise<CreateFirstPaymentInvoiceResult> {
-  const actor = options?.actor ?? {
+  const actor = options.actor ?? {
     kind: "system",
   };
   const [settings, candidate] = await Promise.all([
-    options?.settings ? Promise.resolve(options.settings) : getTenantBillingSettings(),
-    getFirstPaymentInvoiceCandidate(paymentId),
+    options.settings
+      ? Promise.resolve(options.settings)
+      : getTenantBillingSettings(options.tenantId),
+    getFirstPaymentInvoiceCandidate(paymentId, options.tenantId),
   ]);
 
   if (!billingSettingsAreComplete(settings)) {
@@ -95,6 +98,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
     actor,
     mode: candidate.mode,
     paymentId,
+    tenantId: options.tenantId,
   });
 
   if (!claimedPaymentId) {
@@ -129,6 +133,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       date: invoiceDate,
       reference,
       relationId: eligibleCandidate.eboekhoudenRelationId,
+      tenantId: candidate.tenantId,
     });
 
     if (existing.status === "ambiguous") {
@@ -149,12 +154,13 @@ export async function createEboekhoudenInvoiceForFirstPayment(
           actor,
           customerEmail: candidate.customerEmail,
           customerId: candidate.customerId,
-          eboekhoudenInvoiceId: storedRecoveredInvoice.invoiceId,
-          eboekhoudenInvoiceNumber: storedRecoveredInvoice.invoiceNumber,
-          eboekhoudenInvoicePdfUrl: existing.invoice.urlPdfFile ?? null,
           entityId: candidate.paymentId,
+          invoiceDocumentUrl: existing.invoice.urlPdfFile ?? null,
+          invoiceId: storedRecoveredInvoice.invoiceId,
+          invoiceNumber: storedRecoveredInvoice.invoiceNumber,
           mode: candidate.mode,
           subscriptionId: candidate.subscriptionId,
+          tenantId: candidate.tenantId,
         }),
       );
 
@@ -174,7 +180,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       throw new Error("Stored onboarding consent snapshot is invalid.");
     }
 
-    const invoice = await createEboekhoudenInvoice({
+    const invoiceInput: Parameters<typeof createEboekhoudenInvoice>[0] = {
       date: invoiceDate,
       inExVat: "EX",
       items: [
@@ -191,7 +197,11 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       relationId: eligibleCandidate.eboekhoudenRelationId,
       templateId: settings!.invoiceTemplateId!,
       termOfPayment: 0,
-    });
+    };
+    const invoice = await createEboekhoudenInvoice(
+      invoiceInput,
+      candidate.tenantId,
+    );
     const storedInvoice = await storeFirstPaymentInvoiceCreationSuccess({
       actor,
       candidate,
@@ -202,12 +212,13 @@ export async function createEboekhoudenInvoiceForFirstPayment(
         actor,
         customerEmail: candidate.customerEmail,
         customerId: candidate.customerId,
-        eboekhoudenInvoiceId: storedInvoice.invoiceId,
-        eboekhoudenInvoiceNumber: storedInvoice.invoiceNumber,
-        eboekhoudenInvoicePdfUrl: invoice.urlPdfFile ?? null,
         entityId: candidate.paymentId,
+        invoiceDocumentUrl: invoice.urlPdfFile ?? null,
+        invoiceId: storedInvoice.invoiceId,
+        invoiceNumber: storedInvoice.invoiceNumber,
         mode: candidate.mode,
         subscriptionId: candidate.subscriptionId,
+        tenantId: candidate.tenantId,
       }),
     );
 
@@ -223,6 +234,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
         date: invoiceDate,
         reference,
         relationId: eligibleCandidate.eboekhoudenRelationId,
+        tenantId: candidate.tenantId,
       });
 
       if (existing.status === "found") {
@@ -237,12 +249,13 @@ export async function createEboekhoudenInvoiceForFirstPayment(
             actor,
             customerEmail: candidate.customerEmail,
             customerId: candidate.customerId,
-            eboekhoudenInvoiceId: storedRecoveredInvoice.invoiceId,
-            eboekhoudenInvoiceNumber: storedRecoveredInvoice.invoiceNumber,
-            eboekhoudenInvoicePdfUrl: existing.invoice.urlPdfFile ?? null,
             entityId: candidate.paymentId,
+            invoiceDocumentUrl: existing.invoice.urlPdfFile ?? null,
+            invoiceId: storedRecoveredInvoice.invoiceId,
+            invoiceNumber: storedRecoveredInvoice.invoiceNumber,
             mode: candidate.mode,
             subscriptionId: candidate.subscriptionId,
+            tenantId: candidate.tenantId,
           }),
         );
 

@@ -24,6 +24,7 @@ import {
   serializeIntegrationError,
   getLocalCustomer,
 } from "@/lib/onboarding/action-helpers";
+import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 export const repairCustomerBillingState = repairCustomerBillingStateImpl;
 
 const createCustomerSchema = z.object({
@@ -102,6 +103,7 @@ export async function archiveCustomerAction(formData: FormData) {
   }
 
   const session = await requireViewerSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
   const returnTo = updateActionPath(parsed.data.returnTo, {
     focus: null,
@@ -112,6 +114,7 @@ export async function archiveCustomerAction(formData: FormData) {
       kind: "user",
     },
     customerId: parsed.data.customerId,
+    tenantId: tenantSelection.currentTenant.id,
     mode: selectedMode,
   });
 
@@ -150,6 +153,7 @@ export async function restoreCustomerAction(formData: FormData) {
   }
 
   const session = await requireViewerSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
   const returnTo = updateActionPath(parsed.data.returnTo, {
     focus: parsed.data.customerId,
@@ -161,6 +165,7 @@ export async function restoreCustomerAction(formData: FormData) {
       kind: "user",
     },
     customerId: parsed.data.customerId,
+    tenantId: tenantSelection.currentTenant.id,
     mode: selectedMode,
   });
 
@@ -205,12 +210,14 @@ export async function createCustomerAction(formData: FormData) {
   }
 
   await requireViewerSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
 
   try {
     const selectedMode = await getSelectedMollieMode();
     const result = await createCustomerFlow({
       input: parsed.data,
       mode: selectedMode,
+      tenantId: tenantSelection.currentTenant.id,
     });
 
     const returnTo = updateActionPath(parsed.data.returnTo, {
@@ -253,11 +260,16 @@ export async function linkEboekhoudenRelationAction(formData: FormData) {
   }
 
   const session = await requireViewerSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
   const returnTo = updateActionPath(parsed.data.returnTo, {
     focus: parsed.data.customerId,
   });
-  const customer = await getLocalCustomer(parsed.data.customerId, selectedMode);
+  const customer = await getLocalCustomer(
+    parsed.data.customerId,
+    selectedMode,
+    tenantSelection.currentTenant.id,
+  );
 
   if (!customer) {
     redirectWithMessage(returnTo, {
@@ -287,6 +299,7 @@ export async function linkEboekhoudenRelationAction(formData: FormData) {
         notes: parsed.data.notes,
         phone: parsed.data.phone,
       },
+      tenantId: tenantSelection.currentTenant.id,
       mode: selectedMode,
     });
 
@@ -325,6 +338,7 @@ export async function createFirstPaymentAction(formData: FormData) {
   }
 
   const session = await requireViewerSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
 
   const selectedMode = await getSelectedMollieMode();
   const returnTo = updateActionPath(parsed.data.returnTo, {
@@ -338,6 +352,7 @@ export async function createFirstPaymentAction(formData: FormData) {
         kind: "user",
       },
       customerId: parsed.data.customerId,
+      tenantId: tenantSelection.currentTenant.id,
       mode: selectedMode,
       planInput: {
         firstPaymentMode: parsed.data.firstPaymentMode,
@@ -396,6 +411,7 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
   }
 
   const session = await requireViewerSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
   const returnTo = updateActionPath(parsed.data.returnTo, {
     focus: parsed.data.customerId,
@@ -408,6 +424,7 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
         kind: "user",
       },
       customerId: parsed.data.customerId,
+      tenantId: tenantSelection.currentTenant.id,
       mode: selectedMode,
     });
 
@@ -452,6 +469,7 @@ export async function createSubscriptionAction(formData: FormData) {
   }
 
   const session = await requireViewerSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
   const returnTo = updateActionPath(parsed.data.returnTo, {
     focus: parsed.data.customerId,
@@ -465,6 +483,7 @@ export async function createSubscriptionAction(formData: FormData) {
       },
       customerId: parsed.data.customerId,
       mode: selectedMode,
+      tenantId: tenantSelection.currentTenant.id,
       trigger: "manual",
     });
     const feedback = describeSubscriptionActivationResult(result);

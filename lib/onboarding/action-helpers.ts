@@ -50,8 +50,9 @@ export function serializeIntegrationError(error: unknown) {
 export async function updateRelationFromLocalFields(
   relationId: number,
   fields: LocalRelationFields,
+  tenantId: string,
 ) {
-  const relation = await getEboekhoudenRelation(relationId);
+  const relation = await getEboekhoudenRelation(relationId, tenantId);
 
   if (!shouldPatchEboekhoudenRelation(relation, fields)) {
     return relation;
@@ -60,13 +61,18 @@ export async function updateRelationFromLocalFields(
   await updateEboekhoudenRelation(
     relationId,
     localFieldsToRelationPatch(fields, relation),
+    tenantId,
   );
 
-  return getEboekhoudenRelation(relationId);
+  return getEboekhoudenRelation(relationId, tenantId);
 }
 
-export async function getLocalCustomer(customerId: string, mode: "live" | "test") {
-  const detail = await getCustomerDetail(customerId, mode);
+export async function getLocalCustomer(
+  customerId: string,
+  mode: "live" | "test",
+  tenantId?: string,
+) {
+  const detail = await getCustomerDetail(customerId, mode, tenantId);
   return detail?.customer ?? null;
 }
 
@@ -74,22 +80,32 @@ export async function assertRelationIsAvailable(
   relationId: number,
   mode: "live" | "test",
   excludeCustomerId?: string,
+  tenantId?: string,
 ) {
+  if (!tenantId) {
+    throw new Error("Tenant id is required.");
+  }
+
+  const resolvedTenantId = tenantId;
   const existing = await transaction(async (client) => {
     const result = excludeCustomerId
       ? await client.execute<{ id: string }>(sql`
-          select id
-          from customers
-          where mode = ${mode}
-            and eboekhouden_relation_id = ${relationId}
-            and id <> ${excludeCustomerId}
+          select customer_id as id
+          from customer_accounting_links
+          where tenant_id = ${resolvedTenantId}
+            and mode = ${mode}
+            and provider = 'eboekhouden'
+            and provider_customer_id = ${String(relationId)}
+            and customer_id <> ${excludeCustomerId}
           limit 1
         `)
       : await client.execute<{ id: string }>(sql`
-        select id
-        from customers
-        where mode = ${mode}
-          and eboekhouden_relation_id = ${relationId}
+        select customer_id as id
+        from customer_accounting_links
+        where tenant_id = ${resolvedTenantId}
+          and mode = ${mode}
+          and provider = 'eboekhouden'
+          and provider_customer_id = ${String(relationId)}
         limit 1
       `);
 

@@ -58,6 +58,14 @@ function toModeParam(mode?: DashboardModeFilter) {
   return !mode || mode === "all" ? null : mode;
 }
 
+function requireTenantId(tenantId?: string) {
+  if (!tenantId) {
+    throw new Error("Explicit tenant context is required.");
+  }
+
+  return tenantId;
+}
+
 const alertModeExpression = sql<"live" | "test" | null>`
   coalesce(
     p.mode,
@@ -80,7 +88,7 @@ const customerBusinessNameExpression = sql<string | null>`
   )
 `;
 
-const listAlertInboxByMode = cache(async (mode: DashboardModeFilter) => {
+const listAlertInboxByMode = cache(async (mode: DashboardModeFilter, tenantId: string) => {
   const modeParam = toModeParam(mode);
   const result = await getDb().execute<AlertInboxItem>(sql`
       select
@@ -104,12 +112,30 @@ const listAlertInboxByMode = cache(async (mode: DashboardModeFilter) => {
         end as "href",
         ${alertModeExpression} as "mode"
       from alerts a
-      left join payments p on p.id = a.payment_id
-      left join subscriptions s on s.id = a.subscription_id
-      left join customers customer on customer.id = a.customer_id
-      left join customers fallback_customer on fallback_customer.id = coalesce(p.customer_id, s.customer_id)
-      left join customers c on c.id = coalesce(customer.id, fallback_customer.id)
+      left join payments p
+        on p.id = a.payment_id
+        and p.tenant_id = ${tenantId}
+      left join subscriptions s
+        on s.id = a.subscription_id
+        and s.tenant_id = ${tenantId}
+      left join customers customer
+        on customer.id = a.customer_id
+        and customer.tenant_id = ${tenantId}
+      left join customers fallback_customer
+        on fallback_customer.id = coalesce(p.customer_id, s.customer_id)
+        and fallback_customer.tenant_id = ${tenantId}
+      left join customers c
+        on c.id = coalesce(customer.id, fallback_customer.id)
+        and c.tenant_id = ${tenantId}
       where (${modeParam}::mollie_mode is null or ${alertModeExpression} = ${modeParam})
+        and (
+          coalesce(a.payload ->> 'tenantId', '') = ${tenantId}
+          or
+          customer.id is not null
+          or fallback_customer.id is not null
+          or p.id is not null
+          or s.id is not null
+        )
       order by
         case a.status
           when 'open' then 0
@@ -122,13 +148,17 @@ const listAlertInboxByMode = cache(async (mode: DashboardModeFilter) => {
   return result.rows;
 });
 
-export async function listAlertInbox(options?: {
+export async function listAlertInbox(options: {
   mode?: DashboardModeFilter;
+  tenantId: string;
 }) {
-  return listAlertInboxByMode(options?.mode ?? "all");
+  return listAlertInboxByMode(options.mode ?? "all", options.tenantId);
 }
 
-const listRecentWebhookEventsByMode = cache(async (mode: DashboardModeFilter) => {
+const listRecentWebhookEventsByMode = cache(async (
+  mode: DashboardModeFilter,
+  tenantId: string,
+) => {
   const modeParam = toModeParam(mode);
   const result = await getDb().execute<WebhookEventOverview>(sql`
       select
@@ -143,6 +173,7 @@ const listRecentWebhookEventsByMode = cache(async (mode: DashboardModeFilter) =>
         processed_at as "processedAt"
       from webhook_events
       where (${modeParam}::mollie_mode is null or mode = ${modeParam})
+        and tenant_id = ${tenantId}
       order by received_at desc
       limit 12
     `);
@@ -150,17 +181,19 @@ const listRecentWebhookEventsByMode = cache(async (mode: DashboardModeFilter) =>
   return result.rows;
 });
 
-export async function listRecentWebhookEvents(options?: {
+export async function listRecentWebhookEvents(options: {
   mode?: DashboardModeFilter;
+  tenantId: string;
 }) {
-  return listRecentWebhookEventsByMode(options?.mode ?? "all");
+  return listRecentWebhookEventsByMode(options.mode ?? "all", options.tenantId);
 }
 
-export async function listFailedWebhookEvents(options?: {
+export async function listFailedWebhookEvents(options: {
   limit?: number;
   mode?: DashboardModeFilter;
+  tenantId: string;
 }) {
-  const events = await listRecentWebhookEventsByMode(options?.mode ?? "all");
+  const events = await listRecentWebhookEventsByMode(options.mode ?? "all", options.tenantId);
   const limit = Math.max(1, Math.min(options?.limit ?? 8, 20));
 
   return events
@@ -170,7 +203,10 @@ export async function listFailedWebhookEvents(options?: {
     .slice(0, limit);
 }
 
-const getReliabilitySnapshotByMode = cache(async (mode: DashboardModeFilter) => {
+const getReliabilitySnapshotByMode = cache(async (
+  mode: DashboardModeFilter,
+  tenantId: string,
+) => {
   const modeParam = toModeParam(mode);
   const result = await getDb().execute<ReliabilitySnapshot>(sql`
       with alert_records as (
@@ -178,11 +214,29 @@ const getReliabilitySnapshotByMode = cache(async (mode: DashboardModeFilter) => 
           a.status,
           ${alertModeExpression} as mode
         from alerts a
-        left join payments p on p.id = a.payment_id
-        left join subscriptions s on s.id = a.subscription_id
-        left join customers customer on customer.id = a.customer_id
-        left join customers fallback_customer on fallback_customer.id = coalesce(p.customer_id, s.customer_id)
-        left join customers c on c.id = coalesce(customer.id, fallback_customer.id)
+        left join payments p
+          on p.id = a.payment_id
+          and p.tenant_id = ${tenantId}
+        left join subscriptions s
+          on s.id = a.subscription_id
+          and s.tenant_id = ${tenantId}
+        left join customers customer
+          on customer.id = a.customer_id
+          and customer.tenant_id = ${tenantId}
+        left join customers fallback_customer
+          on fallback_customer.id = coalesce(p.customer_id, s.customer_id)
+          and fallback_customer.tenant_id = ${tenantId}
+        left join customers c
+          on c.id = coalesce(customer.id, fallback_customer.id)
+          and c.tenant_id = ${tenantId}
+        where (
+          coalesce(a.payload ->> 'tenantId', '') = ${tenantId}
+          or
+          customer.id is not null
+          or fallback_customer.id is not null
+          or p.id is not null
+          or s.id is not null
+        )
       )
       select
         count(*) filter (
@@ -198,16 +252,19 @@ const getReliabilitySnapshotByMode = cache(async (mode: DashboardModeFilter) => 
           from webhook_events w
           where w.processing_status = 'failed'
             and (${modeParam}::mollie_mode is null or w.mode = ${modeParam})
+            and w.tenant_id = ${tenantId}
         ) as "failedWebhookCount",
         (
           select max(w.received_at)
           from webhook_events w
           where (${modeParam}::mollie_mode is null or w.mode = ${modeParam})
+            and w.tenant_id = ${tenantId}
         ) as "lastReceivedWebhookAt",
         (
           select max(w.processed_at)
           from webhook_events w
           where (${modeParam}::mollie_mode is null or w.mode = ${modeParam})
+            and w.tenant_id = ${tenantId}
         ) as "lastProcessedWebhookAt"
       from alert_records
     `);
@@ -225,11 +282,16 @@ const getReliabilitySnapshotByMode = cache(async (mode: DashboardModeFilter) => 
 
 export async function getReliabilitySnapshot(options?: {
   mode?: DashboardModeFilter;
+  tenantId?: string;
 }) {
-  return getReliabilitySnapshotByMode(options?.mode ?? "all");
+  const tenantId = requireTenantId(options?.tenantId);
+  return getReliabilitySnapshotByMode(options?.mode ?? "all", tenantId);
 }
 
-const listRecentAuditActivityByMode = cache(async (mode: DashboardModeFilter) => {
+const listRecentAuditActivityByMode = cache(async (
+  mode: DashboardModeFilter,
+  tenantId: string,
+) => {
   const modeParam = toModeParam(mode);
   const result = await getDb().execute<AuditActivityItem>(sql`
       select
@@ -243,6 +305,104 @@ const listRecentAuditActivityByMode = cache(async (mode: DashboardModeFilter) =>
         created_at as "createdAt"
       from audit_logs
       where (${modeParam}::mollie_mode is null or mode = ${modeParam})
+        and (
+          exists (
+            select 1
+            from customers c
+            where audit_logs.entity_type = 'customer'
+              and c.id = audit_logs.entity_id
+              and c.tenant_id = ${tenantId}
+          )
+          or exists (
+            select 1
+            from payments p
+            where audit_logs.entity_type = 'payment'
+              and p.id = audit_logs.entity_id
+              and p.tenant_id = ${tenantId}
+          )
+          or exists (
+            select 1
+            from subscriptions s
+            where audit_logs.entity_type = 'subscription'
+              and s.id = audit_logs.entity_id
+              and s.tenant_id = ${tenantId}
+          )
+          or exists (
+            select 1
+            from payment_links pl
+            where audit_logs.entity_type = 'payment_link'
+              and pl.id = audit_logs.entity_id
+              and pl.tenant_id = ${tenantId}
+          )
+          or exists (
+            select 1
+            from mandates m
+            where audit_logs.entity_type = 'mandate'
+              and m.id = audit_logs.entity_id
+              and m.tenant_id = ${tenantId}
+          )
+          or exists (
+            select 1
+            from subscription_operation_requests sor
+            where audit_logs.entity_type = 'subscription_operation_request'
+              and sor.id = audit_logs.entity_id
+              and sor.tenant_id = ${tenantId}
+          )
+          or exists (
+            select 1
+            from recurring_billing_schedules rbs
+            where audit_logs.entity_type = 'recurring_billing_schedule'
+              and rbs.id = audit_logs.entity_id
+              and rbs.tenant_id = ${tenantId}
+          )
+          or exists (
+            select 1
+            from customer_notes cn
+            where audit_logs.entity_type = 'customer_note'
+              and cn.id = audit_logs.entity_id
+              and cn.tenant_id = ${tenantId}
+          )
+          or exists (
+            select 1
+            from alerts a
+            left join payments p
+              on p.id = a.payment_id
+              and p.tenant_id = ${tenantId}
+            left join subscriptions s
+              on s.id = a.subscription_id
+              and s.tenant_id = ${tenantId}
+            left join customers customer
+              on customer.id = a.customer_id
+              and customer.tenant_id = ${tenantId}
+            left join customers fallback_customer
+              on fallback_customer.id = coalesce(p.customer_id, s.customer_id)
+              and fallback_customer.tenant_id = ${tenantId}
+            where audit_logs.entity_type = 'alert'
+              and a.id = audit_logs.entity_id
+              and (
+                coalesce(a.payload ->> 'tenantId', '') = ${tenantId}
+                or
+                customer.id is not null
+                or fallback_customer.id is not null
+                or p.id is not null
+                or s.id is not null
+              )
+          )
+          or exists (
+            select 1
+            from webhook_events w
+            where audit_logs.entity_type = 'webhook_event'
+              and w.id = audit_logs.entity_id
+              and w.tenant_id = ${tenantId}
+          )
+          or exists (
+            select 1
+            from tenants t
+            where audit_logs.entity_type = 'tenant_recurring_billing_cron'
+              and t.id = audit_logs.entity_id
+              and t.id = ${tenantId}
+          )
+        )
       order by created_at desc
       limit 8
     `);
@@ -250,8 +410,9 @@ const listRecentAuditActivityByMode = cache(async (mode: DashboardModeFilter) =>
   return result.rows;
 });
 
-export async function listRecentAuditActivity(options?: {
+export async function listRecentAuditActivity(options: {
   mode?: DashboardModeFilter;
+  tenantId: string;
 }) {
-  return listRecentAuditActivityByMode(options?.mode ?? "all");
+  return listRecentAuditActivityByMode(options.mode ?? "all", options.tenantId);
 }

@@ -34,7 +34,8 @@ Example:
 ## Invoice Automation Ops
 
 - `npm run ops:invoice-check -- <mode> <limit>`: run automation evidence checks
-- `npm run ops:invoice-readiness -- <mode>`: validate environment and scheduler readiness
+- `npm run ops:invoice-readiness`: validate platform environment and scheduler readiness
+- `npm run tenant:readiness -- --tenant-id <tenant-id>`: validate tenant-owned live readiness for the active invoice provider, including Mollie Sales Invoices activation when `Mollie` is active
 - `npm run ops:invoice-backlog -- <mode> <limit>`: report failed and unsent invoice rows
 - `npm run ops:invoice-gate -- <mode> <limit> <maxUnresolvedAlerts> <maxPermanentFailures> <maxDueDeliveryRetries>`: pass or fail automation gate
 - `npm run ops:invoice-autonomy-report -- <mode> <backlogLimit> <gateLimit>`: combined readiness, backlog, and gate report

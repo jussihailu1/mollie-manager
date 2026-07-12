@@ -24,6 +24,7 @@ export async function listCustomerNotificationHistory(options: {
   customerId: string;
   limit?: number;
   mode: MollieMode;
+  tenantId: string;
 }) {
   const limit = Math.max(1, Math.min(options.limit ?? 25, 100));
   const result = await getDb().execute<CustomerNotificationHistoryItem>(sql`
@@ -43,6 +44,7 @@ export async function listCustomerNotificationHistory(options: {
     from customer_payment_notifications cpn
     inner join payments p
       on p.id = cpn.payment_id
+      and p.tenant_id = ${options.tenantId}
       and p.mode = cpn.mode
     where cpn.mode = ${options.mode}
       and coalesce(cpn.customer_id, p.customer_id) = ${options.customerId}

@@ -33,7 +33,19 @@ function toCount(value: unknown) {
   return 0;
 }
 
-export async function getInvoiceAutomationSnapshot(mode: MollieMode) {
+function requireTenantId(tenantId?: string) {
+  if (!tenantId) {
+    throw new Error("Explicit tenant context is required.");
+  }
+
+  return tenantId;
+}
+
+export async function getInvoiceAutomationSnapshot(
+  mode: MollieMode,
+  tenantId?: string,
+) {
+  const resolvedTenantId = requireTenantId(tenantId);
   const result = await getDb().execute<{
     dueFirstPaymentPendingCount: number | string;
     dueRecurringPendingCount: number | string;
@@ -49,6 +61,7 @@ export async function getInvoiceAutomationSnapshot(mode: MollieMode) {
         (p.metadata ->> 'invoiceCreationError') as invoice_error
       from payments p
       where p.mode = ${mode}
+        and p.tenant_id = ${resolvedTenantId}
         and p.payment_type = 'first'
     ),
     recurring_rows as (
@@ -59,6 +72,7 @@ export async function getInvoiceAutomationSnapshot(mode: MollieMode) {
         (rbs.metadata ->> 'invoiceCreationError') as invoice_error
       from recurring_billing_schedules rbs
       where rbs.mode = ${mode}
+        and rbs.tenant_id = ${resolvedTenantId}
     )
     select
       (select count(*) from first_payment_rows where invoice_state = 'pending_invoice') as "dueFirstPaymentPendingCount",
@@ -102,7 +116,9 @@ export async function getInvoiceAutomationSnapshot(mode: MollieMode) {
 
 export async function getInvoiceAutomationCronHeartbeat(
   mode: MollieMode,
+  tenantId?: string,
 ): Promise<InvoiceAutomationCronHeartbeat> {
+  const resolvedTenantId = requireTenantId(tenantId);
   const result = await getDb().execute<{
     lastCronFailureAt: string | null;
     lastCronRunAt: string | null;
@@ -112,25 +128,32 @@ export async function getInvoiceAutomationCronHeartbeat(
     select
       max(al.created_at) filter (
         where al.action = 'recurring_invoice.cron_batch_create'
+          and al.entity_type = 'tenant_recurring_billing_cron'
       ) as "lastCronRunAt",
       max(al.created_at) filter (
         where al.action = 'recurring_invoice.cron_batch_create'
+          and al.entity_type = 'tenant_recurring_billing_cron'
           and al.outcome = 'success'
       ) as "lastCronSuccessAt",
       max(al.created_at) filter (
         where al.action = 'recurring_invoice.cron_batch_create'
+          and al.entity_type = 'tenant_recurring_billing_cron'
           and al.outcome = 'failure'
       ) as "lastCronFailureAt",
       (
-        select al2.outcome
-        from audit_logs al2
-        where al2.mode = ${mode}
+      select al2.outcome
+      from audit_logs al2
+      where al2.mode = ${mode}
+        and al2.entity_type = 'tenant_recurring_billing_cron'
+        and al2.entity_id = ${resolvedTenantId}
           and al2.action = 'recurring_invoice.cron_batch_create'
         order by al2.created_at desc
         limit 1
       ) as "lastCronRunOutcome"
     from audit_logs al
     where al.mode = ${mode}
+      and al.entity_type = 'tenant_recurring_billing_cron'
+      and al.entity_id = ${resolvedTenantId}
       and al.action = 'recurring_invoice.cron_batch_create'
   `);
   const row = result.rows[0];

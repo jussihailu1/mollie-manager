@@ -12,6 +12,11 @@ export type WebhookResourceSyncResult = {
   subscriptionId?: string | null;
 };
 
+export type WebhookResourceContext = {
+  mode: MollieMode;
+  tenantId: string;
+};
+
 export type WebhookEventInsertInput = {
   id: string;
   mode: MollieMode;
@@ -19,6 +24,7 @@ export type WebhookEventInsertInput = {
   requestId: string | null;
   resourceId: string;
   resourceType: string | null;
+  tenantId: string | null;
   topic: string;
 };
 
@@ -34,13 +40,16 @@ export type WebhookEventFailedInput = {
 
 export type MollieWebhookProcessorDependencies = {
   createWebhookEventId?: () => string;
-  findExistingResourceMode: (resourceId: string) => Promise<MollieMode | null>;
+  findExistingResourceContext: (
+    resourceId: string,
+  ) => Promise<WebhookResourceContext | null>;
   insertWebhookEvent: (input: WebhookEventInsertInput) => Promise<void>;
   markWebhookEventFailed: (input: WebhookEventFailedInput) => Promise<void>;
   markWebhookEventProcessed: (input: WebhookEventProcessedInput) => Promise<void>;
   syncResource: (
     resourceId: string,
     preferredMode: MollieMode | null,
+    tenantId: string | null,
   ) => Promise<WebhookResourceSyncResult>;
 };
 
@@ -121,20 +130,39 @@ export async function handleMollieWebhookRequest(
   }
 
   const webhookEventId = dependencies.createWebhookEventId?.() ?? crypto.randomUUID();
-  const existingModeResult = await dependencies.findExistingResourceMode(parsed.resourceId);
+  const existingResourceContext = await dependencies.findExistingResourceContext(parsed.resourceId);
 
   await dependencies.insertWebhookEvent({
     id: webhookEventId,
-    mode: existingModeResult ?? "test",
+    mode: existingResourceContext?.mode ?? "test",
     payload: parsed.payload,
     requestId: request.headers.get("x-request-id") ?? null,
     resourceId: parsed.resourceId,
     resourceType: parsed.resourceType,
+    tenantId: existingResourceContext?.tenantId ?? null,
     topic: parsed.resourceType ?? "mollie-webhook",
   });
 
+  if (!existingResourceContext?.tenantId) {
+    const errorMessage = "Webhook is not linked to a managed local resource.";
+
+    await dependencies.markWebhookEventFailed({
+      errorMessage,
+      id: webhookEventId,
+    });
+
+    return {
+      body: "Webhook processing failed",
+      status: 500,
+    };
+  }
+
   try {
-    const result = await dependencies.syncResource(parsed.resourceId, existingModeResult);
+    const result = await dependencies.syncResource(
+      parsed.resourceId,
+      existingResourceContext.mode,
+      existingResourceContext.tenantId,
+    );
 
     await dependencies.markWebhookEventProcessed({
       id: webhookEventId,

@@ -26,6 +26,7 @@ import {
   syncSubscriptionByMollieId,
 } from "@/lib/reliability/sync";
 import { repairReliabilityTarget } from "@/lib/reliability/repair";
+import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
 const redirectSchema = z.object({
   returnTo: z.string().trim().startsWith("/").default("/notifications"),
@@ -111,6 +112,7 @@ const alertModeExpression = sql<"live" | "test" | null>`
 async function processStoredWebhookResource(
   resourceId: string,
   mode: "live" | "test",
+  tenantId: string,
 ) {
   if (resourceId.startsWith("tr_")) {
     return syncPaymentByMollieId(resourceId, {
@@ -119,6 +121,7 @@ async function processStoredWebhookResource(
       },
       preferredMode: mode,
       strictMode: true,
+      tenantId,
     });
   }
 
@@ -129,6 +132,7 @@ async function processStoredWebhookResource(
       },
       preferredMode: mode,
       strictMode: true,
+      tenantId,
     });
   }
 
@@ -139,6 +143,7 @@ async function processStoredWebhookResource(
       },
       preferredMode: mode,
       strictMode: true,
+      tenantId,
     });
   }
 
@@ -149,6 +154,7 @@ async function updateAlertStatus(
   alertId: string,
   status: "open" | "acknowledged" | "resolved",
   mode: "live" | "test",
+  tenantId: string,
 ) {
   await getDb().execute(sql`
       update alerts
@@ -170,9 +176,18 @@ async function updateAlertStatus(
           select a.id
           from alerts a
           left join payments p on p.id = a.payment_id
+            and p.tenant_id = ${tenantId}
           left join subscriptions s on s.id = a.subscription_id
+            and s.tenant_id = ${tenantId}
           left join customers c on c.id = coalesce(a.customer_id, p.customer_id, s.customer_id)
+            and c.tenant_id = ${tenantId}
           where ${alertModeExpression} = ${mode}
+            and (
+              coalesce(a.payload ->> 'tenantId', '') = ${tenantId}
+              or p.id is not null
+              or s.id is not null
+              or c.id is not null
+            )
         )
     `);
 }
@@ -190,6 +205,7 @@ export async function runReconciliationAction(formData: FormData) {
   }
 
   const session = await requireAdvancedOperationsSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
 
   try {
@@ -200,6 +216,7 @@ export async function runReconciliationAction(formData: FormData) {
       },
       mode: selectedMode,
       reconciliationMode: parsed.data.reconciliationMode,
+      tenantId: tenantSelection.currentTenant.id,
     });
 
     const reconciliationLabel = formatReconciliationMode(parsed.data.reconciliationMode);
@@ -238,6 +255,7 @@ export async function replayWebhookEventAction(formData: FormData) {
   }
 
   const session = await requireAdvancedOperationsSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
 
   const result = await getDb().execute<StoredWebhookEvent>(sql`
@@ -250,6 +268,7 @@ export async function replayWebhookEventAction(formData: FormData) {
       from webhook_events
       where id = ${parsed.data.webhookEventId}
         and mode = ${selectedMode}
+        and tenant_id = ${tenantSelection.currentTenant.id}
       limit 1
     `);
   const event = result.rows[0];
@@ -261,7 +280,11 @@ export async function replayWebhookEventAction(formData: FormData) {
   }
 
   try {
-    await processStoredWebhookResource(event.resourceId, event.mode);
+    await processStoredWebhookResource(
+      event.resourceId,
+      event.mode,
+      tenantSelection.currentTenant.id,
+    );
 
     await getDb().execute(sql`
         update webhook_events
@@ -272,6 +295,7 @@ export async function replayWebhookEventAction(formData: FormData) {
           last_attempt_at = now(),
           processed_at = now()
         where id = ${event.id}
+          and tenant_id = ${tenantSelection.currentTenant.id}
       `);
 
     await writeAuditLog(
@@ -313,6 +337,7 @@ export async function replayWebhookEventAction(formData: FormData) {
           retry_count = retry_count + 1,
           last_attempt_at = now()
         where id = ${event.id}
+          and tenant_id = ${tenantSelection.currentTenant.id}
       `);
 
     await writeAuditLog(
@@ -358,6 +383,7 @@ export async function repairReliabilityTargetAction(formData: FormData) {
   }
 
   const session = await requireAdvancedOperationsSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
 
   try {
@@ -369,6 +395,7 @@ export async function repairReliabilityTargetAction(formData: FormData) {
       id: parsed.data.repairTargetId,
       kind: parsed.data.repairTargetKind,
       mode: selectedMode,
+      tenantId: tenantSelection.currentTenant.id,
     });
 
     revalidatePath("/settings");
@@ -404,6 +431,7 @@ export async function sendTestAlertAction(formData: FormData) {
   }
 
   const session = await requireAdvancedOperationsSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
 
   if (!notificationsAreConfigured()) {
@@ -439,11 +467,12 @@ export async function sendTestAlertAction(formData: FormData) {
           ${title},
           ${message},
           ${JSON.stringify({
-          kind: "manual_test",
-          mode: selectedMode,
-          requestedAt,
-          requestedBy: session.user.email ?? null,
-        })}::jsonb
+            kind: "manual_test",
+            mode: selectedMode,
+            requestedAt,
+            requestedBy: session.user.email ?? null,
+            tenantId: tenantSelection.currentTenant.id,
+          })}::jsonb
         )
       `);
   });
@@ -451,6 +480,7 @@ export async function sendTestAlertAction(formData: FormData) {
   const delivery = await deliverAlertEmail({
     alertId,
     message,
+    tenantId: tenantSelection.currentTenant.id,
     title,
   });
   const delivered = delivery.delivered;
@@ -509,7 +539,13 @@ export async function setAlertStatusAction(formData: FormData) {
 
   await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
-  await updateAlertStatus(parsed.data.alertId, parsed.data.status, selectedMode);
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
+  await updateAlertStatus(
+    parsed.data.alertId,
+    parsed.data.status,
+    selectedMode,
+    tenantSelection.currentTenant.id,
+  );
 
   revalidatePath("/");
   revalidatePath("/notifications");
@@ -529,6 +565,7 @@ export async function markAllAlertsReadAction(formData: FormData) {
 
   await requireViewerSession();
   const selectedMode = await getSelectedMollieMode();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
 
   await getDb().execute(sql`
       update alerts
@@ -540,10 +577,22 @@ export async function markAllAlertsReadAction(formData: FormData) {
         and id in (
           select a.id
           from alerts a
-          left join payments p on p.id = a.payment_id
-          left join subscriptions s on s.id = a.subscription_id
-          left join customers c on c.id = coalesce(a.customer_id, p.customer_id, s.customer_id)
+          left join payments p
+            on p.id = a.payment_id
+            and p.tenant_id = ${tenantSelection.currentTenant.id}
+          left join subscriptions s
+            on s.id = a.subscription_id
+            and s.tenant_id = ${tenantSelection.currentTenant.id}
+          left join customers c
+            on c.id = coalesce(a.customer_id, p.customer_id, s.customer_id)
+            and c.tenant_id = ${tenantSelection.currentTenant.id}
           where ${alertModeExpression} = ${selectedMode}
+            and (
+              coalesce(a.payload ->> 'tenantId', '') = ${tenantSelection.currentTenant.id}
+              or p.id is not null
+              or s.id is not null
+              or c.id is not null
+            )
         )
     `);
 
@@ -570,8 +619,14 @@ export async function openAlertAction(formData: FormData) {
   }
 
   await requireViewerSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
-  await updateAlertStatus(parsed.data.alertId, "acknowledged", selectedMode);
+  await updateAlertStatus(
+    parsed.data.alertId,
+    "acknowledged",
+    selectedMode,
+    tenantSelection.currentTenant.id,
+  );
 
   revalidatePath("/");
   revalidatePath("/notifications");

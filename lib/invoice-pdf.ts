@@ -143,7 +143,12 @@ export async function buildTrustedInvoicePdfAttachment(input: {
 }
 
 function isTrustedInvoicePdfHost(hostname: string) {
-  return hostname === "e-boekhouden.nl" || hostname.endsWith(".e-boekhouden.nl");
+  return (
+    hostname === "e-boekhouden.nl" ||
+    hostname.endsWith(".e-boekhouden.nl") ||
+    hostname === "mollie.com" ||
+    hostname.endsWith(".mollie.com")
+  );
 }
 
 function isPdfContentType(contentType: string) {

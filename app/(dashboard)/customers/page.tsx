@@ -2,6 +2,7 @@ import { CustomersWorkspace } from "@/components/customers-workspace";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { getSingleSearchParam } from "@/lib/format";
 import { listCustomers } from "@/lib/onboarding/data";
+import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 import { toUiCustomerRecord } from "@/lib/ui-data";
 
 export default async function CustomersPage({
@@ -9,11 +10,13 @@ export default async function CustomersPage({
 }: Readonly<{
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
+  const { currentTenant } = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
+  const tenantId = currentTenant.id;
   const [resolvedSearchParams, customersResult, archivedCustomersResult] = await Promise.all([
     searchParams,
-    listCustomers({ mode: selectedMode }),
-    listCustomers({ archived: true, mode: selectedMode }),
+    listCustomers({ mode: selectedMode, tenantId }),
+    listCustomers({ archived: true, mode: selectedMode, tenantId }),
   ]);
 
   return (

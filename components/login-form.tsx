@@ -10,13 +10,14 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { appName } from "@/lib/app-config";
-import { signInWithGoogle } from "@/lib/auth/actions";
+import { signInWithGoogle, signOutUser } from "@/lib/auth/actions";
 
 type LoginFormProps = {
   authIssues: string[];
   authReady: boolean;
   className?: string;
   errorMessage?: string | null;
+  signedInEmail?: string | null;
 };
 
 function GoogleIcon(props: React.ComponentProps<"svg">) {
@@ -35,8 +36,10 @@ export function LoginForm({
   authReady,
   className,
   errorMessage,
+  signedInEmail,
 }: LoginFormProps) {
   const brandMark = appName.slice(0, 2).toUpperCase();
+  const showSignedInState = Boolean(signedInEmail);
 
   return (
     <div className={cn("flex flex-col gap-5", className)}>
@@ -50,7 +53,7 @@ export function LoginForm({
         <CardHeader className="items-center gap-3 text-center">
           <CardTitle className="text-3xl tracking-tight">Welcome to {appName}</CardTitle>
           <CardDescription className="max-w-sm text-pretty text-sm leading-6">
-            Sign in with the allowlisted Google account to continue to the internal dashboard.
+            Sign in with Google, then continue with a tenant member or platform operator account.
           </CardDescription>
         </CardHeader>
 
@@ -75,23 +78,44 @@ export function LoginForm({
             </Alert>
           ) : null}
 
-          <form action={signInWithGoogle} className="w-full">
-            <Button
-              className="w-full"
-              disabled={!authReady}
-              size="lg"
-              type="submit"
-              variant="outline"
-            >
-              <GoogleIcon data-icon="inline-start" />
-              Continue with Google
-            </Button>
-          </form>
+          {showSignedInState ? (
+            <Alert>
+              <AlertTitle>Signed in as {signedInEmail}</AlertTitle>
+              <AlertDescription>
+                Sign out and retry with an account that has tenant membership or platform-operator access.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          <div className="flex flex-col gap-3">
+            {!showSignedInState ? (
+              <form action={signInWithGoogle} className="w-full">
+                <Button
+                  className="w-full"
+                  disabled={!authReady}
+                  size="lg"
+                  type="submit"
+                  variant="outline"
+                >
+                  <GoogleIcon data-icon="inline-start" />
+                  Continue with Google
+                </Button>
+              </form>
+            ) : null}
+
+            {showSignedInState ? (
+              <form action={signOutUser} className="w-full">
+                <Button className="w-full" size="lg" type="submit" variant="outline">
+                  Sign out and try another account
+                </Button>
+              </form>
+            ) : null}
+          </div>
         </CardContent>
 
         <CardFooter className="justify-center px-6 pb-6 pt-0">
           <p className="max-w-sm text-center text-sm leading-6 text-muted-foreground">
-            Access is limited to the configured owner account.
+            Product access is granted by tenant membership or platform-operator bootstrap, not by Google sign-in alone.
           </p>
         </CardFooter>
       </Card>

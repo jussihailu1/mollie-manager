@@ -1,11 +1,11 @@
 import { type NextRequest } from "next/server";
 
-import { requireViewerSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { getLatestConsentLinkUrl } from "@/lib/onboarding/data";
+import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
 export async function GET(request: NextRequest) {
-  await requireViewerSession();
+  const { currentTenant } = await getCurrentTenantSelectionForViewer();
 
   const customerId = request.nextUrl.searchParams.get("customerId")?.trim() ?? "";
   if (!customerId) {
@@ -18,7 +18,11 @@ export async function GET(request: NextRequest) {
   }
 
   const mode = await getSelectedMollieMode();
-  const latestConsentUrl = await getLatestConsentLinkUrl(customerId, mode);
+  const latestConsentUrl = await getLatestConsentLinkUrl(
+    customerId,
+    mode,
+    currentTenant.id,
+  );
 
   return Response.json({
     latestConsentUrl,

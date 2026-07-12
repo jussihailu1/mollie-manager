@@ -47,7 +47,9 @@ Current code still carries single-context assumptions such as:
 - single allowlisted-email access gating
 - app-wide env-backed Mollie credentials
 - app-wide env-backed e-Boekhouden credentials
-- app-wide default-row assumptions in tenant-named settings tables
+- partial tenantization of core customer-linked business tables and loaders
+  while alerts, audit logs, webhook intake, and background follow-up flows are
+  still being moved to explicit tenant scope
 
 Those assumptions are acceptable only as migration debt to be removed by the
 multi-tenant pilot foundation. They are not acceptable as the end-state release
@@ -77,6 +79,17 @@ Implemented so far:
 - settings now includes a first-class ops overview with failed webhook replay controls and recent reliability activity
 - settings and authenticated `/api/health` now share the same reliability ops snapshot for webhook health, invoice automation, delivery retries, and cron heartbeat
 - settings now also surfaces a targeted repair form for single customer, payment, or subscription resyncs
+- settings replay and targeted repair actions now resolve the current tenant
+  before touching webhook or repair state
+- billing settings and advanced invoice automation actions now resolve the
+  current tenant before mutating tenant-owned billing state or running batch
+  invoice actions
+- alert status actions on the notifications surface now resolve the current
+  tenant before acknowledging or reopening tenant-linked alerts
+- subscription operation request actions now resolve the current tenant before
+  recording, withdrawing, transitioning, or syncing subscription request state
+- recurring-invoice cron now fans out by tenant and threads tenant ids through
+  repair, recovery, retry, create, and delivery batches
 - invoice creation batch handling now has a shared helper and executable coverage for first-payment and recurring batch mapping
 - invoice delivery retry batch handling now has a shared helper and executable coverage for first-payment and recurring retry mapping
 - payment sync persistence now lives in a shared helper with executable boundary coverage for the sync orchestrator
@@ -111,6 +124,13 @@ Implemented so far:
 - customer drawer invoice downloads now come from an authenticated customer invoices API backed by a server-side trusted e-Boekhouden PDF URL normalizer, covering first-payment and recurring invoice rows without exposing untrusted document URLs
 - customer drawer manual invoice resend now targets an existing first-payment or recurring invoice and reuses the invoice delivery helper, with dependency-injected coverage proving the flow loads one existing target and does not create invoices
 - unresolved subscription operation requests now have a dedicated sanitized query and surface read-only in Needs Attention and the customer drawer without exposing operator reason, requester email, or raw metadata
+- alert-email lookup and the shared Needs Attention query now require explicit tenant context instead of falling back to a single implicit tenant
+- dashboard-side reliability reads for alerts, webhook history, and audit history now require explicit tenant context; the detailed health snapshot remains the separate bearer-auth path
+- core customer-linked business tables are now being rekeyed around explicit
+  `tenant_id` ownership, and the root customer/payment loaders plus payment
+  drawer path are being narrowed to tenant-scoped reads while webhook intake,
+  tenant session selection, and tenant-owned provider credentials remain
+  follow-up work
 
 The rest of this document keeps the original risk assessment, but the consent-token item below should now be read as materially mitigated rather than still open.
 

@@ -4,6 +4,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { getDb } from "@/lib/db";
 import type { EboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import { buildRecurringFailedInvoiceFilter } from "@/lib/eboekhouden/recurring-invoice-query";
+import { saveStoredInvoice } from "@/lib/invoices";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { deliverAlertEmail, openAlert } from "@/lib/reliability/alerts";
 
@@ -21,27 +22,50 @@ export type RecurringInvoiceRecoveryCandidate = {
   plannedCollectionDate: string;
   scheduleId: string;
   subscriptionId: string;
+  tenantId: string;
 };
 
 export async function listFailedRecurringRecoveryCandidates(
   mode: "live" | "test",
   limit: number,
+  tenantId?: string,
 ) {
+  if (!tenantId) {
+    throw new Error("Tenant id is required.");
+  }
+
+  const resolvedTenantId = tenantId;
   const result = await getDb().execute<RecurringInvoiceRecoveryCandidate>(sql`
     select
       rbs.id as "scheduleId",
       rbs.mode,
+      rbs.tenant_id as "tenantId",
       rbs.invoice_send_due_date::text as "invoiceSendDueDate",
       rbs.planned_collection_date::text as "plannedCollectionDate",
       rbs.subscription_id as "subscriptionId",
       s.customer_id as "customerId",
       c.email as "customerEmail",
-      c.eboekhouden_relation_id as "eboekhoudenRelationId"
+      case
+        when cal.provider_customer_id ~ '^[0-9]+$'
+          then cal.provider_customer_id::int
+        else null
+      end as "eboekhoudenRelationId"
     from recurring_billing_schedules rbs
-    inner join subscriptions s on s.id = rbs.subscription_id
-    inner join customers c on c.id = s.customer_id and c.mode = rbs.mode
-    where ${buildRecurringFailedInvoiceFilter(mode)}
-      and c.eboekhouden_relation_id is not null
+    inner join subscriptions s
+      on s.id = rbs.subscription_id
+      and s.tenant_id = rbs.tenant_id
+    inner join customers c
+      on c.id = s.customer_id
+      and c.mode = rbs.mode
+      and c.tenant_id = rbs.tenant_id
+    left join customer_accounting_links cal
+      on cal.customer_id = c.id
+      and cal.tenant_id = c.tenant_id
+      and cal.mode = c.mode
+      and cal.provider = 'eboekhouden'
+    where rbs.tenant_id = ${resolvedTenantId}
+      and ${buildRecurringFailedInvoiceFilter(mode, resolvedTenantId)}
+      and cal.provider_customer_id is not null
     order by rbs.updated_at asc, rbs.created_at asc
     limit ${Math.max(1, limit)}
   `);
@@ -60,8 +84,6 @@ export async function storeRecoveredFailedInvoiceSuccess(input: {
     update recurring_billing_schedules
     set
       invoice_state = 'invoice_created',
-      eboekhouden_invoice_id = ${invoiceId},
-      eboekhouden_invoice_number = ${invoiceNumber},
       invoice_created_at = coalesce(invoice_created_at, now()),
       invoice_failed_at = null,
       metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
@@ -72,14 +94,33 @@ export async function storeRecoveredFailedInvoiceSuccess(input: {
       updated_at = now()
     where id = ${input.candidate.scheduleId}
       and invoice_state = 'invoice_failed'
-      and eboekhouden_invoice_id is null
-      and eboekhouden_invoice_number is null
+      and not exists (
+        select 1
+        from invoices i
+        where i.tenant_id = recurring_billing_schedules.tenant_id
+          and i.owner_type = 'recurring_schedule'
+          and i.owner_id = recurring_billing_schedules.id
+      )
     returning id
   `);
 
   if (!result.rows[0]?.id) {
     return null;
   }
+
+  await saveStoredInvoice({
+    mode: input.candidate.mode,
+    ownerId: input.candidate.scheduleId,
+    ownerType: "recurring_schedule",
+    provider: "eboekhouden",
+    providerCustomerId: String(input.candidate.eboekhoudenRelationId),
+    providerDocumentUrl: input.invoice.urlPdfFile ?? null,
+    providerInvoiceId: invoiceId,
+    providerInvoiceNumber: invoiceNumber,
+    providerSnapshot: input.invoice as Record<string, unknown>,
+    syncedAt: new Date().toISOString(),
+    tenantId: input.candidate.tenantId,
+  });
 
   await writeAuditLog(
     {
@@ -116,6 +157,7 @@ export async function storeRecoveredFailedInvoiceSuccess(input: {
       },
       severity: "info",
       subscriptionId: input.candidate.subscriptionId,
+      tenantId: input.candidate.tenantId,
       title: "Recurring invoice recovered",
     },
     undefined,
@@ -132,6 +174,7 @@ export async function storeRecoveredFailedInvoiceSuccess(input: {
         `Subscription: ${input.candidate.subscriptionId}`,
         `Error: reconciled existing invoice`,
       ].join("\n"),
+      tenantId: input.candidate.tenantId,
       title: "Recurring invoice recovered",
     });
   }

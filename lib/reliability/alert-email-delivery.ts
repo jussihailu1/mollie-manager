@@ -8,6 +8,7 @@ type DeliveryResult = {
 type AlertDeliveryInput = {
   alertId: string;
   message: string;
+  tenantId: string;
   title: string;
 };
 

@@ -10,9 +10,9 @@ describe("customer notes api surface", () => {
       "utf8",
     );
 
-    assert.match(source, /requireViewerSession/);
+    assert.match(source, /getCurrentTenantSelectionForViewer/);
     assert.match(source, /getSelectedMollieMode/);
-    assert.match(source, /getCustomerDetail/);
+    assert.match(source, /getCustomerDetail\(customerId, selectedMode, tenantId\)/);
     assert.match(source, /listCustomerNotes/);
     assert.match(source, /createCustomerNote/);
     assert.match(source, /Response\.json\(\{ note \}, \{ status: 201 \}\)/);
@@ -25,6 +25,8 @@ describe("customer notes api surface", () => {
     assert.match(source, /action: "customer_note\.create"/);
     assert.match(source, /noteId/);
     assert.doesNotMatch(source, /details:\s*\{[\s\S]*?body/);
+    assert.doesNotMatch(source, /getSingleTenantIdOrThrow/);
+    assert.match(source, /tenantId: string;/);
   });
 
   it("lets the customer drawer add notes and refresh activity", () => {

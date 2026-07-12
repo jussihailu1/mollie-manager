@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { writeAuditLog } from "@/lib/audit";
 import { getDb, transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
-import { getMollieClient } from "@/lib/mollie/client";
+import { getTenantMollieClient } from "@/lib/mollie/client";
 import {
   buildPaymentLinkSyncMetadata,
   derivePaymentLinkSyncAmount,
@@ -18,6 +18,10 @@ import {
   getLocalCustomerByMollieId,
   getLocalPaymentLinkByMollieId,
 } from "@/lib/reliability/sync-resource-state";
+import {
+  requireCustomerTenantId,
+  requirePaymentLinkTenantId,
+} from "@/lib/tenant-ownership";
 
 type MolliePaymentLink = {
   createdAt?: string;
@@ -57,12 +61,16 @@ export async function upsertPaymentLinkFromMollie(
   options: {
     actor: SyncActor;
     customerId?: string | null;
+    tenantId: string;
   },
 ) {
   const linkedCustomer =
     options.customerId ??
-    (await getLocalCustomerByMollieId(mode, paymentLink.customerId))?.id ??
+    (await getLocalCustomerByMollieId(mode, paymentLink.customerId, options.tenantId))?.id ??
     null;
+  const localCustomer = linkedCustomer
+    ? await getLocalCustomerByMollieId(mode, paymentLink.customerId, options.tenantId)
+    : null;
   const paymentLinkAmount = derivePaymentLinkSyncAmount(paymentLink, payments);
   const paymentLinkStatus = derivePaymentLinkSyncStatus(paymentLink, payments);
   let localPaymentLinkId = crypto.randomUUID();
@@ -72,12 +80,21 @@ export async function upsertPaymentLinkFromMollie(
       mode,
       paymentLink.id,
       client,
+      options.tenantId,
     );
+    const tenantId =
+      localCustomer?.tenantId ??
+      (linkedCustomer ? await requireCustomerTenantId(linkedCustomer, client) : null) ??
+      (existingPaymentLink
+        ? await requirePaymentLinkTenantId(existingPaymentLink.id, client)
+        : null) ??
+      options.tenantId;
     localPaymentLinkId = existingPaymentLink?.id ?? localPaymentLinkId;
 
     await client.execute(sql`
         insert into payment_links (
           id,
+          tenant_id,
           customer_id,
           mode,
           mollie_payment_link_id,
@@ -93,6 +110,7 @@ export async function upsertPaymentLinkFromMollie(
           last_synced_at
         ) values (
           ${localPaymentLinkId},
+          ${tenantId},
           ${linkedCustomer ?? existingPaymentLink?.customerId ?? null},
           ${mode},
           ${paymentLink.id},
@@ -113,7 +131,7 @@ export async function upsertPaymentLinkFromMollie(
           now(),
           now()
         )
-        on conflict (mode, mollie_payment_link_id)
+        on conflict (tenant_id, mode, mollie_payment_link_id)
         do update set
           customer_id = coalesce(excluded.customer_id, payment_links.customer_id),
           mollie_status = excluded.mollie_status,
@@ -155,6 +173,7 @@ export async function syncMatchingPaymentLinkForPayment(
   payment: Payment,
   customerId: string | null,
   actor: SyncActor,
+  tenantId: string,
 ) {
   if (!customerId && !payment.customerId) {
     return null;
@@ -167,6 +186,7 @@ export async function syncMatchingPaymentLinkForPayment(
         mollie_payment_link_id as "molliePaymentLinkId"
       from payment_links
       where
+        tenant_id = ${tenantId}
         mode = ${mode}
         and mollie_payment_link_id is not null
         and metadata ->> 'source' = 'subscription_onboarding'
@@ -184,7 +204,8 @@ export async function syncMatchingPaymentLinkForPayment(
       continue;
     }
 
-    const paymentLink = (await getMollieClient(mode).paymentLinks.get(
+    const mollie = await getTenantMollieClient(tenantId, mode);
+    const paymentLink = (await mollie.paymentLinks.get(
       candidate.molliePaymentLinkId,
     )) as unknown as MolliePaymentLink;
     const payments = await collectPaymentLinkPayments(paymentLink);
@@ -196,6 +217,7 @@ export async function syncMatchingPaymentLinkForPayment(
     return upsertPaymentLinkFromMollie(mode, paymentLink, payments, {
       actor,
       customerId: candidate.customerId ?? customerId,
+      tenantId,
     });
   }
 

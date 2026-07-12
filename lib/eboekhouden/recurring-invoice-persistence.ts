@@ -9,6 +9,7 @@ import {
   buildInvoiceCreationSuccessMetadata,
 } from "@/lib/eboekhouden/invoice-creation-metadata";
 import { serializeInvoiceErrorMessage } from "@/lib/eboekhouden/invoice-flow-helpers";
+import { saveStoredInvoice } from "@/lib/invoices";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { deliverAlertEmail, openAlert } from "@/lib/reliability/alerts";
 
@@ -25,6 +26,7 @@ export type RecurringInvoicePersistenceCandidate = {
   plannedCollectionDate: string;
   scheduleId: string;
   subscriptionId: string;
+  tenantId: string;
 };
 
 type AlertResult = {
@@ -40,6 +42,7 @@ export async function claimScheduleForInvoice(input: {
   actor: RecurringInvoiceActor;
   mode: "live" | "test";
   scheduleId: string;
+  tenantId: string;
 }) {
   const result = await getDb().execute<{ id: string }>(sql`
     update recurring_billing_schedules
@@ -53,10 +56,16 @@ export async function claimScheduleForInvoice(input: {
         }),
       )}::jsonb
     where id = ${input.scheduleId}
+      and tenant_id = ${input.tenantId}
       and mode = ${input.mode}
       and invoice_state = 'pending_invoice'
-      and eboekhouden_invoice_id is null
-      and eboekhouden_invoice_number is null
+      and not exists (
+        select 1
+        from invoices i
+        where i.tenant_id = recurring_billing_schedules.tenant_id
+          and i.owner_type = 'recurring_schedule'
+          and i.owner_id = recurring_billing_schedules.id
+      )
     returning id
   `);
 
@@ -77,8 +86,6 @@ export async function storeRecurringInvoiceCreationSuccess(input: {
       update recurring_billing_schedules
       set
         invoice_state = 'invoice_created',
-        eboekhouden_invoice_id = ${invoiceId},
-        eboekhouden_invoice_number = ${invoiceNumber},
         invoice_created_at = now(),
         invoice_failed_at = null,
         metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(
@@ -86,8 +93,26 @@ export async function storeRecurringInvoiceCreationSuccess(input: {
         )}::jsonb,
         updated_at = now()
       where id = ${input.candidate.scheduleId}
+        and tenant_id = ${input.candidate.tenantId}
         and invoice_state = 'invoice_creating'
     `);
+
+    await saveStoredInvoice(
+      {
+        mode: input.candidate.mode,
+        ownerId: input.candidate.scheduleId,
+        ownerType: "recurring_schedule",
+        provider: "eboekhouden",
+        providerCustomerId: null,
+        providerDocumentUrl: input.invoice.urlPdfFile ?? null,
+        providerInvoiceId: invoiceId,
+        providerInvoiceNumber: invoiceNumber,
+        providerSnapshot: input.invoice as Record<string, unknown>,
+        syncedAt: new Date().toISOString(),
+        tenantId: input.candidate.tenantId,
+      },
+      tx,
+    );
 
     await writeAuditLog(
       {
@@ -122,6 +147,7 @@ export async function storeRecurringInvoiceCreationSuccess(input: {
       where status = 'open'
         and payload ->> 'kind' = 'recurring_invoice_creation_failed'
         and payload ->> 'scheduleId' = ${input.candidate.scheduleId}
+        and payload ->> 'tenantId' = ${input.candidate.tenantId}
     `);
 
     return openAlert(
@@ -142,6 +168,7 @@ export async function storeRecurringInvoiceCreationSuccess(input: {
         },
         severity: "info",
         subscriptionId: input.candidate.subscriptionId,
+        tenantId: input.candidate.tenantId,
         title:
           source === "created"
             ? `Recurring invoice created for ${input.candidate.plannedCollectionDate}`
@@ -175,6 +202,7 @@ export async function storeRecurringInvoiceCreationFailure(input: {
         )}::jsonb,
         updated_at = now()
       where id = ${input.candidate.scheduleId}
+        and tenant_id = ${input.candidate.tenantId}
         and invoice_state = 'invoice_creating'
     `);
 
@@ -210,6 +238,7 @@ export async function storeRecurringInvoiceCreationFailure(input: {
         },
         severity: "warning",
         subscriptionId: input.candidate.subscriptionId,
+        tenantId: input.candidate.tenantId,
         title: `Recurring invoice creation failed for ${input.candidate.plannedCollectionDate}`,
       },
       tx,
@@ -228,6 +257,7 @@ export async function storeRecurringInvoiceCreationFailure(input: {
         `Planned collection date: ${input.candidate.plannedCollectionDate}`,
         `Error: ${errorMessage}`,
       ].join("\n"),
+      tenantId: input.candidate.tenantId,
       title: "Recurring invoice creation failed",
     });
   }

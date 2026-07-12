@@ -18,6 +18,10 @@ describe("invoice pdf helpers", () => {
       normalizeTrustedInvoicePdfUrl("https://secure.e-boekhouden.nl/docs/456.pdf"),
       "https://secure.e-boekhouden.nl/docs/456.pdf",
     );
+    assert.equal(
+      normalizeTrustedInvoicePdfUrl("https://my.mollie.com/dashboard/invoices/789.pdf"),
+      "https://my.mollie.com/dashboard/invoices/789.pdf",
+    );
   });
 
   it("rejects untrusted or downgraded invoice urls", () => {

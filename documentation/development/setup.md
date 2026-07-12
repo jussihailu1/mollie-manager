@@ -24,6 +24,7 @@ Main env groups:
   - `APP_ENV`
   - `APP_URL`
   - `AUTH_URL`
+  - `APP_ENCRYPTION_KEY`
 - Authentication:
   - `AUTH_SECRET`
   - `AUTH_ADVANCED_EMAILS`
@@ -43,24 +44,28 @@ Main env groups:
 - Invoice automation:
   - `INVOICE_CRON_SHARED_SECRET`
 
-Current implementation debt still present in code today:
+Platform/bootstrap env still present in code today:
 
-- `AUTH_ALLOWED_EMAIL`
 - `MOLLIE_DEFAULT_MODE`
 - `MOLLIE_TEST_API_KEY`
 - `MOLLIE_LIVE_API_KEY`
 - `MOLLIE_WEBHOOK_PUBLIC_BASE_URL`
-- `EBOEKHOUDEN_API_TOKEN`
-- `EBOEKHOUDEN_API_SOURCE`
 - `SUBSCRIPTION_CANCELLATION_EMAIL`
 - `SUBSCRIPTION_TERMS_URL`
 - `SUBSCRIPTION_PRIVACY_URL`
 - `SUBSCRIPTION_TERMS_VERSION`
 
 Do not extend product scope around those app-wide business credentials. The
-multi-tenant pilot foundation must replace them with tenant-owned stored
-configuration, while platform env should remain for platform/runtime concerns
-such as auth, database, app URL, cron secrets, and shared SMTP.
+multi-tenant pilot now uses tenant-owned stored Mollie and e-Boekhouden
+credentials for active tenant business flows, while platform env remains for
+platform/runtime concerns such as auth, database, app URL, cron secrets, shared
+SMTP, bootstrap defaults, and older readiness tooling that still assumes some
+env-backed checks.
+Current tenant business flows fail closed without explicit tenant context and do
+not fall back to app-wide Mollie or e-Boekhouden credentials.
+`APP_ENCRYPTION_KEY` is also a platform/runtime secret and now encrypts stored
+tenant Mollie and e-Boekhouden credentials. Keep it stable per environment, and
+rotate it with a credential re-encryption/backfill plan rather than ad hoc.
 
 ## Local Bootstrap
 
@@ -82,14 +87,16 @@ such as auth, database, app URL, cron secrets, and shared SMTP.
 - Target product authorization for the shared multi-tenant pilot is membership
   based: a signed-in operator must have tenant membership or a controlled
   platform-operator bootstrap path.
-- `AUTH_ALLOWED_EMAIL` is current implementation debt, not the desired product
-  access model. Replace it during the multi-tenant pilot foundation and do not
-  build new product behavior on top of it.
+- Older local env files may still contain `AUTH_ALLOWED_EMAIL`, but product
+  access now comes from tenant membership or platform-operator records. Do not
+  reintroduce product behavior that depends on a global email gate.
 - `AUTH_ADVANCED_EMAILS` is a comma-separated allowlist for technical settings
   controls such as diagnostics, repair, replay, reconciliation, SMTP tests, and
   invoice batch/retry controls. It does not create product access by itself and
   must not bypass tenant membership or tenant context.
 - `AUTH_SECRET` is required at runtime; the app now fails closed if it is missing.
+- `APP_ENCRYPTION_KEY` is required before writing or reading new-format tenant
+  provider credentials.
 - `APP_ENV=test` can use the test bypass flags for local verification without normal Google login.
 - In `APP_ENV=test`, live Mollie mode is disabled by design.
 
@@ -123,9 +130,21 @@ Expected flow:
 5. configure tenant billing/accounting settings
 6. configure tenant subscription policy defaults
 7. verify webhook/public URL assumptions
-8. run readiness checks in that tenant context before live customer usage
+8. run `npm run tenant:readiness -- --tenant-id <tenant-id>` before live customer usage
 
 No self-serve tenant signup or invite flow is required for the pilot.
+
+Current implementation note:
+
+- tenant, platform-operator, and operator-membership tables now exist
+- tenant-owned subscription-policy defaults and billing/accounting defaults now
+  persist per tenant instead of one shared `"default"` row
+- a legacy `legacy-default` tenant row is created by migration only to keep the
+  current single-context deployment bootable during the foundation work
+- provision real tenants with `npm run tenant:provision -- --slug <slug> --name <name> --operator-email <email>`
+- tenant-scoped auth/session resolution and tenant-scoped core business tables
+  are already in place; remaining pilot work is mostly tenant-specific go-live
+  verification and a few operational/tooling follow-up seams
 
 ## Database Notes
 

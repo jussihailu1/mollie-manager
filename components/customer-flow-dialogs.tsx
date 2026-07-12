@@ -1709,6 +1709,7 @@ export function CustomerDrawer({
   const [noteBody, setNoteBody] = useState("");
   const [noteError, setNoteError] = useState<string | null>(null);
   const [isAddingNote, setIsAddingNote] = useState(false);
+  const [isNoteComposerOpen, setIsNoteComposerOpen] = useState(false);
   const [invoiceLinks, setInvoiceLinks] = useState<CustomerInvoiceLinks | null>(null);
   const [invoiceLinksError, setInvoiceLinksError] = useState<string | null>(null);
   const [isInvoiceLinksLoading, setIsInvoiceLinksLoading] = useState(false);
@@ -2081,6 +2082,7 @@ export function CustomerDrawer({
       }
 
       setNoteBody("");
+      setIsNoteComposerOpen(false);
       setActivityTimelineRefreshKey((value) => value + 1);
       router.refresh();
     } catch (createError) {
@@ -2421,30 +2423,63 @@ export function CustomerDrawer({
 
           <Separator />
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Activity timeline
-            </h3>
-            <form className="space-y-2" onSubmit={handleAddCustomerNote}>
-              <Textarea
-                value={noteBody}
-                onChange={(event) => setNoteBody(event.target.value)}
-                maxLength={2000}
-                placeholder="Add an internal customer note"
-                rows={3}
-              />
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">{noteBody.length}/2000</p>
-                <Button type="submit" size="sm" disabled={isAddingNote || !noteBody.trim()}>
-                  {isAddingNote ? (
-                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <PenLine className="mr-2 h-4 w-4" />
-                  )}
-                  Add note
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Activity timeline
+              </h3>
+              {!isNoteComposerOpen ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setIsNoteComposerOpen(true);
+                    setNoteError(null);
+                  }}
+                >
+                  <PenLine className="mr-2 h-4 w-4" />
+                  Add internal note
                 </Button>
-              </div>
-              {noteError ? <p className="text-sm text-destructive">{noteError}</p> : null}
-            </form>
+              ) : null}
+            </div>
+            {isNoteComposerOpen ? (
+              <form className="space-y-2" onSubmit={handleAddCustomerNote}>
+                <Textarea
+                  value={noteBody}
+                  onChange={(event) => setNoteBody(event.target.value)}
+                  maxLength={2000}
+                  placeholder="Add an internal customer note"
+                  rows={3}
+                />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">{noteBody.length}/2000</p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={isAddingNote}
+                      onClick={() => {
+                        setIsNoteComposerOpen(false);
+                        setNoteBody("");
+                        setNoteError(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" size="sm" disabled={isAddingNote || !noteBody.trim()}>
+                      {isAddingNote ? (
+                        <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <PenLine className="mr-2 h-4 w-4" />
+                      )}
+                      Add note
+                    </Button>
+                  </div>
+                </div>
+                {noteError ? <p className="text-sm text-destructive">{noteError}</p> : null}
+              </form>
+            ) : null}
             {isActivityTimelineLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <LoaderCircle className="h-4 w-4 animate-spin" />

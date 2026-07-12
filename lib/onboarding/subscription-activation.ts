@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { writeAuditLog } from "@/lib/audit";
 import { getDb, transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
-import { getMollieClient, getMollieWebhookUrl } from "@/lib/mollie/client";
+import { getMollieWebhookUrl, getTenantMollieClient } from "@/lib/mollie/client";
 import { upsertRecurringBillingScheduleForSubscription } from "@/lib/recurring-billing-schedule";
 import { deliverAlertEmail, openAlert, resolveAlertsForEntity } from "@/lib/reliability/alerts";
 import { subscriptionConsentPlanSnapshotSchema } from "@/lib/subscription-consent";
@@ -114,7 +114,11 @@ function findPreferredDirectDebitMandate(mandates: ActivationMandate[]) {
   );
 }
 
-async function getActivationContext(customerId: string, mode: MollieMode) {
+async function getActivationContext(
+  customerId: string,
+  mode: MollieMode,
+  tenantId: string,
+) {
   const [customerResult, consentResult, paymentResult, mandateResult, subscriptionResult] =
     await Promise.all([
       getDb().execute<ActivationCustomer>(sql`
@@ -124,6 +128,7 @@ async function getActivationContext(customerId: string, mode: MollieMode) {
           archived_at as "archivedAt"
         from customers
         where id = ${customerId}
+          and tenant_id = ${tenantId}
           and mode = ${mode}
         limit 1
       `),
@@ -136,6 +141,7 @@ async function getActivationContext(customerId: string, mode: MollieMode) {
           soc.accepted_at as "acceptedAt"
         from subscription_onboarding_consents soc
         where soc.customer_id = ${customerId}
+          and soc.tenant_id = ${tenantId}
           and soc.mode = ${mode}
           and soc.accepted_at is not null
         order by soc.accepted_at desc
@@ -148,6 +154,7 @@ async function getActivationContext(customerId: string, mode: MollieMode) {
           paid_at as "paidAt"
         from payments
         where customer_id = ${customerId}
+          and tenant_id = ${tenantId}
           and mode = ${mode}
           and payment_type = 'first'
         order by created_at desc
@@ -160,6 +167,7 @@ async function getActivationContext(customerId: string, mode: MollieMode) {
           mollie_status as "mollieStatus"
         from mandates
         where customer_id = ${customerId}
+          and tenant_id = ${tenantId}
           and mode = ${mode}
         order by created_at desc
       `),
@@ -170,6 +178,7 @@ async function getActivationContext(customerId: string, mode: MollieMode) {
           metadata ->> 'consentId' as "consentId"
         from subscriptions
         where customer_id = ${customerId}
+          and tenant_id = ${tenantId}
           and mode = ${mode}
         order by created_at desc
       `),
@@ -188,9 +197,14 @@ export async function attemptSubscriptionActivation(input: {
   actor?: ActivationActor;
   customerId: string;
   mode: MollieMode;
+  tenantId: string;
   trigger: ActivationTrigger;
 }): Promise<SubscriptionActivationResult> {
-  const context = await getActivationContext(input.customerId, input.mode);
+  const context = await getActivationContext(
+    input.customerId,
+    input.mode,
+    input.tenantId,
+  );
   const customer = context.customer;
 
   if (!customer) {
@@ -275,6 +289,7 @@ export async function attemptSubscriptionActivation(input: {
     };
   }
 
+  const tenantId = input.tenantId;
   const consentLinkedSubscription = context.subscriptions.find(
     (subscription) => subscription.consentId === acceptedConsent.consentId,
   );
@@ -282,6 +297,7 @@ export async function attemptSubscriptionActivation(input: {
   if (consentLinkedSubscription) {
     await resolveAlertsForEntity({
       paymentId: latestPaidFirstPayment.id,
+      tenantId,
     });
 
     return {
@@ -311,7 +327,8 @@ export async function attemptSubscriptionActivation(input: {
   const localSubscriptionId = crypto.randomUUID();
 
   try {
-    const subscription = await getMollieClient(input.mode).customerSubscriptions.create({
+    const mollie = await getTenantMollieClient(tenantId, input.mode);
+    const subscription = await mollie.customerSubscriptions.create({
       amount: {
         currency: "EUR",
         value: plan.subscriptionAmountValue,
@@ -342,6 +359,7 @@ export async function attemptSubscriptionActivation(input: {
       await client.execute(sql`
         insert into subscriptions (
           id,
+          tenant_id,
           customer_id,
           mandate_id,
           mode,
@@ -366,6 +384,7 @@ export async function attemptSubscriptionActivation(input: {
           last_synced_at
         ) values (
           ${localSubscriptionId},
+          ${tenantId},
           ${customer.id},
           ${preferredMandate.id},
           ${input.mode},
@@ -439,6 +458,7 @@ export async function attemptSubscriptionActivation(input: {
 
     await resolveAlertsForEntity({
       paymentId: latestPaidFirstPayment.id,
+      tenantId,
     });
 
     return {
@@ -482,6 +502,7 @@ export async function attemptSubscriptionActivation(input: {
         trigger: input.trigger,
       },
       severity: "warning",
+      tenantId,
       title: "Subscription activation failed",
     });
 
@@ -490,6 +511,7 @@ export async function attemptSubscriptionActivation(input: {
         alertId: alert.id,
         message:
           "A paid onboarding flow could not be promoted into a subscription. Open Mollie Manager to inspect the customer and retry activation.",
+        tenantId,
         title: "Subscription activation failed",
       });
     }

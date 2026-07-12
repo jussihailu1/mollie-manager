@@ -98,12 +98,14 @@ async function processWebhookResource(
   resourceId: string,
   mode: MollieMode,
   actor: RepairActor,
+  tenantId: string,
 ) {
   if (resourceId.startsWith("tr_")) {
     return syncPaymentByMollieId(resourceId, {
       actor,
       preferredMode: mode,
       strictMode: true,
+      tenantId,
     });
   }
 
@@ -112,6 +114,7 @@ async function processWebhookResource(
       actor,
       preferredMode: mode,
       strictMode: true,
+      tenantId,
     });
   }
 
@@ -120,6 +123,7 @@ async function processWebhookResource(
       actor,
       preferredMode: mode,
       strictMode: true,
+      tenantId,
     });
   }
 
@@ -131,6 +135,7 @@ async function updateWebhookEventStatus(
     errorMessage?: string | null;
     id: string;
     processed: boolean;
+    tenantId: string;
   },
 ) {
   await getDb().execute(sql`
@@ -146,10 +151,15 @@ async function updateWebhookEventStatus(
           else processed_at
         end
       where id = ${input.id}
+        and tenant_id = ${input.tenantId}
     `);
 }
 
-async function listFailedWebhookCandidates(mode: MollieMode, limit: number) {
+async function listFailedWebhookCandidatesForTenant(
+  mode: MollieMode,
+  limit: number,
+  tenantId: string,
+) {
   const result = await getDb().execute<FailedWebhookCandidate>(sql`
       select
         id,
@@ -160,6 +170,7 @@ async function listFailedWebhookCandidates(mode: MollieMode, limit: number) {
         retry_count as "retryCount"
       from webhook_events
       where mode = ${mode}
+        and tenant_id = ${tenantId}
         and processing_status = 'failed'
         and resource_id is not null
       order by
@@ -171,25 +182,33 @@ async function listFailedWebhookCandidates(mode: MollieMode, limit: number) {
   return result.rows;
 }
 
-async function listCustomerCandidates(mode: MollieMode, limit: number) {
+async function listCustomerCandidates(
+  mode: MollieMode,
+  limit: number,
+  tenantId: string,
+) {
   const result = await getDb().execute<CustomerCandidate>(sql`
       select
         c.id,
         c.mode,
-        c.eboekhouden_link_status as "eboekhoudenLinkStatus",
+        coalesce(cal.link_status, 'unlinked') as "eboekhoudenLinkStatus",
         c.last_synced_at as "lastSyncedAt",
         case
-          when c.eboekhouden_link_status in ('needs_review', 'sync_error') then 0
+          when cal.link_status in ('needs_review', 'sync_error') then 0
           when c.last_synced_at is null
             or c.last_synced_at < ${buildCandidateThresholdExpression()} then 1
           when exists (
             select 1
             from alerts a
             left join payments p on p.id = a.payment_id
+              and p.tenant_id = ${tenantId}
             left join subscriptions s on s.id = a.subscription_id
+              and s.tenant_id = ${tenantId}
+            left join customers alert_customer on alert_customer.id = a.customer_id
+              and alert_customer.tenant_id = ${tenantId}
             where a.status = 'open'
               and (
-                a.customer_id = c.id
+                alert_customer.id = c.id
                 or p.customer_id = c.id
                 or s.customer_id = c.id
               )
@@ -197,21 +216,31 @@ async function listCustomerCandidates(mode: MollieMode, limit: number) {
           else 2
         end as priority
       from customers c
+      left join customer_accounting_links cal
+        on cal.customer_id = c.id
+        and cal.tenant_id = c.tenant_id
+        and cal.mode = c.mode
+        and cal.provider = 'eboekhouden'
       where c.mode = ${mode}
+        and c.tenant_id = ${tenantId}
         and c.archived_at is null
         and c.mollie_customer_id is not null
         and (
-          c.eboekhouden_link_status in ('needs_review', 'sync_error')
+          cal.link_status in ('needs_review', 'sync_error')
           or c.last_synced_at is null
           or c.last_synced_at < ${buildCandidateThresholdExpression()}
           or exists (
             select 1
             from alerts a
             left join payments p on p.id = a.payment_id
+              and p.tenant_id = ${tenantId}
             left join subscriptions s on s.id = a.subscription_id
+              and s.tenant_id = ${tenantId}
+            left join customers alert_customer on alert_customer.id = a.customer_id
+              and alert_customer.tenant_id = ${tenantId}
             where a.status = 'open'
               and (
-                a.customer_id = c.id
+                alert_customer.id = c.id
                 or p.customer_id = c.id
                 or s.customer_id = c.id
               )
@@ -227,7 +256,11 @@ async function listCustomerCandidates(mode: MollieMode, limit: number) {
   return result.rows;
 }
 
-async function listPaymentCandidates(mode: MollieMode, limit: number) {
+async function listPaymentCandidates(
+  mode: MollieMode,
+  limit: number,
+  tenantId: string,
+) {
   const result = await getDb().execute<PaymentCandidate>(sql`
       select
         p.id,
@@ -246,12 +279,17 @@ async function listPaymentCandidates(mode: MollieMode, limit: number) {
           when exists (
             select 1
             from alerts a
-            where a.payment_id = p.id and a.status = 'open'
+            left join payments alert_payment on alert_payment.id = a.payment_id
+              and alert_payment.tenant_id = ${tenantId}
+            where a.payment_id = p.id
+              and a.status = 'open'
+              and alert_payment.id is not null
           ) then 0
           else 2
         end as priority
       from payments p
       where p.mode = ${mode}
+        and p.tenant_id = ${tenantId}
         and p.mollie_payment_id is not null
         and (
           p.recurring_collection_state in (
@@ -265,7 +303,11 @@ async function listPaymentCandidates(mode: MollieMode, limit: number) {
           or exists (
             select 1
             from alerts a
-            where a.payment_id = p.id and a.status = 'open'
+            left join payments alert_payment on alert_payment.id = a.payment_id
+              and alert_payment.tenant_id = ${tenantId}
+            where a.payment_id = p.id
+              and a.status = 'open'
+              and alert_payment.id is not null
           )
         )
       order by
@@ -278,7 +320,11 @@ async function listPaymentCandidates(mode: MollieMode, limit: number) {
   return result.rows;
 }
 
-async function listSubscriptionCandidates(mode: MollieMode, limit: number) {
+async function listSubscriptionCandidates(
+  mode: MollieMode,
+  limit: number,
+  tenantId: string,
+) {
   const result = await getDb().execute<SubscriptionCandidate>(sql`
       select
         s.id,
@@ -293,12 +339,17 @@ async function listSubscriptionCandidates(mode: MollieMode, limit: number) {
           when exists (
             select 1
             from alerts a
-            where a.subscription_id = s.id and a.status = 'open'
+            left join subscriptions alert_subscription on alert_subscription.id = a.subscription_id
+              and alert_subscription.tenant_id = ${tenantId}
+            where a.subscription_id = s.id
+              and a.status = 'open'
+              and alert_subscription.id is not null
           ) then 0
           else 2
         end as priority
       from subscriptions s
       where s.mode = ${mode}
+        and s.tenant_id = ${tenantId}
         and s.mollie_subscription_id is not null
         and (
           s.local_status in ('payment_action_required', 'out_of_sync')
@@ -307,7 +358,11 @@ async function listSubscriptionCandidates(mode: MollieMode, limit: number) {
           or exists (
             select 1
             from alerts a
-            where a.subscription_id = s.id and a.status = 'open'
+            left join subscriptions alert_subscription on alert_subscription.id = a.subscription_id
+              and alert_subscription.tenant_id = ${tenantId}
+            where a.subscription_id = s.id
+              and a.status = 'open'
+              and alert_subscription.id is not null
           )
         )
       order by
@@ -324,11 +379,13 @@ export async function repairCustomerTarget(input: {
   actor?: RepairActor;
   customerId: string;
   mode: MollieMode;
+  tenantId: string;
 }): Promise<RepairTargetResult> {
   const result = await repairCustomerBillingState({
     actor: input.actor,
     customerId: input.customerId,
     mode: input.mode,
+    tenantId: input.tenantId,
   });
 
   return {
@@ -344,11 +401,13 @@ export async function repairReliabilityTarget(input: {
   id: string;
   kind: RepairTargetKind;
   mode: MollieMode;
+  tenantId: string;
 }): Promise<RepairTargetResult> {
   if (input.kind === "customer") {
     return repairCustomerTarget({
       actor: input.actor,
       customerId: input.id,
+      tenantId: input.tenantId,
       mode: input.mode,
     });
   }
@@ -358,6 +417,7 @@ export async function repairReliabilityTarget(input: {
       actor: input.actor,
       mode: input.mode,
       paymentId: input.id,
+      tenantId: input.tenantId,
     });
   }
 
@@ -365,6 +425,7 @@ export async function repairReliabilityTarget(input: {
     actor: input.actor,
     mode: input.mode,
     subscriptionId: input.id,
+    tenantId: input.tenantId,
   });
 }
 
@@ -372,6 +433,7 @@ export async function repairPaymentTarget(input: {
   actor?: RepairActor;
   paymentId: string;
   mode: MollieMode;
+  tenantId: string;
 }): Promise<RepairTargetResult> {
   const payment = await getDb().execute<LocalPaymentLookup>(sql`
       select
@@ -381,6 +443,7 @@ export async function repairPaymentTarget(input: {
       from payments
       where id = ${input.paymentId}
         and mode = ${input.mode}
+        and tenant_id = ${input.tenantId}
       limit 1
     `);
   const row = payment.rows[0];
@@ -407,6 +470,7 @@ export async function repairPaymentTarget(input: {
     actor: input.actor,
     preferredMode: row.mode,
     strictMode: true,
+    tenantId: input.tenantId,
   });
 
   return {
@@ -420,6 +484,7 @@ export async function repairSubscriptionTarget(input: {
   actor?: RepairActor;
   subscriptionId: string;
   mode: MollieMode;
+  tenantId: string;
 }): Promise<RepairTargetResult> {
   const subscription = await getDb().execute<LocalSubscriptionLookup>(sql`
       select
@@ -429,6 +494,7 @@ export async function repairSubscriptionTarget(input: {
       from subscriptions
       where id = ${input.subscriptionId}
         and mode = ${input.mode}
+        and tenant_id = ${input.tenantId}
       limit 1
     `);
   const row = subscription.rows[0];
@@ -455,6 +521,7 @@ export async function repairSubscriptionTarget(input: {
     actor: input.actor,
     preferredMode: row.mode,
     strictMode: true,
+    tenantId: input.tenantId,
   });
 
   return {
@@ -468,12 +535,17 @@ export async function repairWebhookEventsBatch(input: {
   actor?: RepairActor;
   limit: number;
   mode: MollieMode;
+  tenantId: string;
 }) {
   const actor = input.actor ?? {
     kind: "system" as const,
   };
   const limit = normalizeLimit(input.limit);
-  const candidates = await listFailedWebhookCandidates(input.mode, limit);
+  const candidates = await listFailedWebhookCandidatesForTenant(
+    input.mode,
+    limit,
+    input.tenantId,
+  );
 
   let repairedCount = 0;
   let skippedCount = 0;
@@ -485,10 +557,16 @@ export async function repairWebhookEventsBatch(input: {
     }
 
     try {
-      await processWebhookResource(candidate.resourceId, candidate.mode, actor);
+      await processWebhookResource(
+        candidate.resourceId,
+        candidate.mode,
+        actor,
+        input.tenantId,
+      );
       await updateWebhookEventStatus({
         id: candidate.id,
         processed: true,
+        tenantId: input.tenantId,
       });
       repairedCount += 1;
     } catch (error) {
@@ -497,6 +575,7 @@ export async function repairWebhookEventsBatch(input: {
         errorMessage: message,
         id: candidate.id,
         processed: false,
+        tenantId: input.tenantId,
       });
       skippedCount += 1;
     }
@@ -512,8 +591,8 @@ export async function repairWebhookEventsBatch(input: {
     {
       action: "repair.webhook_batch",
       details: result,
-      entityId: input.mode,
-      entityType: "webhook_repair_batch",
+      entityId: input.tenantId,
+      entityType: "tenant_recurring_billing_cron",
       mode: input.mode,
       outcome: repairedCount > 0 ? "success" : "failure",
       summary: "Processed a bounded repair batch for failed Mollie webhook events.",
@@ -529,15 +608,16 @@ export async function repairStaleRecordsBatch(input: {
   actor?: RepairActor;
   limit: number;
   mode: MollieMode;
+  tenantId: string;
 }): Promise<RepairBatchResult> {
   const actor = input.actor ?? {
     kind: "system" as const,
   };
   const limit = normalizeLimit(input.limit);
   const [customerRows, paymentRows, subscriptionRows] = await Promise.all([
-    listCustomerCandidates(input.mode, limit),
-    listPaymentCandidates(input.mode, limit),
-    listSubscriptionCandidates(input.mode, limit),
+    listCustomerCandidates(input.mode, limit, input.tenantId),
+    listPaymentCandidates(input.mode, limit, input.tenantId),
+    listSubscriptionCandidates(input.mode, limit, input.tenantId),
   ]);
 
   const candidates = [
@@ -578,6 +658,7 @@ export async function repairStaleRecordsBatch(input: {
       const result = await repairCustomerTarget({
         actor,
         customerId: candidate.id,
+        tenantId: input.tenantId,
         mode: input.mode,
       });
 
@@ -601,6 +682,7 @@ export async function repairStaleRecordsBatch(input: {
         actor,
         mode: input.mode,
         paymentId: candidate.id,
+        tenantId: input.tenantId,
       });
 
       if (result.status === "repaired") {
@@ -621,6 +703,7 @@ export async function repairStaleRecordsBatch(input: {
       actor,
       mode: input.mode,
       subscriptionId: candidate.id,
+      tenantId: input.tenantId,
     });
 
     if (result.status === "repaired") {
@@ -643,8 +726,8 @@ export async function repairStaleRecordsBatch(input: {
     {
       action: "repair.stale_batch",
       details: batchResult,
-      entityId: input.mode,
-      entityType: "repair_batch",
+      entityId: input.tenantId,
+      entityType: "tenant_recurring_billing_cron",
       mode: input.mode,
       outcome: repairedCount > 0 ? "success" : "failure",
       summary: "Processed a bounded repair batch for stale Mollie records.",

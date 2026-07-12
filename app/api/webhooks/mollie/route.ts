@@ -12,13 +12,52 @@ import {
   type WebhookResourceSyncResult,
 } from "@/lib/reliability/webhook-processing";
 
-type ExistingResourceMode = {
+type ExistingResourceContext = {
   mode: "live" | "test";
+  tenantId: string;
 };
+
+async function findExistingResourceContext(resourceId: string) {
+  if (resourceId.startsWith("tr_")) {
+    return (
+      await getDb().execute<ExistingResourceContext>(sql`
+        select mode, tenant_id as "tenantId"
+        from payments
+        where mollie_payment_id = ${resourceId}
+        limit 1
+      `)
+    ).rows[0] ?? null;
+  }
+
+  if (resourceId.startsWith("sub_")) {
+    return (
+      await getDb().execute<ExistingResourceContext>(sql`
+        select mode, tenant_id as "tenantId"
+        from subscriptions
+        where mollie_subscription_id = ${resourceId}
+        limit 1
+      `)
+    ).rows[0] ?? null;
+  }
+
+  if (resourceId.startsWith("pl_")) {
+    return (
+      await getDb().execute<ExistingResourceContext>(sql`
+        select mode, tenant_id as "tenantId"
+        from payment_links
+        where mollie_payment_link_id = ${resourceId}
+        limit 1
+      `)
+    ).rows[0] ?? null;
+  }
+
+  return null;
+}
 
 async function processWebhookResource(
   resourceId: string,
   preferredMode: MollieMode | null,
+  tenantId: string | null,
 ) {
   if (resourceId.startsWith("tr_")) {
     return syncPaymentByMollieId(resourceId, {
@@ -28,6 +67,7 @@ async function processWebhookResource(
       preferredMode: preferredMode ?? undefined,
       requireManagedResource: true,
       strictMode: Boolean(preferredMode),
+      tenantId: tenantId ?? undefined,
     });
   }
 
@@ -42,6 +82,7 @@ async function processWebhookResource(
       },
       preferredMode,
       strictMode: true,
+      tenantId: tenantId ?? undefined,
     });
   }
 
@@ -57,6 +98,7 @@ async function processWebhookResource(
       preferredMode,
       requireManagedResource: true,
       strictMode: true,
+      tenantId: tenantId ?? undefined,
     });
   }
 
@@ -65,28 +107,13 @@ async function processWebhookResource(
 
 export async function POST(request: Request) {
   const result = await handleMollieWebhookRequest(request, {
-    findExistingResourceMode: async (resourceId) =>
-      (
-        await getDb().execute<ExistingResourceMode>(sql`
-          select mode
-          from payments
-          where mollie_payment_id = ${resourceId}
-          union all
-          select mode
-          from subscriptions
-          where mollie_subscription_id = ${resourceId}
-          union all
-          select mode
-          from payment_links
-          where mollie_payment_link_id = ${resourceId}
-          limit 1
-        `)
-      ).rows[0]?.mode ?? null,
+    findExistingResourceContext,
     insertWebhookEvent: async (input) => {
       await getDb().execute(sql`
       insert into webhook_events (
         id,
         mode,
+        tenant_id,
         resource_type,
         resource_id,
         topic,
@@ -96,6 +123,7 @@ export async function POST(request: Request) {
       ) values (
         ${input.id},
         ${input.mode},
+        ${input.tenantId},
         ${input.resourceType ?? null},
         ${input.resourceId},
         ${input.topic},
@@ -122,6 +150,12 @@ export async function POST(request: Request) {
       await getDb().execute(sql`
         update webhook_events
         set
+          tenant_id = coalesce(
+            (select tenant_id from payments where id = ${resourceResult.paymentId} limit 1),
+            (select tenant_id from subscriptions where id = ${resourceResult.subscriptionId} limit 1),
+            (select tenant_id from payment_links where id = ${resourceResult.paymentLinkId} limit 1),
+            tenant_id
+          ),
           mode = coalesce(
             (select mode from payments where id = ${resourceResult.paymentId} limit 1),
             (select mode from subscriptions where id = ${resourceResult.subscriptionId} limit 1),

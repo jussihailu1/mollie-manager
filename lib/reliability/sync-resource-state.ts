@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 
 import { getDb, type DbClient, type DbTransaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
-import { getMollieClient } from "@/lib/mollie/client";
+import { getTenantMollieClient } from "@/lib/mollie/client";
 import type {
   CancellationRequestSubscription,
   WithdrawableOperationRequest,
@@ -15,6 +15,7 @@ type LocalCustomerLink = {
   id: string;
   mollieCustomerId: string | null;
   mode: MollieMode;
+  tenantId: string;
 };
 
 type LocalSubscriptionLink = {
@@ -27,6 +28,7 @@ type LocalSubscriptionLink = {
   mode: MollieMode;
   mollieSubscriptionId: string | null;
   subscriptionTermMode: "fixed_term" | "open_ended";
+  tenantId: string;
   totalPayments: number | null;
 };
 
@@ -35,6 +37,7 @@ type LocalStoredPaymentLink = {
   id: string;
   metadata: Record<string, unknown>;
   molliePaymentLinkId: string | null;
+  tenantId: string;
 };
 
 type LocalMandateLink = {
@@ -45,32 +48,50 @@ export type SyncResourceCustomerLink = LocalCustomerLink;
 export type SyncResourceSubscriptionLink = LocalSubscriptionLink;
 export type SyncResourceStoredPaymentLink = LocalStoredPaymentLink;
 
+async function resolveTenantId(tenantId?: string) {
+  if (!tenantId) {
+    throw new Error("Tenant context is required.");
+  }
+
+  return tenantId;
+}
+
 export async function getLocalCustomerByMollieId(
   mode: MollieMode,
   mollieCustomerId: string | undefined,
+  tenantId?: string,
 ) {
   if (!mollieCustomerId) {
     return null;
   }
 
+  const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await getDb().execute<LocalCustomerLink>(sql`
       select
         id,
         mode,
+        tenant_id as "tenantId",
         mollie_customer_id as "mollieCustomerId"
       from customers
-      where mode = ${mode} and mollie_customer_id = ${mollieCustomerId}
+      where tenant_id = ${resolvedTenantId}
+        and mode = ${mode}
+        and mollie_customer_id = ${mollieCustomerId}
       limit 1
     `);
 
   return result.rows[0] ?? null;
 }
 
-export async function getManagedSubscription(subscriptionId: string) {
+export async function getManagedSubscription(
+  subscriptionId: string,
+  tenantId?: string,
+) {
+  const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await getDb().execute<LocalSubscriptionLink>(sql`
       select
         s.id,
         s.mode,
+        s.tenant_id as "tenantId",
         s.local_status as "localStatus",
         s.mandate_id as "mandateId",
         s.mollie_subscription_id as "mollieSubscriptionId",
@@ -82,6 +103,8 @@ export async function getManagedSubscription(subscriptionId: string) {
       from subscriptions s
       inner join customers c on c.id = s.customer_id
       where s.id = ${subscriptionId}
+        and s.tenant_id = ${resolvedTenantId}
+        and c.tenant_id = ${resolvedTenantId}
       limit 1
     `);
 
@@ -92,7 +115,9 @@ export async function lockCancellationRequestSubscription(
   client: DbTransaction,
   subscriptionId: string,
   mode: MollieMode,
+  tenantId?: string,
 ) {
+  const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await client.execute<CancellationRequestSubscription>(sql`
     select
       local_status as "localStatus",
@@ -103,6 +128,7 @@ export async function lockCancellationRequestSubscription(
       customer_id as "customerId"
     from subscriptions
     where id = ${subscriptionId}
+      and tenant_id = ${resolvedTenantId}
       and mode = ${mode}
     for update
   `);
@@ -114,7 +140,9 @@ export async function lockManagedOperationRequest(
   client: DbTransaction,
   operationRequestId: string,
   mode: MollieMode,
+  tenantId?: string,
 ) {
+  const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await client.execute<WithdrawableOperationRequest>(sql`
     select
       sor.id,
@@ -125,8 +153,11 @@ export async function lockManagedOperationRequest(
     from subscription_operation_requests sor
     inner join subscriptions s
       on s.id = sor.subscription_id
+      and s.tenant_id = sor.tenant_id
       and s.mode = sor.mode
     where sor.id = ${operationRequestId}
+      and sor.tenant_id = ${resolvedTenantId}
+      and s.tenant_id = ${resolvedTenantId}
       and sor.mode = ${mode}
     for update
   `);
@@ -137,15 +168,18 @@ export async function lockManagedOperationRequest(
 export async function getManagedSubscriptionByMollieId(
   mode: MollieMode,
   mollieSubscriptionId: string | undefined,
+  tenantId?: string,
 ) {
   if (!mollieSubscriptionId) {
     return null;
   }
 
+  const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await getDb().execute<LocalSubscriptionLink>(sql`
       select
         s.id,
         s.mode,
+        s.tenant_id as "tenantId",
         s.local_status as "localStatus",
         s.mandate_id as "mandateId",
         s.mollie_subscription_id as "mollieSubscriptionId",
@@ -156,7 +190,10 @@ export async function getManagedSubscriptionByMollieId(
         c.mollie_customer_id as "customerMollieId"
       from subscriptions s
       inner join customers c on c.id = s.customer_id
-      where s.mode = ${mode} and s.mollie_subscription_id = ${mollieSubscriptionId}
+      where s.tenant_id = ${resolvedTenantId}
+        and c.tenant_id = ${resolvedTenantId}
+        and s.mode = ${mode}
+        and s.mollie_subscription_id = ${mollieSubscriptionId}
       limit 1
     `);
 
@@ -167,16 +204,21 @@ export async function getLocalPaymentLinkByMollieId(
   mode: MollieMode,
   molliePaymentLinkId: string,
   client?: DbClient,
+  tenantId?: string,
 ) {
   const db = client ?? getDb();
+  const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await db.execute<LocalStoredPaymentLink>(sql`
       select
         id,
         customer_id as "customerId",
         metadata,
-        mollie_payment_link_id as "molliePaymentLinkId"
+        mollie_payment_link_id as "molliePaymentLinkId",
+        tenant_id as "tenantId"
       from payment_links
-      where mode = ${mode} and mollie_payment_link_id = ${molliePaymentLinkId}
+      where tenant_id = ${resolvedTenantId}
+        and mode = ${mode}
+        and mollie_payment_link_id = ${molliePaymentLinkId}
       limit 1
     `);
 
@@ -197,16 +239,20 @@ export async function findLocalMandateId(
   mode: MollieMode,
   mollieMandateId: string | undefined,
   client?: DbClient,
+  tenantId?: string,
 ) {
   if (!mollieMandateId) {
     return null;
   }
 
   const db = client ?? getDb();
+  const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await db.execute<LocalMandateLink>(sql`
     select id
     from mandates
-    where mode = ${mode} and mollie_mandate_id = ${mollieMandateId}
+    where tenant_id = ${resolvedTenantId}
+      and mode = ${mode}
+      and mollie_mandate_id = ${mollieMandateId}
     limit 1
   `);
 
@@ -221,7 +267,8 @@ export async function upsertMandatesForCustomer(
     return new Map<string, string>();
   }
 
-  const mandates = await getMollieClient(customer.mode).customerMandates.page({
+  const mollie = await getTenantMollieClient(customer.tenantId, customer.mode);
+  const mandates = await mollie.customerMandates.page({
     customerId: customer.mollieCustomerId,
   });
   const mandateIdMap = new Map<string, string>();
@@ -230,7 +277,9 @@ export async function upsertMandatesForCustomer(
     const existing = await client.execute<LocalMandateLink>(sql`
         select id
         from mandates
-        where mode = ${customer.mode} and mollie_mandate_id = ${mandate.id}
+        where tenant_id = ${customer.tenantId}
+          and mode = ${customer.mode}
+          and mollie_mandate_id = ${mandate.id}
         limit 1
       `);
     const localMandateId = existing.rows[0]?.id ?? crypto.randomUUID();
@@ -238,6 +287,7 @@ export async function upsertMandatesForCustomer(
     await client.execute(sql`
         insert into mandates (
           id,
+          tenant_id,
           customer_id,
           mode,
           mollie_mandate_id,
@@ -250,6 +300,7 @@ export async function upsertMandatesForCustomer(
           last_synced_at
         ) values (
           ${localMandateId},
+          ${customer.tenantId},
           ${customer.id},
           ${customer.mode},
           ${mandate.id},
@@ -265,7 +316,7 @@ export async function upsertMandatesForCustomer(
           now(),
           now()
         )
-        on conflict (mode, mollie_mandate_id)
+        on conflict (tenant_id, mode, mollie_mandate_id)
         do update set
           customer_id = excluded.customer_id,
           method = excluded.method,

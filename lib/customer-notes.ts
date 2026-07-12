@@ -31,6 +31,7 @@ const listCustomerNotesByMode = cache(async (
   customerId: string,
   mode: DashboardModeFilter,
   limit: number,
+  tenantId: string,
 ) => {
   const modeParam = toModeParam(mode);
   const normalizedLimit = Math.max(1, Math.min(Math.trunc(limit), 100));
@@ -46,6 +47,7 @@ const listCustomerNotesByMode = cache(async (
       cn.archived_at as "archivedAt"
     from customer_notes cn
     where cn.customer_id = ${customerId}
+      and cn.tenant_id = ${tenantId}
       and cn.archived_at is null
       and (${modeParam}::mollie_mode is null or cn.mode = ${modeParam})
     order by cn.created_at desc
@@ -59,11 +61,13 @@ export async function listCustomerNotes(options: {
   customerId: string;
   limit?: number;
   mode?: DashboardModeFilter;
+  tenantId: string;
 }) {
   return listCustomerNotesByMode(
     options.customerId,
     options.mode ?? "all",
     options.limit ?? 20,
+    options.tenantId,
   );
 }
 
@@ -71,6 +75,7 @@ export async function createCustomerNote(input: {
   body: string;
   customerId: string;
   mode: "live" | "test";
+  tenantId: string;
 }) {
   const body = normalizeCustomerNoteBody(input.body);
 
@@ -82,12 +87,14 @@ export async function createCustomerNote(input: {
   const result = await getDb().execute<CustomerNote>(sql`
     insert into customer_notes (
       id,
+      tenant_id,
       mode,
       customer_id,
       body,
       source
     ) values (
       ${noteId},
+      ${input.tenantId},
       ${input.mode},
       ${input.customerId},
       ${body},

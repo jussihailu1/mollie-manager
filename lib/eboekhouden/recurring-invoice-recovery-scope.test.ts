@@ -19,6 +19,9 @@ describe("recurring invoice recovery module boundary", () => {
       recoverySource,
       /export async function storeRecoveredFailedInvoiceSuccess/,
     );
+    assert.match(recoverySource, /rbs\.tenant_id as "tenantId"/);
+    assert.doesNotMatch(recoverySource, /getSingleTenantIdOrThrow/);
+    assert.match(recoverySource, /tenantId: input\.candidate\.tenantId/);
     assert.doesNotMatch(
       invoiceSource,
       /async function listFailedRecurringRecoveryCandidates/,

@@ -16,6 +16,7 @@ export async function runFirstPaymentInvoiceSyncFollowUp(input: {
   mode: MollieMode;
   paymentId: string;
   reconciliationMode: ReconciliationMode;
+  tenantId: string;
 }) {
   await normalizeFirstPaymentInvoiceStates({
     mode: input.mode,
@@ -31,5 +32,6 @@ export async function runFirstPaymentInvoiceSyncFollowUp(input: {
     failureSummary: input.failureSummary,
     mode: input.mode,
     paymentId: input.paymentId,
+    tenantId: input.tenantId,
   });
 }

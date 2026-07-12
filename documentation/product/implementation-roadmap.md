@@ -14,6 +14,12 @@ as defined in `multi-tenant-pilot-scope.md`. This is earlier than broad SaaS
 administration and does not include self-serve signup, invites, platform
 billing, or a full role matrix.
 
+Current execution bias: reach that pilot as soon as possible without lowering
+the documented safety bar. When choosing between two valid slices, prefer the
+one that closes a pilot release gate sooner. Do not spend the active lane on
+non-blocking ops polish, broader platform administration, or advanced
+operator-only tooling unless the work is required for pilot readiness.
+
 ## Product Direction
 
 The app should default to a guided, plain-language workflow:
@@ -35,7 +41,7 @@ and explicit tenant isolation, while broad tenant administration remains later.
 These rules prevent repeating previous cleanup and hardening mistakes:
 
 - define money, legal, privacy, or lifecycle policy before code changes that depend on it
-- keep Mollie payment truth separate from e-Boekhouden invoice truth
+- keep Mollie payment truth separate from provider-owned invoice truth
 - do not create duplicate invoices for one billing period
 - do not automatically pause, cancel, dun, penalize, or escalate a customer after failed payment detection unless a documented policy explicitly allows it
 - model state transitions explicitly; do not hide new product state only in untyped JSONB metadata
@@ -111,6 +117,16 @@ Goal:
 - make the app safely usable by multiple tenants in one shared deployment
   without cross-tenant leakage or provider-credential mixing.
 
+Pilot-fast-path rule:
+
+- treat this phase as the main launch track until the shared multi-tenant pilot
+  release gates are closed
+- keep advanced replay, repair, reconciliation, cron, and diagnostics work only
+  when it is required to satisfy tenant isolation, money-flow correctness, or
+  pilot verification
+- defer nicer advanced tooling, broader ops ergonomics, and non-blocking audit
+  polish until after the pilot unless they close a current release gate
+
 Scope:
 
 - tenant entity and tenant membership model
@@ -126,17 +142,164 @@ Scope:
 - tenant-aware webhook, replay, repair, reconciliation, cron, onboarding,
   invoice, and notification flows
 
+Current bounded implementation slice:
+
+- tenant, platform-operator, and operator-membership foundation is already in
+  place
+- tenant-owned subscription policy defaults and billing/accounting settings are
+  already persisted by `tenant_id`, and helper lookups now require explicit
+  tenant context instead of a single-tenant fallback
+- current slice tenantizes `customers`, `mandates`, `subscriptions`,
+  `subscription_operation_requests`, `payments`,
+  `recurring_billing_schedules`, `payment_links`,
+  `subscription_onboarding_consents`, and `customer_notes`
+- normal dashboard, notifications, customer activity, customer drawer invoice
+  links, customer drawer invoice resend, customer drawer notes, customer drawer
+  billing history, payments, and settings surfaces now resolve the active
+  tenant from the signed-in operator's selection cookie through the shared
+  tenant-context helper
+- current slice also scopes the root customer/payment loaders, payment drawer
+  API, and e-Boekhouden relation-search linked-record filtering to explicit
+  tenant context, while preserving single-tenant fail-closed behavior until
+  membership/session tenant selection lands
+- payment drawer invoice-trigger audit lookups now verify tenant-owned payment
+  and recurring schedule rows before surfacing audit summaries
+- dashboard layout now blocks signed-in operators without tenant membership or
+  a controlled platform-operator bootstrap path
+- tenant-selection shell plumbing now persists the active tenant in a cookie,
+  resolves it from the operator's accessible tenant list, and exposes a manual
+  switcher in the dashboard menu
+- billing settings and advanced invoice automation actions now resolve the
+  current tenant before mutating tenant-owned billing state or running batch
+  invoice actions
+- tenant billing settings now carry an explicit active invoice provider, and
+  stored invoice/customer-link data is provider-neutral so provider switching is
+  forward-only for new invoices
+- alert status actions on the operator notifications surface now resolve the
+  current tenant before acknowledging or reopening tenant-linked alerts
+- subscription operation request actions now resolve the current tenant before
+  recording, withdrawing, transitioning, or syncing subscription request state
+- recurring-invoice cron fan-out now iterates accessible tenants explicitly so
+  invoice create/recovery/retry automation stays tenant-scoped
+- recurring-invoice cron heartbeat metrics now read tenant cron audit rows
+  directly by tenant audit entity id so settings snapshots stay aligned with
+  tenant-local runs
+- recent reliability audit activity now includes tenant-linked alert,
+  webhook-event, and tenant cron rows
+- webhook and stale-repair batch audits now write to the tenant cron audit
+  entity instead of the global batch entity so advanced tenant audit history
+  stays tenant-scoped during protected cron repair follow-up
+- protected recurring-invoice cron no longer writes a route-level global
+  failure audit row before tenant context exists
+- Needs Attention webhook items now require tenant-linked resources before
+  surfacing failed webhook rows
+- payment follow-up queue alert joins now verify tenant-owned payments before
+  showing queued alert evidence
+- alert email lookups now verify tenant-owned linked entities for tenant-backed
+  alert delivery paths
+- invoice delivery retry and recurring recovery alert emails now carry tenant
+  ids from tenant-scoped candidate rows
+- recurring invoice schedule candidates now carry tenant ids into invoice
+  creation and recovery alert delivery
+- recurring invoice creation failure alert delivery now carries tenant ids
+- first-payment invoice follow-up now carries explicit tenant context into
+  billing settings lookup
+- first-payment onboarding and subscription-sync follow-up now carry explicit
+  tenant context into tenant-owned subscription policy defaults and invoice
+  creation lookup
+  from tenant-scoped schedule candidates
+- session-authenticated `/api/health` diagnostics now resolve the active tenant
+  before reading the shared reliability ops snapshot
+- bearer-authorized `/api/health` diagnostics now stay on setup/database checks
+  unless an explicit `tenantId` is supplied for the shared tenant-scoped
+  reliability snapshot
+- tenant-aware Mollie sync/reliability cross-mode lookup helpers now thread
+  explicit tenant context through sync, replay, repair, and subscription-sync
+  lookups, while global/bootstrap `/api/health` diagnostics remain
+  intentionally non-tenant until an explicit `tenantId` is supplied
+- e-Boekhouden relation detail lookups now require active tenant context
+- tenant-owned e-Boekhouden credential storage now exists, manual
+  `tenant:provision` can seed those credentials, and relation search/detail plus
+  billing-settings discovery now resolve e-Boekhouden credentials per tenant
+- e-Boekhouden client credential resolution now fails closed without explicit
+  tenant context for all tenants, including `legacy-default`, instead of
+  keeping the env-backed fallback readable
+- first-payment and recurring invoice create/reconcile flows, invoice PDF fetch
+  paths, and onboarding relation patch flows now thread explicit tenant context
+  into live e-Boekhouden invoice and relation reads/writes
+- first-payment and recurring invoice candidate lookups, invoice-claim writes,
+  invoice-created state writes, and invoice-delivery alert resolution now fence
+  by tenant id through the invoice automation follow-up path
+- tenant-owned Mollie credential storage now exists, manual `tenant:provision`
+  can seed mode-specific Mollie API keys, and tenant-aware Mollie client
+  resolution now drives onboarding customer creation, first-payment payment-link
+  creation, subscription activation, billing repair, with payment-link
+  follow-up now threading explicit tenant context, payment-link sync, mandate
+  sync, and payment drawer live fetches without implicit or `legacy-default`
+  env-backed business fallback
+- tenant-owned Mollie and e-Boekhouden credential encryption now writes through
+  dedicated `APP_ENCRYPTION_KEY` ciphertext while keeping legacy
+  `AUTH_SECRET`-encrypted tenant rows readable until a later re-encryption or
+  backfill slice
+- consent-link lookup now resolves the active tenant before reading latest
+  customer consent URLs
+- customer activity, invoice-link, customer-note, and customer-notification
+  history helpers now require explicit tenant context instead of a
+  single-tenant fallback
+- onboarding customer actions now thread the active tenant through customer
+  creation, linking, archival, restoration, first-payment creation, and billing
+  repair flows
+- onboarding helper/data reads and first-payment/recurring invoice helper
+  queries now fail closed without explicit tenant context instead of falling
+  back to a single-tenant default
+- reconciliation fan-out now carries the active tenant into payment and
+  payment-link sync dependencies
+- reconciliation entrypoints now fail closed without explicit tenant context
+  instead of widening to all tenants
+- sync resource-state lookups now fail closed without tenant context instead of
+  falling back to a single-tenant default
+- tenant-scoped reconciliation summaries now keep their before/after invoice
+  state deltas scoped to the active tenant through fan-out
+- billing-repair payment-link follow-up now threads explicit tenant context
+  instead of the old tenant-less sync fallback, and payment-link sync still
+  requires explicit tenant context instead of a single-tenant fallback
+- invoice email delivery now carries tenant context through first-payment and
+  resend flows instead of global fallback
+- invoice delivery helper metadata reads and invoice-state writes now fence by
+  tenant id instead of bare payment or schedule ids
+- managed webhook intake now requires resolved tenant-local resource context
+  before sync/provider calls
+- managed webhook_events now persist tenant ids, and replay and repair
+  operator actions now require the current tenant when replaying failed
+  webhooks or running targeted repair actions
+- payment follow-up queue, pending subscription request queries, invoice
+  automation metrics, dashboard reliability reads, and repair helper entry
+  points now fail closed without explicit tenant context, with dashboard
+  webhook history reads fenced by tenant directly and failed-webhook repair
+  status writes keeping tenant scope in the update path
+- repair candidate alert lookups now verify tenant-owned payments,
+  subscriptions, and customers before surfacing repair priority
+- alert open/resolve/email-sent helper writes now require tenant context, and
+  unresolved alert uniqueness is now scoped by tenant-backed alert payload and
+  linked entities
+- live e-Boekhouden mutation seams that are in current pilot scope now thread
+  explicit tenant context through relation patch, invoice create/reconcile, and
+  tenant-owned credential resolution; global/bootstrap diagnostics remain
+  intentionally non-tenant unless an explicit `tenantId` is supplied
+
 Required behavior:
 
 - signing in alone does not grant product access
-- an operator may access tenant data only through explicit membership or a
-  controlled platform-operator bootstrap path
+- normal operator access is membership-led, and tenant data access requires
+  explicit tenant membership or a controlled platform-operator bootstrap path
 - one tenant is active for an authenticated operator workflow at a time
 - no tenant business flow may use an implicit app-wide default tenant
 - no tenant business flow may use one global provider account as payment or
   accounting truth
 - cross-tenant data must not appear in normal or advanced operator surfaces
 - current money-flow safeguards must still hold after tenant scoping
+- normal operator shell state now remembers an active tenant, but business
+  query consumers still need to be threaded through that tenant explicitly
 
 Acceptance criteria:
 
@@ -394,3 +557,23 @@ Reason:
 
 If a later feature needs a Phase 0, Phase 0.5, or Phase 1-4 foundation, build
 the foundation first.
+
+## Pilot Launch Priority
+
+Until the shared multi-tenant pilot is ready, the active implementation order
+inside the broader roadmap is:
+
+1. close remaining Phase 0.5 release-gate gaps
+2. preserve Phase 0 failed-payment correctness where tenant scoping touches it
+3. run focused pilot verification
+4. only then widen into Phase 1-7 work that is not required for pilot launch
+
+For avoidance of doubt, the following are not active critical-path work unless a
+specific gap blocks a pilot release gate:
+
+- deeper replay or repair UX polish beyond safe advanced access
+- broader diagnostics ergonomics
+- retention apply tooling beyond accepted policy display and safe dry-run
+- broader subscription operations beyond the already-documented safe read-only
+  or pre-execution state slices
+- plan catalog, advanced overrides, or later platform-administration work

@@ -5,6 +5,7 @@ import type { MollieMode } from "@/lib/env";
 export type FirstPaymentInvoiceMatchInput = {
   mode?: MollieMode;
   paymentId?: string;
+  tenantId?: string;
 };
 
 export function buildFirstPaymentFilter(input?: FirstPaymentInvoiceMatchInput) {
@@ -23,6 +24,7 @@ export function buildFirstPaymentFilter(input?: FirstPaymentInvoiceMatchInput) {
 
 export function buildDeterministicMatchCte(input?: FirstPaymentInvoiceMatchInput) {
   const filters = buildFirstPaymentFilter(input);
+  const tenantFilter = input?.tenantId ? sql`and p.tenant_id = ${input.tenantId}` : sql``;
 
   return sql`
     with payment_link_matches as (
@@ -36,6 +38,7 @@ export function buildDeterministicMatchCte(input?: FirstPaymentInvoiceMatchInput
       from payments p
       inner join payment_links pl
         on pl.mode = p.mode
+        and pl.tenant_id = p.tenant_id
         and pl.metadata ->> 'source' = 'subscription_onboarding'
         and pl.metadata ->> 'paymentType' = 'first'
         and (
@@ -44,8 +47,10 @@ export function buildDeterministicMatchCte(input?: FirstPaymentInvoiceMatchInput
         )
       inner join subscription_onboarding_consents soc
         on soc.mode = p.mode
+        and soc.tenant_id = p.tenant_id
         and soc.payment_link_id = pl.id
       where ${filters}
+        ${tenantFilter}
     ),
     matched_ranked as (
       select

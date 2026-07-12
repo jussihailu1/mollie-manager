@@ -18,6 +18,7 @@ describe("invoice delivery retry flow", () => {
         actor: { kind: "system" },
         limit: 10,
         mode: "test",
+        tenantId: "tenant_1",
       },
       {
         deliverCustomerInvoiceEmail: async (input) => {
@@ -37,41 +38,52 @@ describe("invoice delivery retry flow", () => {
 
           return { status: "skipped" as const };
         },
-        loadCandidates: async () => [
+        loadCandidates: async (_mode, _limit, tenantId) => {
+          assert.equal(tenantId, "tenant_1");
+          return [
           {
             customerEmail: "ops@example.com",
             customerId: "customer_1",
-            eboekhoudenInvoiceId: "123",
-            eboekhoudenInvoiceNumber: "INV-123",
             entityId: "payment_sent",
+            invoiceDocumentUrl: null,
+            invoiceId: "123",
+            invoiceNumber: "INV-123",
+            invoiceProvider: "eboekhouden",
             invoiceType: "first_payment",
             mode: "test",
             plannedCollectionDate: null,
             subscriptionId: "subscription_1",
+            tenantId: "tenant_1",
           },
           {
             customerEmail: "ops@example.com",
             customerId: "customer_1",
-            eboekhoudenInvoiceId: "124",
-            eboekhoudenInvoiceNumber: "INV-124",
             entityId: "payment_failed",
+            invoiceDocumentUrl: null,
+            invoiceId: "124",
+            invoiceNumber: "INV-124",
+            invoiceProvider: "eboekhouden",
             invoiceType: "first_payment",
             mode: "test",
             plannedCollectionDate: null,
             subscriptionId: "subscription_1",
+            tenantId: "tenant_1",
           },
           {
             customerEmail: null,
             customerId: "customer_1",
-            eboekhoudenInvoiceId: null,
-            eboekhoudenInvoiceNumber: null,
             entityId: "payment_skipped",
+            invoiceDocumentUrl: null,
+            invoiceId: null,
+            invoiceNumber: null,
+            invoiceProvider: "eboekhouden",
             invoiceType: "first_payment",
             mode: "test",
             plannedCollectionDate: null,
             subscriptionId: "subscription_1",
+            tenantId: "tenant_1",
           },
-        ],
+        ]},
       },
     );
 
@@ -112,6 +124,7 @@ describe("invoice delivery retry flow", () => {
         actor: { kind: "user" },
         limit: 10,
         mode: "live",
+        tenantId: "tenant_2",
       },
       {
         deliverCustomerInvoiceEmail: async (input) => {
@@ -127,30 +140,38 @@ describe("invoice delivery retry flow", () => {
 
           return { status: "skipped" as const };
         },
-        loadCandidates: async () => [
+        loadCandidates: async (_mode, _limit, tenantId) => {
+          assert.equal(tenantId, "tenant_2");
+          return [
           {
             customerEmail: "ops@example.com",
             customerId: "customer_2",
-            eboekhoudenInvoiceId: "222",
-            eboekhoudenInvoiceNumber: "INV-222",
             entityId: "schedule_sent",
+            invoiceDocumentUrl: null,
+            invoiceId: "222",
+            invoiceNumber: "INV-222",
+            invoiceProvider: "eboekhouden",
             invoiceType: "recurring",
             mode: "live",
             plannedCollectionDate: "2026-06-09",
             subscriptionId: "subscription_2",
+            tenantId: "tenant_2",
           },
           {
             customerEmail: "ops@example.com",
             customerId: "customer_2",
-            eboekhoudenInvoiceId: "223",
-            eboekhoudenInvoiceNumber: "INV-223",
             entityId: "schedule_skipped",
+            invoiceDocumentUrl: null,
+            invoiceId: "223",
+            invoiceNumber: "INV-223",
+            invoiceProvider: "eboekhouden",
             invoiceType: "recurring",
             mode: "live",
             plannedCollectionDate: "2026-06-10",
             subscriptionId: "subscription_2",
+            tenantId: "tenant_2",
           },
-        ],
+        ]},
       },
     );
 

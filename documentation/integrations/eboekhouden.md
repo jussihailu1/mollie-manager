@@ -5,7 +5,8 @@ Audience: developers
 
 ## Role
 
-e-Boekhouden is the invoice and accounting source of truth for this app.
+e-Boekhouden is one supported invoice provider plus the bookkeeping integration
+for tenants that use it.
 
 The app uses e-Boekhouden for:
 
@@ -22,12 +23,12 @@ app-wide e-Boekhouden token.
 
 ## Authentication Model
 
-- Current code starts a session with `EBOEKHOUDEN_API_TOKEN`
+- current tenant business flows resolve tenant-owned e-Boekhouden credentials
+  before starting a session
 - `EBOEKHOUDEN_API_SOURCE` is sent with the session request
-- Session tokens are cached in memory and renewed when needed
-- The multi-tenant pilot foundation must replace the app-wide token assumption
-  with tenant-owned credential/session resolution
-- Any e-Boekhouden session cache must be tenant-aware
+- session tokens are cached in memory and renewed when needed
+- session cache is tenant-aware
+- tenant business flows fail closed without explicit tenant context
 
 Main implementation:
 
@@ -36,26 +37,25 @@ Main implementation:
 ## Customer Relation Linking
 
 - Operators can search and import relations from e-Boekhouden
-- Local customers store:
-  - `eboekhouden_relation_id`
-  - `eboekhouden_relation_code`
-  - `eboekhouden_link_status`
-  - sync timestamp and snapshot metadata
+- Local provider links now live in `customer_accounting_links`, keyed by
+  tenant, customer, mode, and provider
 - Linking is mode-aware and prevents duplicate local linking in the same mode
 - Linking must run against the active tenant's e-Boekhouden account and must not
   mix relations across tenants
 
 ## Invoice Model
 
-- e-Boekhouden owns invoice truth
+- The provider that created an invoice owns invoice truth for that stored
+  invoice row
 - The app owns invoice delivery behavior when configured for SMTP delivery
 - The app must not rely on e-Boekhouden to email customers in the normal app-owned delivery path
 
 Current invoice areas:
 
-- first-payment invoice tracking on `payments`
-- recurring invoice tracking on `recurring_billing_schedules`
-- tenant accounting defaults in `tenant_billing_settings`
+- stored invoices now live in the provider-neutral `invoices` table
+- e-Boekhouden-only invoice defaults live in `tenant_eboekhouden_invoice_settings`
+- tenant-wide generic invoice defaults, including the explicit active provider,
+  live in `tenant_billing_settings`
 
 Invoice template discovery, revenue-ledger discovery, invoice creation, and
 invoice reconciliation must all run against the active tenant's e-Boekhouden
@@ -64,15 +64,15 @@ company/account.
 ## Safety Rules
 
 - Claim rows before calling the upstream invoice API
-- Store returned invoice id and number locally on success
+- Store returned provider invoice id and number in the provider-neutral invoice table on success
 - Write audit logs for success and failure
 - Open operator alerts for important failures
 - Do not treat `mandate_only` EUR 0.01 flows as normal recurring invoice events
 - Resolve tenant context before relation lookup, relation linking, template
   discovery, ledger discovery, invoice creation, invoice retry, reconciliation,
   or PDF URL trust decisions
-- Current global env-backed e-Boekhouden credentials are implementation debt to
-  remove during the multi-tenant pilot foundation
+- there is no supported global e-Boekhouden token path for tenant business
+  flows; credentials must be stored per tenant
 
 ## Relevant Files
 
@@ -85,11 +85,8 @@ company/account.
 
 ## Relevant Env
 
-- `EBOEKHOUDEN_API_TOKEN`
-- `EBOEKHOUDEN_API_SOURCE`
 - `INVOICE_EMAIL_OVERRIDE_TO`
 - SMTP env values used by app-owned delivery
 
-These env values describe current implementation/bootstrap behavior. They are
-not the desired long-term live credential model for the shared multi-tenant
-pilot.
+Tenant e-Boekhouden credentials now live in tenant storage, not global env.
+The session source value is stored with those tenant credentials.

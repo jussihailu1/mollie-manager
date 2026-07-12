@@ -10,8 +10,21 @@ describe("onboarding action helpers boundary", () => {
     assert.match(actionsSource, /@\/lib\/onboarding\/action-helpers/);
     assert.match(helpersSource, /export function redirectWithMessage/);
     assert.match(helpersSource, /export async function updateRelationFromLocalFields/);
+    assert.match(
+      helpersSource,
+      /export async function updateRelationFromLocalFields\(\s*relationId: number,\s*fields: LocalRelationFields,\s*tenantId: string,\s*\)/,
+    );
+    assert.match(
+      helpersSource,
+      /const relation = await getEboekhoudenRelation\(relationId, tenantId\);/,
+    );
+    assert.match(
+      helpersSource,
+      /await updateEboekhoudenRelation\(\s*relationId,\s*localFieldsToRelationPatch\(fields, relation\),\s*tenantId,\s*\);/,
+    );
     assert.match(helpersSource, /export async function getLocalCustomer/);
     assert.match(helpersSource, /export async function assertRelationIsAvailable/);
+    assert.doesNotMatch(helpersSource, /getSingleTenantIdOrThrow/);
     assert.doesNotMatch(actionsSource, /function redirectWithMessage/);
     assert.doesNotMatch(actionsSource, /function serializeError/);
     assert.doesNotMatch(actionsSource, /function serializeIntegrationError/);

@@ -43,6 +43,7 @@ function ledgerLabel(ledger: {
 }
 
 export function BillingSettingsForm({
+  defaultActiveInvoiceProvider,
   invoiceTemplates,
   ledgers,
   defaultInvoiceTemplateId,
@@ -50,6 +51,7 @@ export function BillingSettingsForm({
   hasSavedTemplateOutsideDiscovery,
   hasSavedLedgerOutsideDiscovery,
 }: {
+  defaultActiveInvoiceProvider: "eboekhouden" | "mollie";
   defaultInvoiceTemplateId: number | null | undefined;
   defaultRevenueLedgerId: number | null | undefined;
   hasSavedLedgerOutsideDiscovery: boolean;
@@ -69,12 +71,27 @@ export function BillingSettingsForm({
   }>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
+  const [activeInvoiceProvider, setActiveInvoiceProvider] = useState(
+    defaultActiveInvoiceProvider,
+  );
+  const [selectedInvoiceTemplateId, setSelectedInvoiceTemplateId] = useState(
+    defaultInvoiceTemplateId ? String(defaultInvoiceTemplateId) : "",
+  );
+  const [selectedRevenueLedgerId, setSelectedRevenueLedgerId] = useState(
+    defaultRevenueLedgerId ? String(defaultRevenueLedgerId) : "",
+  );
   const formRef = useRef<HTMLFormElement>(null);
 
   return (
     <form className="space-y-4" action={updateBillingSettingsAction} ref={formRef}>
       <input type="hidden" name="returnTo" value="/settings" />
       <input type="hidden" name="invoiceEmailDeliveryMode" value="app_smtp" />
+      {activeInvoiceProvider === "mollie" ? (
+        <>
+          <input type="hidden" name="invoiceTemplateId" value={selectedInvoiceTemplateId} />
+          <input type="hidden" name="revenueLedgerId" value={selectedRevenueLedgerId} />
+        </>
+      ) : null}
 
       <fieldset
         aria-disabled={!isEditing}
@@ -83,12 +100,34 @@ export function BillingSettingsForm({
       >
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
+            <Label htmlFor="activeInvoiceProvider">Active invoice provider</Label>
+            <select
+              className={selectClassName}
+              id="activeInvoiceProvider"
+              name="activeInvoiceProvider"
+              value={activeInvoiceProvider}
+              onChange={(event) =>
+                setActiveInvoiceProvider(
+                  event.target.value as "eboekhouden" | "mollie",
+                )
+              }
+            >
+              <option value="mollie">Mollie</option>
+              <option value="eboekhouden">e-Boekhouden</option>
+            </select>
+          </div>
+        </div>
+
+        {activeInvoiceProvider === "eboekhouden" ? (
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
             <Label htmlFor="invoiceTemplateId">Invoice template</Label>
             <select
               className={selectClassName}
               id="invoiceTemplateId"
               name="invoiceTemplateId"
-              defaultValue={defaultInvoiceTemplateId ?? ""}
+              value={selectedInvoiceTemplateId}
+              onChange={(event) => setSelectedInvoiceTemplateId(event.target.value)}
               disabled={
                 !isEditing ||
                 (invoiceTemplates.length === 0 && !defaultInvoiceTemplateId)
@@ -113,7 +152,8 @@ export function BillingSettingsForm({
               className={selectClassName}
               id="revenueLedgerId"
               name="revenueLedgerId"
-              defaultValue={defaultRevenueLedgerId ?? ""}
+              value={selectedRevenueLedgerId}
+              onChange={(event) => setSelectedRevenueLedgerId(event.target.value)}
               disabled={!isEditing || (ledgers.length === 0 && !defaultRevenueLedgerId)}
             >
               <option value="">Select revenue ledger</option>
@@ -129,12 +169,14 @@ export function BillingSettingsForm({
               ))}
             </select>
           </div>
-        </div>
+          </div>
+        ) : null}
       </fieldset>
 
       <p className="text-xs text-muted-foreground">
-        Loaded {invoiceTemplates.length} invoice templates and {ledgers.length} ledger
-        accounts from e-Boekhouden. VAT is fixed to 21% for now.
+        {activeInvoiceProvider === "eboekhouden"
+          ? `Loaded ${invoiceTemplates.length} invoice templates and ${ledgers.length} ledger accounts from e-Boekhouden. VAT is fixed to 21% for now.`
+          : "Mollie is the active invoice provider. e-Boekhouden-only template and ledger settings stay stored for later but are not required while Mollie is active."}
       </p>
 
       <div className="flex items-center gap-2">
@@ -147,6 +189,13 @@ export function BillingSettingsForm({
               onClick={(event) => {
                 event.preventDefault();
                 formRef.current?.reset();
+                setActiveInvoiceProvider(defaultActiveInvoiceProvider);
+                setSelectedInvoiceTemplateId(
+                  defaultInvoiceTemplateId ? String(defaultInvoiceTemplateId) : "",
+                );
+                setSelectedRevenueLedgerId(
+                  defaultRevenueLedgerId ? String(defaultRevenueLedgerId) : "",
+                );
                 setIsEditing(false);
               }}
             >

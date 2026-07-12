@@ -42,6 +42,7 @@ export type SubscriptionSyncTarget = {
   metadata: Record<string, unknown>;
   mode: MollieMode;
   subscriptionTermMode: "fixed_term" | "open_ended";
+  tenantId: string;
   totalPayments: number | null;
 };
 
@@ -87,6 +88,7 @@ export async function persistSyncedSubscriptionPayments(
         updated_at = now(),
         last_synced_at = now()
       where id = ${input.localSubscription.id}
+        and tenant_id = ${input.localSubscription.tenantId}
     `);
 
   await upsertRecurringBillingScheduleForSubscription(client, {
@@ -124,6 +126,7 @@ export async function persistSyncedSubscriptionPayments(
       payment,
       paymentType,
       recurringCollectionState,
+      tenantId: input.localSubscription.tenantId,
     });
 
     persistedPayments.push({ localPaymentId, payment });

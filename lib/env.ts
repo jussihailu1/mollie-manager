@@ -42,8 +42,8 @@ const rawServerEnvSchema = z.object({
   APP_ENV: z.enum(["development", "test", "production"]).default("development"),
   AUTH_URL: optionalUrl,
   APP_URL: optionalUrl,
+  APP_ENCRYPTION_KEY: optionalString,
   AUTH_SECRET: optionalString,
-  AUTH_ALLOWED_EMAIL: optionalEmail,
   AUTH_GOOGLE_ID: optionalString,
   AUTH_GOOGLE_SECRET: optionalString,
   AUTH_ADVANCED_EMAILS: optionalString,
@@ -69,8 +69,6 @@ const rawServerEnvSchema = z.object({
   ALERT_EMAIL_TO: optionalEmail,
   INVOICE_EMAIL_OVERRIDE_TO: optionalEmail,
   INVOICE_CRON_SHARED_SECRET: optionalString,
-  EBOEKHOUDEN_API_TOKEN: optionalString,
-  EBOEKHOUDEN_API_SOURCE: z.string().trim().min(1).max(10).default("Kify"),
   SUBSCRIPTION_CANCELLATION_EMAIL: optionalEmail,
   SUBSCRIPTION_TERMS_URL: optionalUrl,
   SUBSCRIPTION_PRIVACY_URL: optionalUrl,
@@ -104,7 +102,6 @@ const postgresUrlSchema = z
   );
 
 const authConfigSchema = z.object({
-  AUTH_ALLOWED_EMAIL: z.string().email(),
   AUTH_GOOGLE_ID: z.string().min(1),
   AUTH_GOOGLE_SECRET: z.string().min(1),
   AUTH_SECRET: z.string().min(32),
@@ -144,11 +141,6 @@ const mollieWebhookConfigSchema = z.object({
   MOLLIE_WEBHOOK_SHARED_SECRET: z.string().min(16).optional(),
 });
 
-const eboekhoudenConfigSchema = z.object({
-  EBOEKHOUDEN_API_SOURCE: z.string().trim().min(1).max(10),
-  EBOEKHOUDEN_API_TOKEN: z.string().min(1),
-});
-
 const subscriptionPolicyConfigSchema = z.object({
   SUBSCRIPTION_CANCELLATION_EMAIL: z.string().email(),
   SUBSCRIPTION_PRIVACY_URL: z.string().url(),
@@ -164,8 +156,10 @@ function buildStatus(issues: string[]): SetupSectionStatus {
 }
 
 export function getSetupStatus() {
+  const applicationIssues = [
+    env.APP_ENCRYPTION_KEY ? null : "APP_ENCRYPTION_KEY is missing.",
+  ].filter((value): value is string => value !== null);
   const authIssues = [
-    env.AUTH_ALLOWED_EMAIL ? null : "AUTH_ALLOWED_EMAIL is missing.",
     env.AUTH_GOOGLE_ID ? null : "AUTH_GOOGLE_ID is missing.",
     env.AUTH_GOOGLE_SECRET ? null : "AUTH_GOOGLE_SECRET is missing.",
     env.AUTH_SECRET ? null : "AUTH_SECRET is missing.",
@@ -177,11 +171,6 @@ export function getSetupStatus() {
     !postgresUrlSchema.safeParse(env.DATABASE_URL).success
       ? "DATABASE_URL is not a PostgreSQL connection string."
       : null,
-  ].filter((value): value is string => value !== null);
-
-  const mollieIssues = [
-    env.MOLLIE_TEST_API_KEY ? null : "MOLLIE_TEST_API_KEY is missing.",
-    env.MOLLIE_LIVE_API_KEY ? null : "MOLLIE_LIVE_API_KEY is missing.",
   ].filter((value): value is string => value !== null);
 
   const webhookIssues = [
@@ -199,9 +188,9 @@ export function getSetupStatus() {
   ].filter((value): value is string => value !== null);
 
   return {
+    application: buildStatus(applicationIssues),
     auth: buildStatus(authIssues),
     database: buildStatus(databaseIssues),
-    mollie: buildStatus(mollieIssues),
     notifications: buildStatus(notificationIssues),
     webhook: buildStatus(webhookIssues),
   };
@@ -241,10 +230,6 @@ export function isTestAuthBypassEnabled() {
 
 export function getMollieWebhookConfig() {
   return mollieWebhookConfigSchema.parse(env);
-}
-
-export function getEboekhoudenConfig() {
-  return eboekhoudenConfigSchema.parse(env);
 }
 
 export function getSubscriptionPolicyConfig() {

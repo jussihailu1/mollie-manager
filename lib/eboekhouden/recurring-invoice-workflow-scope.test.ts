@@ -13,6 +13,22 @@ describe("recurring invoice workflow module boundary", () => {
     assert.match(recurringSource, /@\/lib\/eboekhouden\/recurring-invoice-workflow/);
     assert.match(workflowSource, /export async function createEboekhoudenInvoiceForSchedule/);
     assert.match(workflowSource, /deliverCustomerInvoiceEmail/);
+    assert.match(
+      workflowSource,
+      /getScheduledInvoiceCandidate\(scheduleId, options\.tenantId\)/,
+    );
+    assert.match(
+      workflowSource,
+      /claimScheduleForInvoice\(\{[\s\S]*tenantId: options\.tenantId,[\s\S]*\}\)/,
+    );
+    assert.match(
+      workflowSource,
+      /findExistingEboekhoudenInvoiceByReference\(\{[\s\S]*tenantId: candidate\.tenantId,/,
+    );
+    assert.match(
+      workflowSource,
+      /createEboekhoudenInvoice\(\s*invoiceInput,\s*candidate\.tenantId,\s*\)/,
+    );
     assert.doesNotMatch(recurringSource, /export async function createEboekhoudenInvoiceForSchedule/);
     assert.doesNotMatch(recurringSource, /createEboekhoudenInvoice\(/);
   });

@@ -13,6 +13,7 @@ describe("customer invoice resend flow", () => {
         mode: "test",
         ownerId: "payment_1",
         ownerType: "payment",
+        tenantId: "tenant_1",
       },
       {
         async loadTarget(input) {
@@ -20,17 +21,20 @@ describe("customer invoice resend flow", () => {
           return {
             customerEmail: "customer@example.com",
             customerId: input.customerId,
-            eboekhoudenInvoiceId: "123",
-            eboekhoudenInvoiceNumber: "INV-123",
             entityId: input.ownerId,
+            invoiceDocumentUrl: null,
+            invoiceId: "123",
+            invoiceNumber: "INV-123",
+            invoiceProvider: "eboekhouden",
             invoiceType: "first_payment",
             mode: "test",
             plannedCollectionDate: null,
             subscriptionId: null,
+            tenantId: input.tenantId,
           };
         },
         async deliverCustomerInvoiceEmail(input) {
-          calls.push(`deliver:${input.entityId}:${input.eboekhoudenInvoiceNumber}`);
+          calls.push(`deliver:${input.entityId}:${input.invoiceNumber}`);
           return { status: "sent" };
         },
       },
@@ -49,6 +53,7 @@ describe("customer invoice resend flow", () => {
         mode: "test",
         ownerId: "missing",
         ownerType: "recurring_schedule",
+        tenantId: "tenant_1",
       },
       {
         async loadTarget() {

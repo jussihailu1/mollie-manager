@@ -17,8 +17,14 @@ describe("sync resource state module boundary", () => {
       resourceStateSource,
       /export async function upsertMandatesForCustomer/,
     );
+    assert.match(
+      resourceStateSource,
+      /const mollie = await getTenantMollieClient\(customer\.tenantId, customer\.mode\);/,
+    );
     assert.doesNotMatch(syncSource, /async function getLocalCustomerByMollieId/);
     assert.doesNotMatch(syncSource, /async function getManagedSubscription/);
     assert.doesNotMatch(syncSource, /async function upsertMandatesForCustomer/);
+    assert.doesNotMatch(resourceStateSource, /getSingleTenantIdOrThrow/);
+    assert.match(resourceStateSource, /Tenant context is required\./);
   });
 });

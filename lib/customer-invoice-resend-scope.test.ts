@@ -9,6 +9,7 @@ describe("customer invoice resend surface", () => {
 
     assert.match(source, /deliverCustomerInvoiceEmail/);
     assert.match(source, /loadCustomerInvoiceResendTarget/);
+    assert.doesNotMatch(source, /getSingleTenantIdOrThrow/);
     assert.doesNotMatch(source, /createFirstPaymentInvoice|createRecurringInvoice/);
     assert.doesNotMatch(source, /invoice\.create|batch_create/);
   });
@@ -19,8 +20,8 @@ describe("customer invoice resend surface", () => {
       "utf8",
     );
 
-    assert.match(source, /requireViewerSession/);
-    assert.match(source, /getCustomerDetail/);
+    assert.match(source, /getCurrentTenantSelectionForViewer/);
+    assert.match(source, /getCustomerDetail\(customerId, selectedMode, tenantId\)/);
     assert.match(source, /resendCustomerInvoiceEmail/);
     assert.match(source, /ownerType/);
     assert.match(source, /ownerId/);

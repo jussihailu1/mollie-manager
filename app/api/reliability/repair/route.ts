@@ -7,6 +7,7 @@ import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import {
   repairReliabilityTarget,
 } from "@/lib/reliability/repair";
+import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
 const repairSchema = z.object({
   id: z.string().uuid(),
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest) {
   }
 
   const selectedMode = await getSelectedMollieMode();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
 
   try {
     const actor = {
@@ -66,6 +68,7 @@ export async function POST(request: NextRequest) {
       id: parsed.data.id,
       kind: parsed.data.kind,
       mode: selectedMode,
+      tenantId: tenantSelection.currentTenant.id,
     });
 
     await revalidateDashboardPaths();

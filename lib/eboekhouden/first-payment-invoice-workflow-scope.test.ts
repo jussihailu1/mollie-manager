@@ -16,7 +16,25 @@ describe("first-payment invoice workflow module boundary", () => {
     assert.match(firstPaymentSource, /@\/lib\/eboekhouden\/first-payment-invoice-workflow/);
     assert.match(workflowSource, /export async function createEboekhoudenInvoiceForFirstPayment/);
     assert.match(workflowSource, /subscriptionConsentPlanSnapshotSchema/);
+    assert.match(
+      workflowSource,
+      /getFirstPaymentInvoiceCandidate\(paymentId, options\.tenantId\)/,
+    );
+    assert.match(
+      workflowSource,
+      /claimFirstPaymentInvoiceForCreation\(\{[\s\S]*tenantId: options\.tenantId,[\s\S]*\}\)/,
+    );
+    assert.match(workflowSource, /tenantId: candidate\.tenantId/);
+    assert.match(
+      workflowSource,
+      /findExistingEboekhoudenInvoiceByReference\(\{[\s\S]*tenantId: candidate\.tenantId,/,
+    );
+    assert.match(
+      workflowSource,
+      /createEboekhoudenInvoice\(\s*invoiceInput,\s*candidate\.tenantId,\s*\)/,
+    );
     assert.doesNotMatch(firstPaymentSource, /export async function createEboekhoudenInvoiceForFirstPayment/);
-    assert.doesNotMatch(firstPaymentSource, /subscriptionConsentPlanSnapshotSchema/);
+    assert.match(firstPaymentSource, /createInvoiceForFirstPayment/);
+    assert.match(firstPaymentSource, /activeInvoiceProvider/);
   });
 });

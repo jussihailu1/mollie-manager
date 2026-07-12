@@ -7,7 +7,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { transaction, type DbTransaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { getCustomerDetail } from "@/lib/onboarding/data";
-import { getMollieClient } from "@/lib/mollie/client";
+import { getTenantMollieClient } from "@/lib/mollie/client";
 import { syncPaymentLinkByMollieId } from "@/lib/reliability/sync";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 
@@ -37,27 +37,39 @@ type RepairActor = {
   kind: "system" | "user";
 };
 
-async function getLocalPayments(customerId: string, client: DbTransaction) {
+async function getLocalPayments(
+  customerId: string,
+  tenantId: string,
+  client: DbTransaction,
+) {
   const result = await client.execute<LocalPaymentRecord>(sql`
       select
         id,
         mollie_payment_id as "molliePaymentId",
         payment_type as "paymentType"
       from payments
-      where customer_id = ${customerId} and mollie_payment_id is not null
+      where customer_id = ${customerId}
+        and tenant_id = ${tenantId}
+        and mollie_payment_id is not null
       order by created_at desc
     `);
 
   return result.rows;
 }
 
-async function getLocalSubscriptions(customerId: string, client: DbTransaction) {
+async function getLocalSubscriptions(
+  customerId: string,
+  tenantId: string,
+  client: DbTransaction,
+) {
   const result = await client.execute<LocalSubscriptionRecord>(sql`
       select
         id,
         mollie_subscription_id as "mollieSubscriptionId"
       from subscriptions
-      where customer_id = ${customerId} and mollie_subscription_id is not null
+      where customer_id = ${customerId}
+        and tenant_id = ${tenantId}
+        and mollie_subscription_id is not null
       order by created_at desc
     `);
 
@@ -67,6 +79,7 @@ async function getLocalSubscriptions(customerId: string, client: DbTransaction) 
 async function upsertMandate(
   client: DbTransaction,
   customerId: string,
+  tenantId: string,
   mode: MollieMode,
   mandate: {
     createdAt?: string | null;
@@ -79,7 +92,9 @@ async function upsertMandate(
   const existing = await client.execute<{ id: string }>(sql`
       select id
       from mandates
-      where mode = ${mode} and mollie_mandate_id = ${mandate.id}
+      where tenant_id = ${tenantId}
+        and mode = ${mode}
+        and mollie_mandate_id = ${mandate.id}
       limit 1
     `);
 
@@ -88,6 +103,7 @@ async function upsertMandate(
   await client.execute(sql`
       insert into mandates (
         id,
+        tenant_id,
         customer_id,
         mode,
         mollie_mandate_id,
@@ -100,6 +116,7 @@ async function upsertMandate(
         last_synced_at
       ) values (
         ${localMandateId},
+        ${tenantId},
         ${customerId},
         ${mode},
         ${mandate.id},
@@ -115,7 +132,7 @@ async function upsertMandate(
         now(),
         now()
       )
-      on conflict (mode, mollie_mandate_id)
+      on conflict (tenant_id, mode, mollie_mandate_id)
       do update set
         customer_id = excluded.customer_id,
         method = excluded.method,
@@ -133,11 +150,16 @@ export async function repairCustomerBillingState(input: {
   actor?: RepairActor;
   customerId: string;
   mode: "live" | "test";
+  tenantId: string;
 }): Promise<CustomerRepairResult> {
   const actor = input.actor ?? {
     kind: "system" as const,
   };
-  const customerDetail = await getCustomerDetail(input.customerId, input.mode);
+  const customerDetail = await getCustomerDetail(
+    input.customerId,
+    input.mode,
+    input.tenantId,
+  );
   if (!customerDetail) {
     return {
       customerId: input.customerId,
@@ -178,7 +200,8 @@ export async function repairCustomerBillingState(input: {
     };
   }
 
-  const mollie = getMollieClient(input.mode);
+  const tenantId = input.tenantId;
+  const mollie = await getTenantMollieClient(tenantId, input.mode);
   const mandates = await mollie.customerMandates.page({
     customerId: mollieCustomerId,
   });
@@ -187,18 +210,24 @@ export async function repairCustomerBillingState(input: {
     const mandateIdMap = new Map<string, string>();
 
     for (const mandate of mandates) {
-      const localMandateId = await upsertMandate(client, customer.id, customer.mode, {
-        createdAt: mandate.createdAt,
-        details: mandate.details,
-        id: mandate.id,
-        method: mandate.method,
-        status: mandate.status,
-      });
+      const localMandateId = await upsertMandate(
+        client,
+        customer.id,
+        tenantId,
+        customer.mode,
+        {
+          createdAt: mandate.createdAt,
+          details: mandate.details,
+          id: mandate.id,
+          method: mandate.method,
+          status: mandate.status,
+        },
+      );
 
       mandateIdMap.set(mandate.id, localMandateId);
     }
 
-    const localPayments = await getLocalPayments(customer.id, client);
+    const localPayments = await getLocalPayments(customer.id, tenantId, client);
 
     for (const localPayment of localPayments) {
       const payment = await mollie.payments.get(localPayment.molliePaymentId);
@@ -223,7 +252,11 @@ export async function repairCustomerBillingState(input: {
         `);
     }
 
-    const localSubscriptions = await getLocalSubscriptions(customer.id, client);
+    const localSubscriptions = await getLocalSubscriptions(
+      customer.id,
+      tenantId,
+      client,
+    );
 
     for (const localSubscription of localSubscriptions) {
       const subscription = (await mollie.customerSubscriptions.get(
@@ -282,6 +315,7 @@ export async function repairCustomerBillingState(input: {
       actor,
       preferredMode: input.mode,
       strictMode: true,
+      tenantId,
     });
   }
 

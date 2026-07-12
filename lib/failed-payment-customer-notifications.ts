@@ -39,6 +39,7 @@ type PaymentNotificationContextRow = {
   firstPaymentMode: "mandate_only" | "real_installment" | null;
   invoiceNumber: string | null;
   plannedCollectionDate: string | null;
+  tenantId: string;
   subscriptionId: string | null;
 };
 
@@ -72,17 +73,23 @@ async function loadPaymentNotificationContext(
   const result = await db.execute<PaymentNotificationContextRow>(sql`
       select
         p.customer_id as "customerId",
+        p.tenant_id as "tenantId",
         p.subscription_id as "subscriptionId",
         p.amount_value::text as "amountValue",
         p.amount_currency as "amountCurrency",
-        p.eboekhouden_invoice_number as "invoiceNumber",
+        i.provider_invoice_number as "invoiceNumber",
         p.metadata ->> 'firstPaymentMode' as "firstPaymentMode",
         coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail",
         rbs.planned_collection_date::text as "plannedCollectionDate"
       from payments p
-      left join customers c on c.id = p.customer_id
-      left join recurring_billing_schedules rbs on rbs.payment_id = p.id
+      left join invoices i
+        on i.owner_type = 'payment'
+        and i.owner_id = p.id
+        and i.tenant_id = p.tenant_id
+        and i.mode = p.mode
+      left join customers c on c.id = p.customer_id and c.tenant_id = p.tenant_id
+      left join recurring_billing_schedules rbs on rbs.payment_id = p.id and rbs.tenant_id = p.tenant_id
       where p.id = ${localPaymentId}
       limit 1
     `);
@@ -280,6 +287,7 @@ export async function runFailedPaymentCustomerNotificationForSyncedPayment(input
           taskContext.outcome.state === "mandate_problem"
             ? "critical"
             : "warning",
+        tenantId: row.tenantId,
         subscriptionId: taskContext.subscriptionId,
         title: "Failed payment customer follow-up",
       });

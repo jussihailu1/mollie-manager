@@ -50,6 +50,7 @@ const listCustomerActivityTimelineByMode = cache(async (
   customerId: string,
   mode: DashboardModeFilter,
   limit: number,
+  tenantId: string,
 ) => {
   const modeParam = toModeParam(mode);
   const normalizedLimit = Math.max(1, Math.min(Math.trunc(limit), 100));
@@ -69,6 +70,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         concat('/customers?focus=', c.id) as href
       from customers c
       where c.id = ${customerId}
+        and c.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or c.mode = ${modeParam})
 
       union all
@@ -92,6 +94,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         concat('/customers?focus=', soc.customer_id) as href
       from subscription_onboarding_consents soc
       where soc.customer_id = ${customerId}
+        and soc.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or soc.mode = ${modeParam})
 
       union all
@@ -129,6 +132,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         concat('/payments?focus=', p.id) as href
       from payments p
       where p.customer_id = ${customerId}
+        and p.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
 
       union all
@@ -146,11 +150,7 @@ const listCustomerActivityTimelineByMode = cache(async (
           when p.invoice_state = 'invoice_failed' then 'First-payment invoice failed'
           else 'First-payment invoice updated'
         end as title,
-        case
-          when p.eboekhouden_invoice_number is not null
-            then concat('e-Boekhouden invoice ', p.eboekhouden_invoice_number, ' is ', replace(p.invoice_state::text, '_', ' '), '.')
-          else concat('First-payment invoice is ', replace(p.invoice_state::text, '_', ' '), '.')
-        end as summary,
+        concat('First-payment invoice is ', replace(p.invoice_state::text, '_', ' '), '.') as summary,
         coalesce(p.invoice_sent_at, p.invoice_created_at, p.invoice_failed_at, p.updated_at, p.created_at) as "occurredAt",
         'payment' as "entityType",
         p.id as "entityId",
@@ -158,6 +158,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         concat('/payments?focus=', p.id) as href
       from payments p
       where p.customer_id = ${customerId}
+        and p.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
         and p.payment_type = 'first'
         and p.invoice_state <> 'not_applicable'
@@ -184,8 +185,12 @@ const listCustomerActivityTimelineByMode = cache(async (
         s.customer_id as "customerId",
         concat('/customers?focus=', s.customer_id) as href
       from recurring_billing_schedules rbs
-      inner join subscriptions s on s.id = rbs.subscription_id and s.mode = rbs.mode
+      inner join subscriptions s
+        on s.id = rbs.subscription_id
+        and s.tenant_id = rbs.tenant_id
+        and s.mode = rbs.mode
       where s.customer_id = ${customerId}
+        and rbs.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or rbs.mode = ${modeParam})
         and rbs.invoice_state <> 'pending_invoice'
 
@@ -219,19 +224,19 @@ const listCustomerActivityTimelineByMode = cache(async (
               sor.requested_effective_at::date::text,
               ' and preserves service through ',
               sor.paid_period_end_at::date::text,
-              '.',
+              '.'
             )
           when sor.operation = 'cancel'
             then concat(
               'Cancellation review request targets ',
               sor.requested_effective_at::date::text,
-              ' with immediate service end policy.',
+              ' with immediate service end policy.'
             )
           else concat(
             initcap(sor.operation::text),
             ' review request targets ',
             sor.requested_effective_at::date::text,
-            '.',
+            '.'
           )
         end as summary,
         coalesce(sor.withdrawn_at, sor.created_at) as "occurredAt",
@@ -240,8 +245,12 @@ const listCustomerActivityTimelineByMode = cache(async (
         s.customer_id as "customerId",
         concat('/customers?focus=', s.customer_id) as href
       from subscription_operation_requests sor
-      inner join subscriptions s on s.id = sor.subscription_id and s.mode = sor.mode
+      inner join subscriptions s
+        on s.id = sor.subscription_id
+        and s.tenant_id = sor.tenant_id
+        and s.mode = sor.mode
       where s.customer_id = ${customerId}
+        and sor.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or sor.mode = ${modeParam})
 
       union all
@@ -263,6 +272,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         concat('/customers?focus=', s.customer_id) as href
       from subscriptions s
       where s.customer_id = ${customerId}
+        and s.tenant_id = ${tenantId}
         and (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
 
       union all
@@ -270,7 +280,7 @@ const listCustomerActivityTimelineByMode = cache(async (
       select
         concat('alert:', a.id) as id,
         'alert_opened' as "itemType",
-        a.severity,
+        a.severity::text as severity,
         a.title,
         a.message as summary,
         a.created_at as "occurredAt",
@@ -282,9 +292,9 @@ const listCustomerActivityTimelineByMode = cache(async (
           else concat('/customers?focus=', coalesce(a.customer_id, p.customer_id, s.customer_id))
         end as href
       from alerts a
-      left join payments p on p.id = a.payment_id
-      left join subscriptions s on s.id = a.subscription_id
-      left join customers ac on ac.id = a.customer_id
+      left join payments p on p.id = a.payment_id and p.tenant_id = ${tenantId}
+      left join subscriptions s on s.id = a.subscription_id and s.tenant_id = ${tenantId}
+      left join customers ac on ac.id = a.customer_id and ac.tenant_id = ${tenantId}
       where coalesce(a.customer_id, p.customer_id, s.customer_id) = ${customerId}
         and (
           ${modeParam}::mollie_mode is null
@@ -313,7 +323,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         coalesce(cpn.customer_id, p.customer_id) as "customerId",
         concat('/payments?focus=', cpn.payment_id) as href
       from customer_payment_notifications cpn
-      inner join payments p on p.id = cpn.payment_id
+      inner join payments p on p.id = cpn.payment_id and p.tenant_id = ${tenantId}
       where coalesce(cpn.customer_id, p.customer_id) = ${customerId}
         and (${modeParam}::mollie_mode is null or cpn.mode = ${modeParam})
 
@@ -338,6 +348,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         concat('/customers?focus=', cn.customer_id) as href
       from customer_notes cn
       where cn.customer_id = ${customerId}
+        and cn.tenant_id = ${tenantId}
         and cn.archived_at is null
         and (${modeParam}::mollie_mode is null or cn.mode = ${modeParam})
 
@@ -352,11 +363,17 @@ const listCustomerActivityTimelineByMode = cache(async (
         al.created_at as "occurredAt",
         'audit_log' as "entityType",
         al.id as "entityId",
-        ${customerId} as "customerId",
-        concat('/customers?focus=', ${customerId}) as href
+        ${customerId}::text as "customerId",
+        concat('/customers?focus=', ${customerId}::text) as href
       from audit_logs al
-      left join payments p on al.entity_type = 'payment' and p.id = al.entity_id
-      left join subscriptions s on al.entity_type = 'subscription' and s.id = al.entity_id
+      left join payments p
+        on al.entity_type = 'payment'
+        and p.id = al.entity_id
+        and p.tenant_id = ${tenantId}
+      left join subscriptions s
+        on al.entity_type = 'subscription'
+        and s.id = al.entity_id
+        and s.tenant_id = ${tenantId}
       where (
           (al.entity_type = 'customer' and al.entity_id = ${customerId})
           or p.customer_id = ${customerId}
@@ -376,10 +393,12 @@ export async function listCustomerActivityTimeline(options: {
   customerId: string;
   limit?: number;
   mode?: DashboardModeFilter;
+  tenantId: string;
 }) {
   return listCustomerActivityTimelineByMode(
     options.customerId,
     options.mode ?? "all",
     options.limit ?? 50,
+    options.tenantId,
   );
 }

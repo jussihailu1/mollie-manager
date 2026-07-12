@@ -1,7 +1,7 @@
 import { PaymentMethod, SequenceType } from "@mollie/api-client";
 
 import type { MollieMode } from "@/lib/env";
-import { getMollieClient, getMollieWebhookUrl } from "@/lib/mollie/client";
+import { getMollieWebhookUrl, getTenantMollieClient } from "@/lib/mollie/client";
 import { buildConsentTokenStorage, createConsentToken } from "@/lib/onboarding/consent-token-storage";
 import { buildFirstPaymentOnboardingRecords } from "@/lib/onboarding/first-payment-onboarding-records";
 import { persistFirstPaymentOnboardingRecords, type FirstPaymentOnboardingActor } from "@/lib/onboarding/first-payment-onboarding-persistence";
@@ -17,12 +17,13 @@ export type FirstPaymentOnboardingFlowInput = {
   };
   planInput: Omit<FirstPaymentPlanInput, "tenantPolicy">;
   selectedMode: MollieMode;
+  tenantId: string;
 };
 
 export async function createFirstPaymentOnboardingFlow(
   input: FirstPaymentOnboardingFlowInput,
 ) {
-  const tenantPolicy = await ensureTenantSubscriptionPolicyDefaults();
+  const tenantPolicy = await ensureTenantSubscriptionPolicyDefaults(input.tenantId);
   const firstPaymentPlan = buildFirstPaymentPlan({
     ...input.planInput,
     tenantPolicy: {
@@ -33,7 +34,10 @@ export async function createFirstPaymentOnboardingFlow(
       termsVersion: tenantPolicy.termsVersion,
     },
   });
-  const mollie = getMollieClient(input.selectedMode);
+  const mollie = await getTenantMollieClient(
+    input.tenantId,
+    input.selectedMode,
+  );
   const localPaymentLinkId = crypto.randomUUID();
   const localConsentId = crypto.randomUUID();
   const consentToken = createConsentToken();

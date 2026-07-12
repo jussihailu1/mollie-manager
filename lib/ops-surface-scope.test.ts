@@ -8,11 +8,14 @@ describe("ops surface hardening", () => {
     const source = readFileSync(resolve("lib/reliability/actions.ts"), "utf8");
 
     assert.match(source, /processing_status as "processingStatus"/);
+    assert.match(source, /getCurrentTenantSelectionForViewer/);
     assert.match(
       source,
       /Only failed webhook events in the current mode can be replayed\./,
     );
     assert.match(source, /event\.processingStatus !== "failed"/);
+    assert.match(source, /from webhook_events[\s\S]*where id = \$\{parsed\.data\.webhookEventId\}[\s\S]*and mode = \$\{selectedMode\}/);
+    assert.match(source, /tenant_id = \$\{tenantSelection\.currentTenant\.id\}/);
   });
 
   it("surfaces first-class operator diagnostics and replay controls in settings", () => {
@@ -24,6 +27,7 @@ describe("ops surface hardening", () => {
       /Shared reliability snapshot for \/settings and advanced \/api\/health/,
     );
     assert.match(source, /Open advanced diagnostics/);
+    assert.match(source, /href=\{`\/api\/health\?tenantId=\$\{tenantId\}`\}/);
     assert.match(source, /Failed webhook replay queue/);
     assert.match(source, /replayWebhookEventAction/);
     assert.match(source, /confirmMessage=\{`Replay failed/);
@@ -47,10 +51,18 @@ describe("ops surface hardening", () => {
     assert.match(settingsSource, /hasAdvancedOperationsAccess/);
     assert.match(settingsSource, /DeveloperSettingsToggle/);
     assert.match(settingsSource, /Billing and accounting configuration/);
-    assert.match(settingsSource, /Recurring invoice accounting/);
+    assert.match(settingsSource, /Invoice provider settings/);
     assert.match(reliabilityActionsSource, /requireAdvancedOperationsSession/);
+    assert.match(reliabilityActionsSource, /repairReliabilityTarget\(\{/);
     assert.match(billingActionsSource, /requireViewerSession/);
     assert.match(billingActionsSource, /requireAdvancedOperationsSession/);
+    assert.match(billingActionsSource, /getCurrentTenantSelectionForViewer/);
+    assert.match(billingActionsSource, /tenantId: tenantSelection\.currentTenant\.id/);
+    assert.match(reliabilityActionsSource, /getCurrentTenantSelectionForViewer/);
+    assert.match(
+      reliabilityActionsSource,
+      /tenantSelection\.currentTenant\.id/,
+    );
     assert.match(authSource, /hasAdvancedOperationsAccess/);
   });
 
@@ -96,9 +108,14 @@ describe("ops surface hardening", () => {
   it("shares the same reliability ops snapshot between settings and health diagnostics", () => {
     const settingsSource = readFileSync(resolve("app/(dashboard)/settings/page.tsx"), "utf8");
     const healthSource = readFileSync(resolve("app/api/health/route.ts"), "utf8");
+    const snapshotSource = readFileSync(resolve("lib/reliability/ops-snapshot.ts"), "utf8");
 
     assert.match(settingsSource, /getReliabilityOpsSnapshot/);
     assert.match(healthSource, /getReliabilityOpsSnapshot/);
+    assert.match(healthSource, /getCurrentTenantSelectionForViewer/);
+    assert.match(healthSource, /tenantId: diagnosticsContext\.tenantId/);
+    assert.match(healthSource, /const opsSnapshot = diagnosticsContext\.tenantId/);
+    assert.match(snapshotSource, /tenantId: string;/);
     assert.match(healthSource, /opsSnapshot/);
   });
 

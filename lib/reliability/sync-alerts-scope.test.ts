@@ -11,5 +11,7 @@ describe("sync alert module boundary", () => {
     assert.doesNotMatch(syncSource, /@\/lib\/reliability\/alerts/);
     assert.match(syncAlertsSource, /export async function handlePaymentAlerts/);
     assert.match(syncAlertsSource, /export async function handleSubscriptionAlerts/);
+    assert.match(syncAlertsSource, /tenantId: string/);
+    assert.match(syncAlertsSource, /tenantId: input\.tenantId/);
   });
 });

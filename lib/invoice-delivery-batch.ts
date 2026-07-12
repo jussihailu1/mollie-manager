@@ -1,4 +1,5 @@
 import type { MollieMode } from "@/lib/env";
+import type { InvoiceProvider } from "@/lib/invoices";
 
 export type InvoiceActor = {
   email?: string | null;
@@ -9,14 +10,16 @@ export type DeliveryInput = {
   actor: InvoiceActor;
   customerEmail: string | null;
   customerId: string | null;
-  eboekhoudenInvoiceId: string | null;
-  eboekhoudenInvoiceNumber: string | null;
-  eboekhoudenInvoicePdfUrl?: string | null;
   entityId: string;
+  invoiceDocumentUrl?: string | null;
+  invoiceId: string | null;
+  invoiceNumber: string | null;
+  invoiceProvider: InvoiceProvider;
   invoiceType: "first_payment" | "recurring";
   mode: MollieMode;
   plannedCollectionDate?: string | null;
   subscriptionId: string | null;
+  tenantId: string;
 };
 
 export type RetryDeliveryCandidate = Omit<DeliveryInput, "actor">;
@@ -35,6 +38,7 @@ export type RetryInvoiceDeliveryBatchDependencies = {
   loadCandidates: (
     mode: MollieMode,
     limit: number,
+    tenantId: string,
   ) => Promise<RetryDeliveryCandidate[]>;
 };
 
@@ -43,12 +47,14 @@ export async function retryInvoiceDeliveryEmailsBatchWithDependencies(
     actor: InvoiceActor;
     limit?: number;
     mode: MollieMode;
+    tenantId: string;
   },
   dependencies: RetryInvoiceDeliveryBatchDependencies,
 ) {
   const candidates = await dependencies.loadCandidates(
     input.mode,
     input.limit ?? 25,
+    input.tenantId,
   );
   let sentCount = 0;
   let failedCount = 0;

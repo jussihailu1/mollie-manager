@@ -49,6 +49,7 @@ function toModeParam(mode?: DashboardModeFilter) {
 const listBaseNeedsAttentionItemsByMode = cache(async (
   mode: DashboardModeFilter,
   limit: number,
+  tenantId: string,
 ) => {
   const modeParam = toModeParam(mode);
   const normalizedLimit = Math.max(1, Math.min(limit, 50));
@@ -120,9 +121,10 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.email as "customerEmail",
         concat('/payments?focus=', p.id) as "href"
       from payments p
-      left join customers c on c.id = p.customer_id
+      left join customers c on c.id = p.customer_id and c.tenant_id = p.tenant_id
       where
-        (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
+        p.tenant_id = ${tenantId}
+        and (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
         and (
           p.disputed_at is not null
           or p.mollie_status in ('failed', 'expired')
@@ -184,9 +186,10 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.email as "customerEmail",
         concat('/customers?focus=', c.id) as "href"
       from subscriptions s
-      inner join customers c on c.id = s.customer_id
+      inner join customers c on c.id = s.customer_id and c.tenant_id = s.tenant_id
       where
-        (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
+        s.tenant_id = ${tenantId}
+        and (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
         and s.local_status in ('payment_action_required', 'out_of_sync')
 
       union all
@@ -206,9 +209,10 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.email as "customerEmail",
         concat('/payments?focus=', p.id) as "href"
       from payments p
-      left join customers c on c.id = p.customer_id
+      left join customers c on c.id = p.customer_id and c.tenant_id = p.tenant_id
       where
-        (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
+        p.tenant_id = ${tenantId}
+        and (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
         and p.payment_type = 'first'
         and p.invoice_state = 'invoice_failed'
 
@@ -229,10 +233,11 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.email as "customerEmail",
         concat('/customers?focus=', c.id) as "href"
       from recurring_billing_schedules rbs
-      inner join subscriptions s on s.id = rbs.subscription_id
-      inner join customers c on c.id = s.customer_id and c.mode = rbs.mode
+      inner join subscriptions s on s.id = rbs.subscription_id and s.tenant_id = rbs.tenant_id
+      inner join customers c on c.id = s.customer_id and c.tenant_id = rbs.tenant_id and c.mode = rbs.mode
       where
-        (${modeParam}::mollie_mode is null or rbs.mode = ${modeParam})
+        rbs.tenant_id = ${tenantId}
+        and (${modeParam}::mollie_mode is null or rbs.mode = ${modeParam})
         and rbs.invoice_state = 'invoice_failed'
 
       union all
@@ -265,9 +270,10 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.email as "customerEmail",
         concat('/payments?focus=', p.id) as "href"
       from payments p
-      left join customers c on c.id = p.customer_id
+      left join customers c on c.id = p.customer_id and c.tenant_id = p.tenant_id
       where
-        (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
+        p.tenant_id = ${tenantId}
+        and (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
         and p.payment_type = 'first'
         and p.invoice_state = 'invoice_created'
         and p.invoice_sent_at is null
@@ -303,10 +309,11 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.email as "customerEmail",
         concat('/customers?focus=', c.id) as "href"
       from recurring_billing_schedules rbs
-      inner join subscriptions s on s.id = rbs.subscription_id
-      inner join customers c on c.id = s.customer_id and c.mode = rbs.mode
+      inner join subscriptions s on s.id = rbs.subscription_id and s.tenant_id = rbs.tenant_id
+      inner join customers c on c.id = s.customer_id and c.tenant_id = rbs.tenant_id and c.mode = rbs.mode
       where
-        (${modeParam}::mollie_mode is null or rbs.mode = ${modeParam})
+        rbs.tenant_id = ${tenantId}
+        and (${modeParam}::mollie_mode is null or rbs.mode = ${modeParam})
         and rbs.invoice_state = 'invoice_created'
         and rbs.invoice_sent_at is null
         and coalesce(rbs.metadata ->> 'invoiceDeliveryStatus', '') = 'failed'
@@ -318,35 +325,48 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.id as "entityId",
         'customer' as "type",
         case
-          when c.eboekhouden_link_status in ('needs_review', 'sync_error')
+          when cal.link_status in ('needs_review', 'sync_error')
             then 'critical'
           else 'warning'
         end as "severity",
         'eboekhouden_relation_problem' as "itemType",
         case
-          when c.eboekhouden_link_status = 'sync_error'
+          when cal.link_status = 'sync_error'
             then 'e-Boekhouden relation sync failed'
-          when c.eboekhouden_link_status = 'needs_review'
+          when cal.link_status = 'needs_review'
             then 'e-Boekhouden relation needs review'
           else 'Missing e-Boekhouden relation'
         end as "title",
         'This customer needs a verified e-Boekhouden relation before invoice automation can proceed safely.' as "summary",
         'Open the customer and link or repair the e-Boekhouden relation before creating invoices.',
-        coalesce(c.eboekhouden_synced_at, c.updated_at, c.created_at) as "createdAt",
+        coalesce(cal.synced_at, c.updated_at, c.created_at) as "createdAt",
         c.id as "customerId",
         coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail",
         concat('/customers?focus=', c.id) as "href"
       from customers c
+      left join customer_accounting_links cal
+        on cal.customer_id = c.id
+        and cal.tenant_id = c.tenant_id
+        and cal.mode = c.mode
+        and cal.provider = 'eboekhouden'
       where
-        (${modeParam}::mollie_mode is null or c.mode = ${modeParam})
+        c.tenant_id = ${tenantId}
+        and (${modeParam}::mollie_mode is null or c.mode = ${modeParam})
         and c.archived_at is null
-        and c.eboekhouden_link_status in ('unlinked', 'needs_review', 'sync_error')
+        and exists (
+          select 1
+          from tenant_billing_settings tbs
+          where tbs.tenant_id = c.tenant_id
+            and tbs.active_invoice_provider = 'eboekhouden'
+        )
+        and coalesce(cal.link_status, 'unlinked') in ('unlinked', 'needs_review', 'sync_error')
         and (
           exists (
             select 1
             from payments p2
             where p2.customer_id = c.id
+              and p2.tenant_id = c.tenant_id
               and p2.mode = c.mode
               and p2.invoice_state in ('pending_invoice', 'invoice_failed')
           )
@@ -354,6 +374,7 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
             select 1
             from subscriptions s2
             where s2.customer_id = c.id
+              and s2.tenant_id = c.tenant_id
               and s2.mode = c.mode
               and s2.local_status in ('awaiting_first_payment', 'mandate_pending', 'active', 'payment_action_required')
           )
@@ -376,10 +397,14 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.email as "customerEmail",
         concat('/customers?focus=', c.id) as "href"
       from subscriptions s
-      inner join customers c on c.id = s.customer_id and c.mode = s.mode
-      left join mandates m on m.id = s.mandate_id and m.mode = s.mode
+      inner join customers c on c.id = s.customer_id and c.tenant_id = s.tenant_id and c.mode = s.mode
+      left join mandates m
+        on m.id = s.mandate_id
+        and m.tenant_id = s.tenant_id
+        and m.mode = s.mode
       where
-        (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
+        s.tenant_id = ${tenantId}
+        and (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
         and s.local_status in ('awaiting_first_payment', 'mandate_pending', 'active', 'payment_action_required')
         and (s.mandate_id is null or coalesce(m.is_valid, false) = false)
 
@@ -401,7 +426,8 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         concat('/customers?focus=', c.id) as "href"
       from customers c
       where
-        (${modeParam}::mollie_mode is null or c.mode = ${modeParam})
+        c.tenant_id = ${tenantId}
+        and (${modeParam}::mollie_mode is null or c.mode = ${modeParam})
         and c.archived_at is null
         and c.mollie_customer_id is not null
         and (
@@ -426,9 +452,10 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.email as "customerEmail",
         concat('/payments?focus=', p.id) as "href"
       from payments p
-      left join customers c on c.id = p.customer_id and c.mode = p.mode
+      left join customers c on c.id = p.customer_id and c.tenant_id = p.tenant_id and c.mode = p.mode
       where
-        (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
+        p.tenant_id = ${tenantId}
+        and (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
         and p.mollie_payment_id is not null
         and (
           p.last_synced_at is null
@@ -452,9 +479,10 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.email as "customerEmail",
         concat('/customers?focus=', c.id) as "href"
       from subscriptions s
-      inner join customers c on c.id = s.customer_id and c.mode = s.mode
+      inner join customers c on c.id = s.customer_id and c.tenant_id = s.tenant_id and c.mode = s.mode
       where
-        (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
+        s.tenant_id = ${tenantId}
+        and (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
         and s.mollie_subscription_id is not null
         and s.local_status not in ('cancelled')
         and (
@@ -482,6 +510,7 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
       where
         (${modeParam}::mollie_mode is null or w.mode = ${modeParam})
         and w.processing_status = 'failed'
+        and w.tenant_id = ${tenantId}
     ) items
     order by
       case severity
@@ -517,17 +546,18 @@ function toPendingOperationAttentionItem(
   };
 }
 
-export async function listNeedsAttentionItems(options?: {
+export async function listNeedsAttentionItems(options: {
   limit?: number;
   mode?: DashboardModeFilter;
+  tenantId: string;
 }) {
   const mode = options?.mode ?? "all";
   const limit = options?.limit ?? 20;
-  const baseItems = await listBaseNeedsAttentionItemsByMode(mode, limit);
+  const baseItems = await listBaseNeedsAttentionItemsByMode(mode, limit, options.tenantId);
   const pendingOperationItems =
     mode === "all"
       ? []
-      : await listPendingSubscriptionOperationRequests({ limit, mode });
+      : await listPendingSubscriptionOperationRequests({ limit, mode, tenantId: options.tenantId });
 
   return [...baseItems, ...pendingOperationItems.map(toPendingOperationAttentionItem)]
     .sort((left, right) => {
