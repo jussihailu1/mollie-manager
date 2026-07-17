@@ -13,6 +13,15 @@ For the shared multi-tenant pilot, each tenant owns its own Mollie
 credentials/configuration. Tenant business flows must not rely on one shared
 app-wide Mollie account.
 
+Current tenant business calls still use manually provisioned API keys. Mollie
+Connect now has tenant-owned OAuth state, callback, encrypted token refresh,
+scope validation, revoke/disconnect, and reconnect foundations. Business-flow
+migration to the credential-neutral resolver remains active roadmap work.
+
+The accepted production OAuth ownership, scope, lifecycle, migration, and
+failure contract is in [Mollie Connect Connection Contract](mollie-connect-contract.md).
+It is implementation policy; it does not claim the OAuth runtime exists yet.
+
 ## Mode Model
 
 - Supported modes: `test` and `live`
@@ -67,7 +76,7 @@ Mollie.
   context is resolved from the onboarding token and linked local state.
 - Hosted consent tokens are looked up by hash and recovered for authenticated operator reuse via encrypted storage; run the consent-token backfill after the schema migration to erase legacy plaintext rows.
 - Failed Mollie webhook events can be replayed from the operator ops surface, but replay is now limited to failed stored events in the selected mode.
-- Repair and reconciliation flows must not silently change invoice truth in e-Boekhouden.
+- Repair and reconciliation flows must not silently change provider-owned invoice truth.
 - Tenant-owned Mollie credentials must be used consistently in onboarding,
   subscription creation, sync, replay, repair, and webhook follow-up flows.
 - app-wide Mollie env may still exist for runtime/bootstrap concerns, but active

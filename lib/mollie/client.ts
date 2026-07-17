@@ -9,8 +9,8 @@ import {
   type MollieMode,
 } from "@/lib/env";
 import {
-  resolveTenantMollieConfig,
-} from "@/lib/mollie/tenant-credentials";
+  resolveTenantMollieAuthentication,
+} from "@/lib/mollie/tenant-connections";
 
 type MollieClient = ReturnType<typeof createMollieClient>;
 
@@ -50,21 +50,50 @@ export async function getTenantMollieClient(
   tenantId?: string,
   mode: MollieMode = getDefaultMollieMode(),
 ) {
-  const config = await resolveTenantMollieConfig(tenantId, mode);
-  const cacheKey = `${tenantId}:${mode}`;
+  if (!tenantId) {
+    throw new Error("Explicit tenant context is required.");
+  }
+  const authentication = await resolveTenantMollieAuthentication(tenantId, mode);
+  const cacheKey = authentication.kind === "oauth"
+    ? `${tenantId}:oauth:${authentication.connectionId}:${authentication.accessToken}`
+    : `${tenantId}:api_key:${mode}`;
   const cached = tenantClientCache.get(cacheKey);
 
   if (cached) {
     return cached;
   }
 
-  const client = createMollieClient({
-    apiKey: config.MOLLIE_API_KEY,
-  });
+  const client = authentication.kind === "oauth"
+    ? createMollieClient({ accessToken: authentication.accessToken })
+    : createMollieClient({ apiKey: authentication.apiKey });
 
   tenantClientCache.set(cacheKey, client);
 
   return client;
+}
+
+export async function getTenantMollieRequestAuthentication(
+  tenantId: string,
+  mode: MollieMode,
+) {
+  return resolveTenantMollieAuthentication(tenantId, mode);
+}
+
+export async function getTenantMollieRequestContext(
+  tenantId: string | undefined,
+  mode: MollieMode,
+): Promise<{ profileId?: string; testmode?: true }> {
+  if (!tenantId) {
+    throw new Error("Explicit tenant context is required.");
+  }
+  const authentication = await resolveTenantMollieAuthentication(tenantId, mode);
+  if (authentication.kind !== "oauth") {
+    return {};
+  }
+  return {
+    profileId: authentication.profileId,
+    ...(mode === "test" ? { testmode: true as const } : {}),
+  };
 }
 
 export function getMollieWebhookUrl(path = "/api/webhooks/mollie") {

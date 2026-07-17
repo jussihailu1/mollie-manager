@@ -61,6 +61,9 @@ const rawServerEnvSchema = z.object({
   MOLLIE_PROFILE_ID: optionalString,
   MOLLIE_WEBHOOK_PUBLIC_BASE_URL: optionalUrl,
   MOLLIE_WEBHOOK_SHARED_SECRET: optionalString,
+  MOLLIE_CONNECT_CLIENT_ID: optionalString,
+  MOLLIE_CONNECT_CLIENT_SECRET: optionalString,
+  MOLLIE_CONNECT_REDIRECT_URI: optionalUrl,
   SMTP_HOST: optionalString,
   SMTP_PORT: optionalPort.default(587),
   SMTP_USER: optionalString,
@@ -139,6 +142,12 @@ const mollieLiveConfigSchema = z.object({
 const mollieWebhookConfigSchema = z.object({
   MOLLIE_WEBHOOK_PUBLIC_BASE_URL: z.string().url(),
   MOLLIE_WEBHOOK_SHARED_SECRET: z.string().min(16).optional(),
+});
+
+const mollieConnectConfigSchema = z.object({
+  MOLLIE_CONNECT_CLIENT_ID: z.string().min(1),
+  MOLLIE_CONNECT_CLIENT_SECRET: z.string().min(1),
+  MOLLIE_CONNECT_REDIRECT_URI: z.string().url(),
 });
 
 const subscriptionPolicyConfigSchema = z.object({
@@ -230,6 +239,10 @@ export function isTestAuthBypassEnabled() {
 
 export function getMollieWebhookConfig() {
   return mollieWebhookConfigSchema.parse(env);
+}
+
+export function getMollieConnectConfig() {
+  return mollieConnectConfigSchema.parse(env);
 }
 
 export function getSubscriptionPolicyConfig() {

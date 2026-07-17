@@ -12,7 +12,9 @@ This runbook tracks the current retention/compliance hardening work for complian
 - consent evidence
 - metadata that may carry old or unnecessary personal data
 
-Roadmap context: retention policy UI and dry-run cleanup are tracked in `../product/implementation-roadmap.md` as Phase 4. Failed-payment correctness remains the earlier product priority.
+Roadmap context: retention visibility and dry-run tooling are implemented. Any
+future destructive apply path remains later backlog and must be promoted through
+`../product/implementation-roadmap.md`; it is not active Mollie Connect work.
 
 For shared-app tenant scope and release boundaries, also use
 `../product/multi-tenant-pilot-scope.md`.

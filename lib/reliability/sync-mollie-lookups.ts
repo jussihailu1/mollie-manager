@@ -3,8 +3,7 @@ import "server-only";
 import type { Payment } from "@mollie/api-client";
 
 import type { MollieMode } from "@/lib/env";
-import { getTenantMollieClient, isMollieConfigured } from "@/lib/mollie/client";
-import { resolveTenantMollieConfig } from "@/lib/mollie/tenant-credentials";
+import { getTenantMollieClient, getTenantMollieRequestAuthentication, getTenantMollieRequestContext, isMollieConfigured } from "@/lib/mollie/client";
 import { buildConfiguredMollieModeOrder } from "@/lib/reliability/mollie-mode-selection";
 import { findMollieResourceAcrossModes } from "@/lib/reliability/mollie-resource-lookup";
 import type { PaymentLinkSyncSource } from "@/lib/reliability/payment-link-sync-record";
@@ -53,7 +52,7 @@ async function buildLookupMollieModeOrder(input: {
 
   for (const mode of orderedModes) {
     try {
-      await resolveTenantMollieConfig(tenantId, mode);
+      await getTenantMollieRequestAuthentication(tenantId, mode);
       availableModes.push(mode);
     } catch (error) {
       lastCredentialError = error;
@@ -79,7 +78,13 @@ export async function findPaymentAcrossModes(
       strictMode,
       tenantId,
     }),
-    async (mode) => (await getTenantMollieClient(tenantId, mode)).payments.get(molliePaymentId),
+    async (mode) => {
+      const [client, { testmode }] = await Promise.all([
+        getTenantMollieClient(tenantId, mode),
+        getTenantMollieRequestContext(tenantId, mode),
+      ]);
+      return client.payments.get(molliePaymentId, { ...(testmode ? { testmode } : {}) });
+    },
     "Payment was not found in Mollie.",
   );
 
@@ -101,10 +106,16 @@ export async function findPaymentLinkAcrossModes(
       strictMode,
       tenantId,
     }),
-    async (mode) =>
-      (await getTenantMollieClient(tenantId, mode)).paymentLinks.get(
+    async (mode) => {
+      const [client, { testmode }] = await Promise.all([
+        getTenantMollieClient(tenantId, mode),
+        getTenantMollieRequestContext(tenantId, mode),
+      ]);
+      return client.paymentLinks.get(
         molliePaymentLinkId,
-      ) as unknown as Promise<SyncMolliePaymentLink>,
+        { ...(testmode ? { testmode } : {}) },
+      ) as unknown as Promise<SyncMolliePaymentLink>;
+    },
     "Payment link was not found in Mollie.",
   );
 
@@ -129,15 +140,18 @@ export async function findSubscriptionAcrossModes(
     }),
     async (mode) => {
       const client = await getTenantMollieClient(tenantId, mode);
+      const { testmode } = await getTenantMollieRequestContext(tenantId, mode);
       const subscription = await client.customerSubscriptions.get(
         mollieSubscriptionId,
         {
           customerId: customerMollieId,
+          ...(testmode ? { testmode } : {}),
         },
       );
       const payments = await client.subscriptionPayments.page({
         customerId: customerMollieId,
         subscriptionId: mollieSubscriptionId,
+        ...(testmode ? { testmode } : {}),
       });
 
       return {

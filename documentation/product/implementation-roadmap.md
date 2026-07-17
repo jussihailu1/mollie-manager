@@ -1,579 +1,190 @@
 # Implementation Roadmap
 
-Status: active roadmap
+Status: active; sole authority for development order
 Audience: product and engineering
 
-## Purpose
-
-This is the autonomous-development roadmap for turning the app into a product that a non-technical operator can use safely, while still allowing advanced configuration for operators who understand accounting, policy, and recovery details.
-
-Use this roadmap before starting feature work. `feature-inventory.md` records what exists; this file defines the order and quality bar for what comes next.
-
-Near-term release target: a shared-app, manually provisioned multi-tenant pilot
-as defined in `multi-tenant-pilot-scope.md`. This is earlier than broad SaaS
-administration and does not include self-serve signup, invites, platform
-billing, or a full role matrix.
-
-Current execution bias: reach that pilot as soon as possible without lowering
-the documented safety bar. When choosing between two valid slices, prefer the
-one that closes a pilot release gate sooner. Do not spend the active lane on
-non-blocking ops polish, broader platform administration, or advanced
-operator-only tooling unless the work is required for pilot readiness.
+## How To Use This Roadmap
 
-## Product Direction
+Read this file before starting product work. It defines the current end goal,
+active milestone, completion gate, and allowed execution order.
 
-The app should default to a guided, plain-language workflow:
+Supporting documents have narrower roles:
 
-- show what needs attention
-- explain what happened and why it matters
-- recommend the safest next operator action
-- keep legally required setup explicit but minimal
-- hide advanced diagnostics, repair, replay, and policy controls unless the operator has the right access and opens the advanced surface
+- `feature-inventory.md` records current capability evidence; it does not set priority.
+- `multi-tenant-pilot-scope.md` preserves the tenant-isolation baseline.
+- `subscription-policy.md` defines subscription lifecycle and consent policy.
+- `recurring-billing-policy.md` defines collection, invoice notice, and failed-payment policy.
+- operations documents explain how to run already-approved workflows.
 
-The app should not require operators to understand Mollie internals, e-Boekhouden internals, SEPA timing, retry policy, or invoice-state implementation details for normal use.
+If another document conflicts with this roadmap on development order, this
+roadmap wins. Update the conflicting document before continuing.
 
-The near-term product target is no longer "one operational context first" in the
-release sense. It is a shared-app multi-tenant pilot with manual provisioning
-and explicit tenant isolation, while broad tenant administration remains later.
-
-## Hard Rules For All Roadmap Work
-
-These rules prevent repeating previous cleanup and hardening mistakes:
-
-- define money, legal, privacy, or lifecycle policy before code changes that depend on it
-- keep Mollie payment truth separate from provider-owned invoice truth
-- do not create duplicate invoices for one billing period
-- do not automatically pause, cancel, dun, penalize, or escalate a customer after failed payment detection unless a documented policy explicitly allows it
-- model state transitions explicitly; do not hide new product state only in untyped JSONB metadata
-- keep secret-bearing values out of URLs, logs, audit details, client payloads, and generic metadata
-- treat webhooks as signals; re-fetch authoritative state before acting
-- make external side effects idempotent or claim-before-call
-- add focused pure/helper coverage for policy decisions before adding orchestration
-- add dependency-injected seam coverage for flows with external services
-- add database-backed coverage when a feature depends on multiple tables staying consistent
-- keep public and normal-operator surfaces narrow; put raw diagnostics and repair controls behind advanced access
-- resolve an explicit tenant for every tenant business query, mutation, webhook, repair, replay, cron, invoice, sync, and notification flow
-- do not allow `AUTH_ADVANCED_EMAILS` or developer mode to bypass tenant membership or tenant context
-- use tenant-owned Mollie and e-Boekhouden credentials for tenant business flows; do not fall back to one shared provider account
-- keep tenant business data isolated in schema, query scope, audit scope, and operator UI scope
-- design destructive cleanup as report-only first, then dry-run, then explicit scoped apply
-- update docs in the same slice as behavior changes
-
-## Phase 0: Failed Payment Correctness
-
-Priority: highest
-
-Reason: money flow must be correct before larger product work.
-
-Goal:
-
-- automatically detect unsuccessful payment flows
-- notify the customer with clear, policy-safe language
-- create an operator task that explains the failure and recommended next step
-- keep actual consequences manual or policy-controlled later
-
-Scope:
-
-- recurring payment failures and returns
-- first-payment failures during onboarding
-- mandate-only setup payment failures
-- chargebacks, refunds, and reversals
-- missing or unusable mandate signals
-- long-pending SEPA payments that pass the safe pending window
-
-Required behavior:
-
-- classify payment outcome into plain states such as `pending`, `paid`, `failed`, `reversed`, `charged_back`, `mandate_problem`, and `needs_review`
-- distinguish failed collection from invoice creation or invoice delivery failure
-- detect the failure from reconciled Mollie state, not only webhook payloads
-- preserve one invoice per billing period
-- send a customer notification only when the app has enough evidence to say the payment failed or needs action
-- open a durable operator task/alert with the failure reason, customer impact, relevant invoice/payment/subscription links, and safe next action
-- do not automatically pause service, cancel subscription, add fees, start collection, or retry indefinitely
-
-Customer notification default:
-
-- plain language
-- no threat language
-- no automatic penalty wording
-- explain that payment did not succeed or was reversed
-- mention that the invoice/payment obligation may still be open when legally true
-- give the configured contact path or future recovery link
-
-Acceptance criteria:
-
-- failure policy documented in `recurring-billing-policy.md`
-- state classification in pure helpers with tests
-- customer email composition in isolated helpers with tests
-- no duplicate invoice path introduced
-- operator task visible in the normal "Needs attention" flow
-- audit log written without sensitive payload leakage
-- failed payment state can be rebuilt by reconciliation
-
-## Phase 0.5: Multi-Tenant Pilot Foundation
-
-Goal:
-
-- make the app safely usable by multiple tenants in one shared deployment
-  without cross-tenant leakage or provider-credential mixing.
-
-Pilot-fast-path rule:
-
-- treat this phase as the main launch track until the shared multi-tenant pilot
-  release gates are closed
-- keep advanced replay, repair, reconciliation, cron, and diagnostics work only
-  when it is required to satisfy tenant isolation, money-flow correctness, or
-  pilot verification
-- defer nicer advanced tooling, broader ops ergonomics, and non-blocking audit
-  polish until after the pilot unless they close a current release gate
-
-Scope:
-
-- tenant entity and tenant membership model
-- current-tenant session/context resolution for authenticated operators
-- keep normal operator routes on `/customers`, `/payments`, `/notifications`,
-  and `/settings`
-- public consent/return routes resolve tenant implicitly through the token and
-  linked local state
-- tenant-owned Mollie credentials
-- tenant-owned e-Boekhouden credentials
-- tenant-owned subscription policy defaults and billing/accounting settings
-- tenant-scoped core business tables, indexes, and uniqueness rules
-- tenant-aware webhook, replay, repair, reconciliation, cron, onboarding,
-  invoice, and notification flows
-
-Current bounded implementation slice:
-
-- tenant, platform-operator, and operator-membership foundation is already in
-  place
-- tenant-owned subscription policy defaults and billing/accounting settings are
-  already persisted by `tenant_id`, and helper lookups now require explicit
-  tenant context instead of a single-tenant fallback
-- current slice tenantizes `customers`, `mandates`, `subscriptions`,
-  `subscription_operation_requests`, `payments`,
-  `recurring_billing_schedules`, `payment_links`,
-  `subscription_onboarding_consents`, and `customer_notes`
-- normal dashboard, notifications, customer activity, customer drawer invoice
-  links, customer drawer invoice resend, customer drawer notes, customer drawer
-  billing history, payments, and settings surfaces now resolve the active
-  tenant from the signed-in operator's selection cookie through the shared
-  tenant-context helper
-- current slice also scopes the root customer/payment loaders, payment drawer
-  API, and e-Boekhouden relation-search linked-record filtering to explicit
-  tenant context, while preserving single-tenant fail-closed behavior until
-  membership/session tenant selection lands
-- payment drawer invoice-trigger audit lookups now verify tenant-owned payment
-  and recurring schedule rows before surfacing audit summaries
-- dashboard layout now blocks signed-in operators without tenant membership or
-  a controlled platform-operator bootstrap path
-- tenant-selection shell plumbing now persists the active tenant in a cookie,
-  resolves it from the operator's accessible tenant list, and exposes a manual
-  switcher in the dashboard menu
-- billing settings and advanced invoice automation actions now resolve the
-  current tenant before mutating tenant-owned billing state or running batch
-  invoice actions
-- tenant billing settings now carry an explicit active invoice provider, and
-  stored invoice/customer-link data is provider-neutral so provider switching is
-  forward-only for new invoices
-- alert status actions on the operator notifications surface now resolve the
-  current tenant before acknowledging or reopening tenant-linked alerts
-- subscription operation request actions now resolve the current tenant before
-  recording, withdrawing, transitioning, or syncing subscription request state
-- recurring-invoice cron fan-out now iterates accessible tenants explicitly so
-  invoice create/recovery/retry automation stays tenant-scoped
-- recurring-invoice cron heartbeat metrics now read tenant cron audit rows
-  directly by tenant audit entity id so settings snapshots stay aligned with
-  tenant-local runs
-- recent reliability audit activity now includes tenant-linked alert,
-  webhook-event, and tenant cron rows
-- webhook and stale-repair batch audits now write to the tenant cron audit
-  entity instead of the global batch entity so advanced tenant audit history
-  stays tenant-scoped during protected cron repair follow-up
-- protected recurring-invoice cron no longer writes a route-level global
-  failure audit row before tenant context exists
-- Needs Attention webhook items now require tenant-linked resources before
-  surfacing failed webhook rows
-- payment follow-up queue alert joins now verify tenant-owned payments before
-  showing queued alert evidence
-- alert email lookups now verify tenant-owned linked entities for tenant-backed
-  alert delivery paths
-- invoice delivery retry and recurring recovery alert emails now carry tenant
-  ids from tenant-scoped candidate rows
-- recurring invoice schedule candidates now carry tenant ids into invoice
-  creation and recovery alert delivery
-- recurring invoice creation failure alert delivery now carries tenant ids
-- first-payment invoice follow-up now carries explicit tenant context into
-  billing settings lookup
-- first-payment onboarding and subscription-sync follow-up now carry explicit
-  tenant context into tenant-owned subscription policy defaults and invoice
-  creation lookup
-  from tenant-scoped schedule candidates
-- session-authenticated `/api/health` diagnostics now resolve the active tenant
-  before reading the shared reliability ops snapshot
-- bearer-authorized `/api/health` diagnostics now stay on setup/database checks
-  unless an explicit `tenantId` is supplied for the shared tenant-scoped
-  reliability snapshot
-- tenant-aware Mollie sync/reliability cross-mode lookup helpers now thread
-  explicit tenant context through sync, replay, repair, and subscription-sync
-  lookups, while global/bootstrap `/api/health` diagnostics remain
-  intentionally non-tenant until an explicit `tenantId` is supplied
-- e-Boekhouden relation detail lookups now require active tenant context
-- tenant-owned e-Boekhouden credential storage now exists, manual
-  `tenant:provision` can seed those credentials, and relation search/detail plus
-  billing-settings discovery now resolve e-Boekhouden credentials per tenant
-- e-Boekhouden client credential resolution now fails closed without explicit
-  tenant context for all tenants, including `legacy-default`, instead of
-  keeping the env-backed fallback readable
-- first-payment and recurring invoice create/reconcile flows, invoice PDF fetch
-  paths, and onboarding relation patch flows now thread explicit tenant context
-  into live e-Boekhouden invoice and relation reads/writes
-- first-payment and recurring invoice candidate lookups, invoice-claim writes,
-  invoice-created state writes, and invoice-delivery alert resolution now fence
-  by tenant id through the invoice automation follow-up path
-- tenant-owned Mollie credential storage now exists, manual `tenant:provision`
-  can seed mode-specific Mollie API keys, and tenant-aware Mollie client
-  resolution now drives onboarding customer creation, first-payment payment-link
-  creation, subscription activation, billing repair, with payment-link
-  follow-up now threading explicit tenant context, payment-link sync, mandate
-  sync, and payment drawer live fetches without implicit or `legacy-default`
-  env-backed business fallback
-- tenant-owned Mollie and e-Boekhouden credential encryption now writes through
-  dedicated `APP_ENCRYPTION_KEY` ciphertext while keeping legacy
-  `AUTH_SECRET`-encrypted tenant rows readable until a later re-encryption or
-  backfill slice
-- consent-link lookup now resolves the active tenant before reading latest
-  customer consent URLs
-- customer activity, invoice-link, customer-note, and customer-notification
-  history helpers now require explicit tenant context instead of a
-  single-tenant fallback
-- onboarding customer actions now thread the active tenant through customer
-  creation, linking, archival, restoration, first-payment creation, and billing
-  repair flows
-- onboarding helper/data reads and first-payment/recurring invoice helper
-  queries now fail closed without explicit tenant context instead of falling
-  back to a single-tenant default
-- reconciliation fan-out now carries the active tenant into payment and
-  payment-link sync dependencies
-- reconciliation entrypoints now fail closed without explicit tenant context
-  instead of widening to all tenants
-- sync resource-state lookups now fail closed without tenant context instead of
-  falling back to a single-tenant default
-- tenant-scoped reconciliation summaries now keep their before/after invoice
-  state deltas scoped to the active tenant through fan-out
-- billing-repair payment-link follow-up now threads explicit tenant context
-  instead of the old tenant-less sync fallback, and payment-link sync still
-  requires explicit tenant context instead of a single-tenant fallback
-- invoice email delivery now carries tenant context through first-payment and
-  resend flows instead of global fallback
-- invoice delivery helper metadata reads and invoice-state writes now fence by
-  tenant id instead of bare payment or schedule ids
-- managed webhook intake now requires resolved tenant-local resource context
-  before sync/provider calls
-- managed webhook_events now persist tenant ids, and replay and repair
-  operator actions now require the current tenant when replaying failed
-  webhooks or running targeted repair actions
-- payment follow-up queue, pending subscription request queries, invoice
-  automation metrics, dashboard reliability reads, and repair helper entry
-  points now fail closed without explicit tenant context, with dashboard
-  webhook history reads fenced by tenant directly and failed-webhook repair
-  status writes keeping tenant scope in the update path
-- repair candidate alert lookups now verify tenant-owned payments,
-  subscriptions, and customers before surfacing repair priority
-- alert open/resolve/email-sent helper writes now require tenant context, and
-  unresolved alert uniqueness is now scoped by tenant-backed alert payload and
-  linked entities
-- live e-Boekhouden mutation seams that are in current pilot scope now thread
-  explicit tenant context through relation patch, invoice create/reconcile, and
-  tenant-owned credential resolution; global/bootstrap diagnostics remain
-  intentionally non-tenant unless an explicit `tenantId` is supplied
-
-Required behavior:
-
-- signing in alone does not grant product access
-- normal operator access is membership-led, and tenant data access requires
-  explicit tenant membership or a controlled platform-operator bootstrap path
-- one tenant is active for an authenticated operator workflow at a time
-- no tenant business flow may use an implicit app-wide default tenant
-- no tenant business flow may use one global provider account as payment or
-  accounting truth
-- cross-tenant data must not appear in normal or advanced operator surfaces
-- current money-flow safeguards must still hold after tenant scoping
-- normal operator shell state now remembers an active tenant, but business
-  query consumers still need to be threaded through that tenant explicitly
-
-Acceptance criteria:
-
-- canonical scope is documented in `multi-tenant-pilot-scope.md`
-- tenant entity and operator membership model are documented before code
-- schema and query rules make tenant scope explicit for tenant business data
-- tenant-owned provider credential resolution exists before live tenant actions
-- webhook and cron follow-up cannot proceed without resolved tenant context
-- focused tests prove no cross-tenant read/write leakage in core flows
-- current hosted onboarding and billing flows still work with tenant resolution
-- broad SaaS administration remains out of scope
-
-## Phase 1: Needs Attention Dashboard
-
-Goal:
-
-- make the app show normal operators what to fix first without needing raw diagnostics.
-
-Scope:
-
-- failed or reversed payments
-- payment issue customer tasks
-- failed invoices
-- failed invoice email delivery
-- failed webhooks
-- missing e-Boekhouden relation links
-- stale Mollie sync state
-- missing mandate or mandate problem
-- setup blockers
-
-Required behavior:
-
-- group items by urgency and business impact
-- use plain labels and recommended action text
-- link directly to the customer, payment, invoice, or settings location needed to resolve the issue
-- keep replay/repair raw controls in advanced surfaces, but show safe operator explanations in normal surfaces
-
-Acceptance criteria:
-
-- dashboard cards are driven by shared query helpers
-- each item has stable type, severity, entity references, and recommended action
-- source data is covered by focused tests
-- no raw webhook payloads or sensitive metadata shown to normal operators
-- current source list stays frozen until docs explicitly add a new attention class
-
-## Phase 2: Customer Activity Timeline And Derived Lifecycle State
-
-Goal:
-
-- make a customer's history understandable without inspecting multiple tables.
-
-Scope:
-
-- customer notes
-- automatic activity from audit logs, alerts, payments, invoices, subscription changes, consent, and email delivery
-- derived customer lifecycle state
-
-Lifecycle state model:
-
-- use derived state first
-- no manual override in near-term scope
-- possible states: onboarding, active, payment issue, paused, cancelled, ended, needs setup
-- the state should explain its source, for example "payment issue because latest recurring payment failed"
-
-Acceptance criteria:
-
-- timeline query has stable item types
-- notes are separate from audit logs
-- lifecycle state is derived by a pure helper with tests
-- UI explains why a state appears
-- manual override remains out of scope until a future product decision
-
-## Phase 3: Noob-Friendly Operator UX
-
-Goal:
-
-- make normal workflows clear for someone with little technical or financial knowledge.
-
-Scope:
-
-- better customer-facing return page after Mollie checkout
-- clear SEPA pending, failed, and reversed messaging
-- operator copy that explains invoice/payment/subscription state in plain language
-- invoice download links for operators
-- manual invoice resend from customer or payment drawer
-- setup checklist with only legally/business-required setup visible by default
-
-Required behavior:
-
-- explain "pending" as normal for SEPA when applicable
-- explain "failed" without implying cancellation or penalties
-- keep advanced configuration available but out of the primary path
-- show "what to do next" near every issue state
-- keep the operator aware of the active tenant context without requiring
-  tenant-namespaced URLs
-
-Acceptance criteria:
-
-- customer-facing copy is centralized enough to review
-- invoice URLs continue to use trusted-source guardrails
-- resend actions are idempotent and audited
-- normal setup does not expose raw cron, webhook, or repair concepts
-
-## Phase 4: Retention Policy UI And Dry-Run Cleanup
-
-Goal:
-
-- move retention from report-only to accepted policy display plus safe dry-run tooling.
-
-Scope:
-
-- UI showing the accepted retention policy
-- dry-run cleanup report
-- no destructive apply until dry-run output is reviewable and the operator explicitly scopes the cleanup
-
-Required behavior:
-
-- separate live and test data decisions
-- any future operator-facing report or apply path must also require explicit
-  tenant scope
-- preserve invoice, payment, mandate, consent, and audit evidence unless policy explicitly allows removal
-- redact or delete stale personal-data fragments only through scoped rules
-- every future destructive action must require explicit mode/table/window selection
-
-Acceptance criteria:
-
-- policy values stored explicitly
-- dry-run output explains row counts and evidence impact
-- no default destructive cleanup
-- docs and runbook updated before any apply path exists
-
-## Phase 5: Subscription Operations
-
-Goal:
-
-- support common customer lifecycle workflows without accidental financial consequences.
-
-Scope:
-
-- subscription pause/resume flow
-- cancellation workflow with reason, effective date, and audit trail
-- payment failure follow-up queue
-- customer notification history
-
-Required behavior:
-
-- pause/resume/cancel actions are explicit operator actions
-- cancellation must separate service end, billing end, and collection state
-- pre-execution request statuses must have explicit meaning before any provider execution is implemented
-- provider execution must require fresh Mollie re-fetch before action and provider confirmation after action
-- failed payment follow-up should recommend actions before automating consequences
-- customer communication should be stored with outcome evidence
-
-Acceptance criteria:
-
-- state transition policy documented before code
-- pre-execution request lifecycle (`pending`, `scheduled`, `processing`, `withdrawn`) documented before UI or server-action transitions
-- execution-state policy (`processing` -> `applied|failed`, retry/requeue rules, confirmation rules) documented before provider mutation code
-- pure state-transition helpers with tests
-- audit trail for every lifecycle action
-- no conflict with fixed-term subscription semantics
-- payment follow-up queue remains read-only evidence unless the roadmap later adds an explicit ownership/due-date/disposition slice
-
-## Phase 6: Plan Catalog And Accounting Mapping
-
-Goal:
-
-- stop forcing operators to type or remember recurring commercial/accounting details.
-
-Scope:
-
-- plan catalog
-- product/service line templates for e-Boekhouden invoices
-- VAT and revenue ledger mapping by plan
-- setup fee support
-- trial support
-- discount support
-- proration rules for mid-cycle changes
-
-Order:
-
-1. plan catalog
-2. invoice line templates
-3. VAT and ledger mapping by plan
-4. setup fees
-5. trials and discounts
-6. proration
-
-Reason:
-
-- proration and discounts are risky until plan, period, invoice-line, VAT, and ledger semantics are explicit.
-
-Acceptance criteria:
-
-- plan changes are versioned or snapshotted into customer consent and invoice evidence
-- accounting mappings are validated before activation
-- generated invoices can be explained from stored plan/line snapshots
-- customer-facing consent shows the actual financial terms
-
-## Phase 7: Advanced Policy Overrides
-
-Goal:
-
-- support business-specific policy variation without confusing normal users.
-
-Scope:
-
-- per-customer or per-subscription policy overrides
-- custom invoice notice days
-- custom cancellation behavior
-- custom recovery rules
-
-Default:
-
-- tenant defaults remain the simple path
-- overrides must be advanced and visibly exceptional
-
-Acceptance criteria:
-
-- policy precedence is explicit: platform fallback -> tenant default -> customer/subscription override
-- every override is included in customer-facing consent where relevant
-- override audit trail exists
-- no override silently changes already-agreed customer terms
-
-## Very Late Platform Track
-
-These are intentionally far future:
-
-- real roles such as admin, finance, support, developer, and auditor
-- multi-user invites
-- self-serve tenant signup
-- broad tenant administration UX
-- platform billing
-- tenant SMTP overrides and richer provider-linking UX
-- customer self-serve portal beyond simple invoice downloads or recovery links
-- full onboarding for new users of this app
-
-Reason:
-
-- the app should first become correct, understandable, safe, and tenant-isolated
-  before adding broader platform administration.
-
-## Current Autonomous Development Order
-
-1. Phase 0 failed payment correctness
-2. Phase 0.5 multi-tenant pilot foundation
-3. Phase 1 needs attention dashboard
-4. Phase 2 customer timeline and derived lifecycle state
-5. Phase 3 noob-friendly UX and invoice resend/downloads
-6. Phase 4 retention policy UI and dry-run cleanup
-7. Phase 5 subscription operations
-8. Phase 6 plan catalog and accounting mapping
-9. Phase 7 advanced policy overrides
-10. very late platform track
-
-If a later feature needs a Phase 0, Phase 0.5, or Phase 1-4 foundation, build
-the foundation first.
-
-## Pilot Launch Priority
-
-Until the shared multi-tenant pilot is ready, the active implementation order
-inside the broader roadmap is:
-
-1. close remaining Phase 0.5 release-gate gaps
-2. preserve Phase 0 failed-payment correctness where tenant scoping touches it
-3. run focused pilot verification
-4. only then widen into Phase 1-7 work that is not required for pilot launch
-
-For avoidance of doubt, the following are not active critical-path work unless a
-specific gap blocks a pilot release gate:
-
-- deeper replay or repair UX polish beyond safe advanced access
-- broader diagnostics ergonomics
-- retention apply tooling beyond accepted policy display and safe dry-run
-- broader subscription operations beyond the already-documented safe read-only
-  or pre-execution state slices
-- plan catalog, advanced overrides, or later platform-administration work
+## Product End Goal
+
+Each tenant can securely connect its own Mollie organization through OAuth.
+Existing tenant-scoped customer, payment, payment-link, mandate, subscription,
+invoice, webhook, reconciliation, repair, and readiness flows use that
+connection without API-key sharing, credential mixing, or implicit fallback.
+
+Normal operators can see whether Mollie is connected, which organization and
+profile are active, and what action is required when access is incomplete or
+revoked. Existing API-key connections remain temporary migration compatibility,
+not the final onboarding model.
+
+## Verified Baseline
+
+The current code already provides:
+
+- membership-led tenant access and active-tenant selection
+- tenant-scoped core business data and operator surfaces
+- encrypted tenant-owned Mollie API keys and e-Boekhouden credentials
+- hosted subscription consent and first-payment onboarding
+- Mollie customer, payment-link, mandate, subscription, and payment sync
+- fail-closed managed webhook processing with tenant evidence
+- failed-payment classification, customer notification evidence, and operator tasks
+- provider-neutral invoice records with Mollie and e-Boekhouden adapters
+- tenant-aware invoice delivery, resend, download, reconciliation, cron, and repair paths
+- provider-aware tenant readiness checks
+- normal Needs Attention, customer timeline, notes, and derived lifecycle views
+
+The current Mollie client still authenticates tenant business calls with stored
+API keys. OAuth connection identity, token lifecycle, scopes, profile selection,
+capability state, revocation, and reconnect behavior do not exist yet.
+
+## Active Milestone: M6 Production Proof And Migration Gate
+
+This is the only active product milestone.
+
+M1 through M5 are complete. The accepted contract is in
+[`../integrations/mollie-connect-contract.md`](../integrations/mollie-connect-contract.md).
+All tenant SDK and Sales Invoices requests now share the credential-neutral,
+tenant-fenced resolver; temporary API-key compatibility remains fail-closed.
+
+Normal operator connection controls now show sanitized organization, selected
+profile, scopes/capability readiness, and safe actions. An OAuth connection
+remains incomplete until the operator explicitly selects a valid profile.
+
+Goal: record live connected-tenant proof for all existing Mollie flows and the
+API-key migration-retirement decision.
+
+M6 is complete only when the live-proof runbook has evidence for customer
+creation, first payment, mandate, subscription, payment link, webhook,
+reconciliation, Mollie invoicing, readiness, revocation, and reconnect.
+
+## Ordered Mollie Connect Milestones
+
+Work in this order. Do not open a later milestone while an earlier milestone has
+unfinished acceptance criteria unless an external blocker is recorded and the
+new work still belongs to the same end goal.
+
+### M1: Connection Contract
+
+Define ownership, scopes, authorization, token lifecycle, connection states,
+migration compatibility, audit rules, and failure behavior.
+
+### M2: Dual-Auth Foundation
+
+Add an OAuth connection model alongside temporary legacy API-key support. Store
+only the connection identity and encrypted credentials required by the M1
+contract. Keep every credential lookup explicitly tenant-scoped and fail closed.
+
+### M3: OAuth Lifecycle
+
+Implement authorization start and callback, authorization-code exchange,
+concurrency-safe access-token refresh, revoked-consent handling, scope validation,
+disconnect, and reconnect. Protect redirects with state validation and keep
+tokens out of URLs, logs, audits, and client payloads.
+
+### M4: Existing-Flow Migration
+
+Route every tenant Mollie business operation through one credential-neutral
+client resolver. Preserve current tenant fencing, test/live behavior,
+idempotency, webhook authority checks, payment truth, and API-key migration
+compatibility.
+
+### M5: Connection And Readiness UX
+
+Let an authorized operator connect, reconnect, disconnect, and select the active
+profile. Show organization, profile, granted scopes, capability/readiness state,
+last verification, and safe next actions. Follow Mollie's Capabilities API
+direction instead of creating a new dependency on the deprecated Onboarding API.
+
+### M6: Production Proof And Migration Gate
+
+Prove OAuth-backed customer creation, first payment, mandate establishment,
+subscription activation, payment links, webhooks, reconciliation, Mollie
+invoicing, readiness, revocation, and reconnect for a real connected tenant.
+Document evidence and the explicit gate for retiring manual API-key onboarding.
+
+## Mollie Connect Completion Gate
+
+Mollie Connect is complete only when all six milestones pass:
+
+- existing tenant business flows work through OAuth
+- cross-tenant credential use is structurally prevented and covered by tests
+- token refresh is concurrency-safe and failures are recoverable without secret leakage
+- revoked or incomplete connections fail closed with an actionable operator state
+- organization, profile, scopes, and capabilities are visible without raw provider payloads
+- API-key tenants can migrate without breaking existing business records
+- current payment, invoice, webhook, retry, and reconciliation safeguards still hold
+- live connected-tenant proof is recorded
+- active docs match implemented behavior
+
+Code completion without live connected-tenant proof is not program completion.
+An external Mollie activation or approval dependency must be recorded as an
+explicit blocker, not disguised as completed work.
+
+## Non-Negotiable Product Rules
+
+- Mollie remains payment and mandate truth.
+- Each stored invoice remains owned by the provider that created it.
+- Resolve an explicit tenant before every business read, mutation, webhook,
+  replay, repair, cron, invoice, sync, and notification flow.
+- Never fall back from a tenant OAuth failure to another tenant or global account.
+- Treat webhooks as signals and re-fetch authoritative state before acting.
+- Make external side effects idempotent or claim-before-call.
+- Keep secrets out of URLs, logs, audits, client payloads, and generic metadata.
+- Define money, legal, privacy, and lifecycle policy before code depends on it.
+- Keep destructive cleanup report-only, then dry-run, then explicitly scoped apply.
+- Keep normal operator UX narrow; raw diagnostics and repair controls remain advanced.
+- Update docs in the same slice as behavior changes.
+
+## Execution And Drift Rules
+
+- Keep exactly one active milestone in this file.
+- Every implementation slice must close a named acceptance criterion from that milestone.
+- Prefer the smallest coherent slice that advances the active completion gate.
+- Do not create work from incidental TODOs, aesthetic observations, or nearby refactor opportunities.
+- Do not broaden scope because a touched module could be cleaner.
+- Refactor only when required to complete or verify the active milestone safely.
+- Verify the touched seam first; widen checks in proportion to risk.
+- End each slice with result, evidence, blocker if any, and next milestone criterion.
+- Keep active status concise. Git and archived summaries hold history.
+- When blocked externally, continue only with another unmet criterion inside the
+  active milestone; otherwise stop with the exact blocker.
+
+Until the Mollie Connect completion gate closes, do not implement refunds,
+chargeback workspaces, balances/settlements, application fees, Resell Pricing,
+POS, Marketplace flows, broad role systems, or unrelated operator polish.
+
+## Later Backlog
+
+After Mollie Connect is complete, reassess this queue in order of customer and
+money-flow value:
+
+1. provider-side subscription cancellation execution under `subscription-policy.md`
+2. controlled refund read/create lifecycle with audit and uncertain-outcome reconciliation
+3. chargeback detail and operator follow-up
+4. balances and settlements reconciliation for payout/accounting visibility
+5. profile and payment-method health improvements beyond the Connect completion gate
+6. tenant subscription-policy settings UI
+7. plan catalog, invoice-line templates, VAT, and revenue-ledger mapping
+8. discounts, trials, setup fees, and proration after catalog policy exists
+9. customer self-service cancellation and richer entitlement rules
+10. per-subscription policy overrides
+11. broader roles, self-serve tenant administration, invites, and platform billing
+12. Application Fees or Resell Pricing after commercial and tax policy is approved
+
+Pause/resume remains out of scope while Mollie cancellation is irreversible.
+Marketplace, Split Payments, balance transfers, programmatic payouts, Orders,
+shipments, and POS remain non-goals until a separate product decision adds them.

@@ -169,6 +169,20 @@
       "when": 1783684800001,
       "tag": "0023_remove_legacy_invoice_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1783980000000,
+      "tag": "0024_tenant_mollie_connections",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1783983600000,
+      "tag": "0025_mollie_oauth_states",
+      "breakpoints": true
     }
   ]
 }

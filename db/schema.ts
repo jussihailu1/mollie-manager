@@ -19,6 +19,14 @@ import {
 
 export const mollieModeEnum = pgEnum("mollie_mode", ["test", "live"]);
 
+export const mollieConnectionStatusEnum = pgEnum("mollie_connection_status", [
+  "connected",
+  "incomplete",
+  "revoked",
+  "reconnect_required",
+  "disconnected",
+]);
+
 export const customerAccountingLinkStatusEnum = pgEnum(
   "customer_accounting_link_status",
   [
@@ -734,6 +742,55 @@ export const tenantMollieCredentials = pgTable(
       table.tenantId,
       table.mode,
     ),
+  ],
+);
+
+export const tenantMollieConnections = pgTable(
+  "tenant_mollie_connections",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    status: mollieConnectionStatusEnum("status").notNull(),
+    organizationId: text("organization_id"),
+    organizationName: text("organization_name"),
+    selectedProfileId: text("selected_profile_id"),
+    selectedProfileName: text("selected_profile_name"),
+    grantedScopes: jsonb("granted_scopes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    refreshTokenCiphertext: text("refresh_token_ciphertext"),
+    accessTokenCiphertext: text("access_token_ciphertext"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", { mode: "string", withTimezone: true }),
+    credentialVersion: integer("credential_version").notNull().default(1),
+    lastVerifiedAt: timestamp("last_verified_at", { mode: "string", withTimezone: true }),
+    lastRefreshedAt: timestamp("last_refreshed_at", { mode: "string", withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { mode: "string", withTimezone: true }),
+    disconnectedAt: timestamp("disconnected_at", { mode: "string", withTimezone: true }),
+    failureReasonCode: text("failure_reason_code"),
+    connectedAt: timestamp("connected_at", { mode: "string", withTimezone: true }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({ columns: [table.tenantId], foreignColumns: [tenants.id], name: "tenant_mollie_connections_tenant_id_fkey" }).onDelete("cascade"),
+    unique("tenant_mollie_connections_tenant_id_key").on(table.tenantId),
+    index("tenant_mollie_connections_status_idx").on(table.status),
+  ],
+);
+
+export const mollieOauthStates = pgTable(
+  "mollie_oauth_states",
+  {
+    id: text("id").primaryKey(),
+    stateDigest: text("state_digest").notNull(),
+    tenantId: text("tenant_id").notNull(),
+    actorEmail: text("actor_email").notNull(),
+    expiresAt: timestamp("expires_at", { mode: "string", withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { mode: "string", withTimezone: true }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({ columns: [table.tenantId], foreignColumns: [tenants.id], name: "mollie_oauth_states_tenant_id_fkey" }).onDelete("cascade"),
+    unique("mollie_oauth_states_state_digest_key").on(table.stateDigest),
+    index("mollie_oauth_states_tenant_expires_idx").on(table.tenantId, table.expiresAt.desc()),
   ],
 );
 

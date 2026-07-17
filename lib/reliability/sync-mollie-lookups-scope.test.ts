@@ -15,14 +15,14 @@ describe("sync mollie lookup module boundary", () => {
     assert.match(lookupSource, /tenantId\?: string;/);
     assert.match(lookupSource, /if \(!tenantId\) \{/);
     assert.match(lookupSource, /buildConfiguredMollieModeOrder\(\{/);
-    assert.match(lookupSource, /await resolveTenantMollieConfig\(tenantId, mode\);/);
+    assert.match(lookupSource, /await getTenantMollieRequestAuthentication\(tenantId, mode\);/);
     assert.match(
       lookupSource,
-      /async \(mode\) => \(await getTenantMollieClient\(tenantId, mode\)\)\.payments\.get\(molliePaymentId\)/,
+      /getTenantMollieRequestContext\(tenantId, mode\)[\s\S]*client\.payments\.get\(molliePaymentId, \{ \.\.\.\(testmode \? \{ testmode \} : \{\}\) \}\)/,
     );
     assert.match(
       lookupSource,
-      /async \(mode\) =>\s*\(await getTenantMollieClient\(tenantId, mode\)\)\.paymentLinks\.get\(/,
+      /getTenantMollieRequestContext\(tenantId, mode\)[\s\S]*client\.paymentLinks\.get\(/,
     );
     assert.match(
       lookupSource,

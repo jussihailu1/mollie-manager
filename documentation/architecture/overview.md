@@ -6,10 +6,9 @@ Audience: developers
 ## Purpose
 
 This document describes the current intended implementation shape of the app.
-It is not the product backlog. For release target and sequencing, use:
-
-- `../product/multi-tenant-pilot-scope.md`
-- `../product/implementation-roadmap.md`
+It is not the product backlog. Use `../product/implementation-roadmap.md` for
+development sequencing and `../product/multi-tenant-pilot-scope.md` for the
+tenant-isolation baseline.
 
 ## System Roles
 

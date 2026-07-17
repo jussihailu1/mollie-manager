@@ -2,19 +2,21 @@
 
 This folder contains the active documentation for the project plus an archive of superseded notes.
 
-## Canonical Docs
+## Required Reading Order
 
-These are the active sources of truth:
+For product development, read active docs in this order:
+
+1. `product/implementation-roadmap.md`: sole authority for active goal, milestone, and feature order
+2. relevant policy: `product/subscription-policy.md` and/or `product/recurring-billing-policy.md`
+3. `product/feature-inventory.md`: current capability evidence only
+4. `product/multi-tenant-pilot-scope.md`: tenant-isolation baseline when the work touches tenant business data or providers
+
+Other active references:
 
 - `architecture/overview.md`: current implementation shape and code map
 - `development/setup.md`: local setup and environment guidance
 - `development/commands-and-checks.md`: common developer and ops commands
-- `development/codebase-review.md`: active engineering assessment, risks, and remediation tracks
-- `product/implementation-roadmap.md`: active autonomous-development roadmap and feature order
-- `product/feature-inventory.md`: active implementation inventory and development backlog
-- `product/subscription-policy.md`: canonical subscription-policy rules
-- `product/recurring-billing-policy.md`: canonical recurring billing rules
-- `product/subscription-roadmap.md`: future-facing product direction only
+- `development/codebase-review.md`: historical 2026-06-17 engineering assessment; never a sequencing authority
 - `operations/invoice-automation-runbook.md`: invoice automation operations runbook
 - `integrations/mollie.md`: Mollie integration boundaries and mode rules
 - `integrations/eboekhouden.md`: e-Boekhouden integration boundaries and invoice rules
@@ -28,7 +30,9 @@ These are the active sources of truth:
 
 - Product rules live under `product/`.
 - Feature sequencing lives in `product/implementation-roadmap.md`.
+- `product/feature-inventory.md` never creates priority by itself.
 - Operational procedures live under `operations/`.
 - Technical structure lives under `architecture/`, `development/`, and `integrations/`.
 - Archived docs are not authoritative.
-- If two docs disagree, the canonical active doc wins over anything in `archive/`.
+- If active docs disagree on sequence, `product/implementation-roadmap.md` wins.
+- Active docs always win over anything in `archive/`.

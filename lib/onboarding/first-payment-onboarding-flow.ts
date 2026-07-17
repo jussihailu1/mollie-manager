@@ -1,7 +1,7 @@
 import { PaymentMethod, SequenceType } from "@mollie/api-client";
 
 import type { MollieMode } from "@/lib/env";
-import { getMollieWebhookUrl, getTenantMollieClient } from "@/lib/mollie/client";
+import { getMollieWebhookUrl, getTenantMollieClient, getTenantMollieRequestContext } from "@/lib/mollie/client";
 import { buildConsentTokenStorage, createConsentToken } from "@/lib/onboarding/consent-token-storage";
 import { buildFirstPaymentOnboardingRecords } from "@/lib/onboarding/first-payment-onboarding-records";
 import { persistFirstPaymentOnboardingRecords, type FirstPaymentOnboardingActor } from "@/lib/onboarding/first-payment-onboarding-persistence";
@@ -38,6 +38,7 @@ export async function createFirstPaymentOnboardingFlow(
     input.tenantId,
     input.selectedMode,
   );
+  const { profileId, testmode } = await getTenantMollieRequestContext(input.tenantId, input.selectedMode);
   const localPaymentLinkId = crypto.randomUUID();
   const localConsentId = crypto.randomUUID();
   const consentToken = createConsentToken();
@@ -53,9 +54,11 @@ export async function createFirstPaymentOnboardingFlow(
     customerId: input.customer.mollieCustomerId,
     description: firstPaymentPlan.paymentDescription,
     idempotencyKey: crypto.randomUUID(),
+    ...(profileId ? { profileId } : {}),
     redirectUrl,
     reusable: false,
     sequenceType: SequenceType.first,
+    ...(testmode ? { testmode } : {}),
     webhookUrl,
   });
   const onboardingRecords = buildFirstPaymentOnboardingRecords({

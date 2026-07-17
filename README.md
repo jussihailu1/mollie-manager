@@ -2,7 +2,7 @@
 
 Mollie Manager is an internal backoffice for managing Mollie subscription onboarding, recurring billing operations, invoice creation, and reliability workflows.
 
-The current release target is a shared-app, manually provisioned multi-tenant pilot. Mollie remains the payment source of truth. e-Boekhouden remains the invoice and accounting source of truth. The local PostgreSQL database is the operational layer that ties onboarding, reconciliation, alerts, audit logging, and invoice automation together.
+The shared-app, manually provisioned multi-tenant foundation is in place, and Mollie Connect is the active product goal. Mollie remains the payment source of truth. Each stored invoice remains owned by the provider that created it (`mollie` or `eboekhouden`). The local PostgreSQL database is the operational layer that ties onboarding, reconciliation, alerts, audit logging, and invoice automation together.
 
 ## Core Workflow
 
@@ -57,11 +57,13 @@ Start with [documentation/README.md](documentation/README.md).
 
 The most important active docs are:
 
+- [documentation/product/implementation-roadmap.md](documentation/product/implementation-roadmap.md)
+- [documentation/product/subscription-policy.md](documentation/product/subscription-policy.md)
+- [documentation/product/recurring-billing-policy.md](documentation/product/recurring-billing-policy.md)
 - [documentation/architecture/overview.md](documentation/architecture/overview.md)
 - [documentation/development/setup.md](documentation/development/setup.md)
 - [documentation/product/feature-inventory.md](documentation/product/feature-inventory.md)
-- [documentation/product/subscription-policy.md](documentation/product/subscription-policy.md)
-- [documentation/product/recurring-billing-policy.md](documentation/product/recurring-billing-policy.md)
+- [documentation/product/multi-tenant-pilot-scope.md](documentation/product/multi-tenant-pilot-scope.md)
 - [documentation/operations/invoice-automation-runbook.md](documentation/operations/invoice-automation-runbook.md)
 
 ## Notes

@@ -1,0 +1,33 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, it } from "node:test";
+
+describe("Mollie Connect operator UX scope", () => {
+  const connectionSource = readFileSync(resolve("lib/mollie/tenant-connections.ts"), "utf8");
+  const actionsSource = readFileSync(resolve("lib/mollie/connection-actions.ts"), "utf8");
+  const settingsSource = readFileSync(resolve("app/(dashboard)/settings/page.tsx"), "utf8");
+
+  it("uses tenant OAuth credentials for profiles, capabilities, and organization only", () => {
+    assert.match(connectionSource, /https:\/\/api\.mollie\.com\/v2\/profiles\?limit=250/);
+    assert.match(connectionSource, /https:\/\/api\.mollie\.com\/v2\/capabilities/);
+    assert.match(connectionSource, /https:\/\/api\.mollie\.com\/v2\/organizations\/me/);
+    assert.match(connectionSource, /getTenantMollieOAuthAccessToken\(tenantId\)/);
+    assert.doesNotMatch(connectionSource, /console\.log/);
+  });
+
+  it("requires explicit server-verified profile selection", () => {
+    assert.match(actionsSource, /getCurrentTenantSelectionForViewer/);
+    assert.match(actionsSource, /listTenantMollieProfiles\(currentTenant\.id\)/);
+    assert.match(actionsSource, /find\(\(entry\) => entry\.id === profileId\)/);
+    assert.match(connectionSource, /status = 'connected', selected_profile_id/);
+  });
+
+  it("keeps connection controls and raw provider payloads out of the client surface", () => {
+    assert.match(settingsSource, /Mollie Connect/);
+    assert.match(settingsSource, /Connect Mollie/);
+    assert.match(settingsSource, /Disconnect/);
+    assert.match(settingsSource, /Payments: \{formatLabel\(mollieCapabilities\.state\)\}/);
+    assert.doesNotMatch(settingsSource, /refreshToken|accessToken|_embedded|requirements/);
+  });
+});

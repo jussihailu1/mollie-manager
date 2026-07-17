@@ -7,7 +7,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { transaction, type DbTransaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { getCustomerDetail } from "@/lib/onboarding/data";
-import { getTenantMollieClient } from "@/lib/mollie/client";
+import { getTenantMollieClient, getTenantMollieRequestContext } from "@/lib/mollie/client";
 import { syncPaymentLinkByMollieId } from "@/lib/reliability/sync";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 
@@ -202,8 +202,10 @@ export async function repairCustomerBillingState(input: {
 
   const tenantId = input.tenantId;
   const mollie = await getTenantMollieClient(tenantId, input.mode);
+  const { testmode } = await getTenantMollieRequestContext(tenantId, input.mode);
   const mandates = await mollie.customerMandates.page({
     customerId: mollieCustomerId,
+    ...(testmode ? { testmode } : {}),
   });
 
   await transaction(async (client) => {
@@ -230,7 +232,9 @@ export async function repairCustomerBillingState(input: {
     const localPayments = await getLocalPayments(customer.id, tenantId, client);
 
     for (const localPayment of localPayments) {
-      const payment = await mollie.payments.get(localPayment.molliePaymentId);
+      const payment = await mollie.payments.get(localPayment.molliePaymentId, {
+        ...(testmode ? { testmode } : {}),
+      });
       const linkedMandateId = payment.mandateId
         ? mandateIdMap.get(payment.mandateId) ?? null
         : null;
@@ -263,6 +267,7 @@ export async function repairCustomerBillingState(input: {
         localSubscription.mollieSubscriptionId,
         {
           customerId: mollieCustomerId,
+          ...(testmode ? { testmode } : {}),
         },
       )) as unknown as {
         status: string;

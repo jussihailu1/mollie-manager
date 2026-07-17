@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { writeAuditLog } from "@/lib/audit";
 import { getDb, transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
-import { getTenantMollieClient } from "@/lib/mollie/client";
+import { getTenantMollieClient, getTenantMollieRequestContext } from "@/lib/mollie/client";
 import {
   buildPaymentLinkSyncMetadata,
   derivePaymentLinkSyncAmount,
@@ -205,8 +205,10 @@ export async function syncMatchingPaymentLinkForPayment(
     }
 
     const mollie = await getTenantMollieClient(tenantId, mode);
+    const { testmode } = await getTenantMollieRequestContext(tenantId, mode);
     const paymentLink = (await mollie.paymentLinks.get(
       candidate.molliePaymentLinkId,
+      { ...(testmode ? { testmode } : {}) },
     )) as unknown as MolliePaymentLink;
     const payments = await collectPaymentLinkPayments(paymentLink);
 

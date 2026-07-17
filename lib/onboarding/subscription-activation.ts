@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { writeAuditLog } from "@/lib/audit";
 import { getDb, transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
-import { getMollieWebhookUrl, getTenantMollieClient } from "@/lib/mollie/client";
+import { getMollieWebhookUrl, getTenantMollieClient, getTenantMollieRequestContext } from "@/lib/mollie/client";
 import { upsertRecurringBillingScheduleForSubscription } from "@/lib/recurring-billing-schedule";
 import { deliverAlertEmail, openAlert, resolveAlertsForEntity } from "@/lib/reliability/alerts";
 import { subscriptionConsentPlanSnapshotSchema } from "@/lib/subscription-consent";
@@ -328,6 +328,7 @@ export async function attemptSubscriptionActivation(input: {
 
   try {
     const mollie = await getTenantMollieClient(tenantId, input.mode);
+    const { testmode } = await getTenantMollieRequestContext(tenantId, input.mode);
     const subscription = await mollie.customerSubscriptions.create({
       amount: {
         currency: "EUR",
@@ -346,6 +347,7 @@ export async function attemptSubscriptionActivation(input: {
         trigger: input.trigger,
       },
       startDate: plan.startDate,
+      ...(testmode ? { testmode } : {}),
       ...(plan.subscriptionTermMode === "fixed_term" &&
       plan.recurringChargeCount !== null
         ? {

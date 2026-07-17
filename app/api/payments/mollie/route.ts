@@ -7,7 +7,7 @@ import { getDb } from "@/lib/db";
 import { normalizeTrustedInvoicePdfUrl } from "@/lib/invoice-pdf";
 import { getStoredInvoiceByOwner } from "@/lib/invoices";
 import { getInvoiceProviderAdapterById } from "@/lib/invoicing/provider-resolver";
-import { getTenantMollieClient } from "@/lib/mollie/client";
+import { getTenantMollieClient, getTenantMollieRequestContext } from "@/lib/mollie/client";
 import type { PaymentDrawerData } from "@/lib/payment-details";
 import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
@@ -449,8 +449,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const mollie = await getTenantMollieClient(tenantId, selectedMode);
+    const { testmode } = await getTenantMollieRequestContext(tenantId, selectedMode);
     const payment = await mollie.payments.get(
       localPayment.molliePaymentId,
+      { ...(testmode ? { testmode } : {}) },
     );
 
     return Response.json(

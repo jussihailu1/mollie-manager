@@ -16,7 +16,7 @@ describe("Mollie client boundary", () => {
     assert.match(clientSource, /return env\.MOLLIE_DEFAULT_MODE;/);
     assert.match(clientSource, /export function isMollieConfigured\(mode: MollieMode\)/);
     assert.match(clientSource, /getMollieApiKey\(mode\);/);
-    assert.match(clientSource, /resolveTenantMollieConfig,/);
+    assert.match(clientSource, /resolveTenantMollieAuthentication,/);
     assert.match(
       clientSource,
       /export function getMollieClient\(mode: MollieMode = getDefaultMollieMode\(\)\)/,
@@ -30,13 +30,16 @@ describe("Mollie client boundary", () => {
       clientSource,
       /const tenantClientCache = new Map<string, MollieClient>\(\);/,
     );
-    assert.match(clientSource, /const config = await resolveTenantMollieConfig\(tenantId, mode\);/);
-    assert.match(clientSource, /const cacheKey = `\$\{tenantId\}:\$\{mode\}`;/);
+    assert.match(clientSource, /const authentication = await resolveTenantMollieAuthentication\(tenantId, mode\);/);
+    assert.match(clientSource, /\? `\$\{tenantId\}:oauth:\$\{authentication\.connectionId\}:\$\{authentication\.accessToken\}`/);
+    assert.match(clientSource, /: `\$\{tenantId\}:api_key:\$\{mode\}`/);
     assert.match(clientSource, /tenantClientCache\.set\(cacheKey, client\);/);
     assert.match(
       clientSource,
-      /createMollieClient\(\{\s*apiKey: config\.MOLLIE_API_KEY,\s*\}\);/,
+      /authentication\.kind === "oauth"\s*\? createMollieClient\(\{ accessToken: authentication\.accessToken \}\)\s*:\s*createMollieClient\(\{ apiKey: authentication\.apiKey \}\);/,
     );
+    assert.match(clientSource, /export async function getTenantMollieRequestContext\(/);
+    assert.match(clientSource, /\.\.\.\(mode === "test" \? \{ testmode: true as const \} : \{\}\)/);
     assert.match(clientSource, /clientCache\.set\(mode, client\);/);
     assert.match(
       clientSource,

@@ -61,15 +61,15 @@ describe("multi-tenant pilot release gates", () => {
 
     assert.match(
       mollieClientSource,
-      /const config = await resolveTenantMollieConfig\(tenantId, mode\);/,
+      /const authentication = await resolveTenantMollieAuthentication\(tenantId, mode\);/,
     );
     assert.match(
       mollieClientSource,
-      /createMollieClient\(\{\s*apiKey: config\.MOLLIE_API_KEY,\s*\}\);/,
+      /authentication\.kind === "oauth"\s*\? createMollieClient\(\{ accessToken: authentication\.accessToken \}\)\s*:\s*createMollieClient\(\{ apiKey: authentication\.apiKey \}\);/,
     );
     assert.match(
       mollieClientSource,
-      /const cacheKey = `\$\{tenantId\}:\$\{mode\}`;/,
+      /\? `\$\{tenantId\}:oauth:\$\{authentication\.connectionId\}:\$\{authentication\.accessToken\}`/,
     );
     assert.match(
       eboekhoudenClientSource,

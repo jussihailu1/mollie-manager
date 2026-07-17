@@ -3,7 +3,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 
 import { getDb } from "@/lib/db";
-import { resolveTenantMollieConfig } from "@/lib/mollie/tenant-credentials";
+import { getTenantMollieRequestAuthentication } from "@/lib/mollie/client";
 import { type InvoiceProviderAdapter } from "@/lib/invoicing/provider-types";
 
 type MollieRecipientProfile = {
@@ -186,12 +186,25 @@ async function requestMollieSalesInvoices<T>(
     tenantId: string;
   },
 ) {
-  const config = await resolveTenantMollieConfig(input.tenantId, input.mode);
-  const response = await fetch(`https://api.mollie.com/v2${input.path}`, {
-    body: input.body ? JSON.stringify(input.body) : undefined,
+  const authentication = await getTenantMollieRequestAuthentication(input.tenantId, input.mode);
+  const url = new URL(`https://api.mollie.com/v2${input.path}`);
+  const isOAuth = authentication.kind === "oauth";
+  const testmode = isOAuth && input.mode === "test";
+  if (!input.body && testmode) {
+    url.searchParams.set("testmode", "true");
+  }
+  const body = input.body
+    ? {
+        ...input.body,
+        ...(isOAuth ? { profileId: authentication.profileId } : {}),
+        ...(testmode ? { testmode: true } : {}),
+      }
+    : undefined;
+  const response = await fetch(url, {
+    body: body ? JSON.stringify(body) : undefined,
     cache: "no-store",
     headers: {
-      Authorization: `Bearer ${config.MOLLIE_API_KEY}`,
+      Authorization: `Bearer ${authentication.kind === "oauth" ? authentication.accessToken : authentication.apiKey}`,
       ...(input.body ? { "Content-Type": "application/json" } : {}),
     },
     method: input.method,

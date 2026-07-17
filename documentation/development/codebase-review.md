@@ -1,12 +1,14 @@
 # Codebase Review
 
-Status: active planning doc
+Status: historical engineering assessment; not a planning authority
 Audience: engineering and product
 Reviewed: 2026-06-17
 
 ## Purpose
 
-This document records the current engineering assessment of the codebase before further feature development. It is meant to drive prioritization, not just capture observations.
+This document records an engineering assessment performed on 2026-06-17. Use
+it as historical risk context only. Current priority and development order come
+exclusively from `../product/implementation-roadmap.md`.
 
 ## Review Scope
 
@@ -590,7 +592,11 @@ Status:
 - destructive cleanup is intentionally not implemented yet
 - typed policy display and read-only dry-run candidate reporting are implemented; destructive apply remains intentionally absent
 
-## Recommended Current Order
+## Historical Recommended Order (Superseded)
+
+This order was used during the 2026-06-17 review and must not be used to select
+new work. The listed foundations are represented by current evidence in
+`../product/feature-inventory.md`; follow `../product/implementation-roadmap.md`.
 
 If the goal is best risk reduction with the least wasted effort, start in this order:
 
