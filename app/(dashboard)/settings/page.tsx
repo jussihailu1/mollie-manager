@@ -219,6 +219,43 @@ export default async function SettingsPage({
           />
         ) : null}
 
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Mollie Connect</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!mollieConnection || mollieConnection.status === "disconnected" ? (
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-sm text-muted-foreground">Connect this tenant&apos;s Mollie organization. Existing API-key setup remains temporary compatibility.</p>
+                <Button asChild><Link href="/api/mollie/connect">Connect Mollie</Link></Button>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <Badge variant={mollieConnection.status === "connected" ? "default" : "outline"}>{formatLabel(mollieConnection.status)}</Badge>
+                  <span className="text-muted-foreground">{mollieOrganization?.name ?? mollieConnection.organizationName ?? "Organization verification pending"}</span>
+                  {mollieConnection.selectedProfileName ? <span className="text-muted-foreground">Profile: {mollieConnection.selectedProfileName}</span> : null}
+                  {mollieCapabilities ? <span className="text-muted-foreground">Payments: {formatLabel(mollieCapabilities.state)}</span> : null}
+                </div>
+                {mollieConnection.status === "incomplete" ? (
+                  <form action={selectMollieProfileAction} className="flex flex-wrap items-end gap-3">
+                    <label className="grid gap-1 text-sm">Active Mollie profile
+                      <select name="profileId" required className="h-10 min-w-64 rounded-md border border-input bg-background px-3">
+                        <option value="">Select a profile</option>
+                        {mollieProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name ?? profile.id}</option>)}
+                      </select>
+                    </label>
+                    <Button type="submit" disabled={mollieProfiles.length === 0}>Save profile</Button>
+                    <Button asChild variant="outline"><Link href="/api/mollie/connect">Reconnect Mollie</Link></Button>
+                  </form>
+                ) : (
+                  <div className="flex gap-3"><Button asChild variant="outline"><Link href="/api/mollie/connect">Reconnect Mollie</Link></Button><form action={disconnectMollieConnectionAction}><Button type="submit" variant="destructive">Disconnect</Button></form></div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+
         <RetentionPolicyCard />
 
         <Card>
