@@ -311,9 +311,9 @@ export function OperationsShell({
             isSidebarVisuallyCollapsed ? "flex-col justify-center gap-3 px-0" : "justify-between",
           )}
         >
-          <h1 className="text-2xl font-bold tracking-tighter text-primary">
+          <Link href="/" className="text-2xl font-bold tracking-tighter text-primary">
             {isSidebarVisuallyCollapsed ? "K" : "Kify"}
-          </h1>
+          </Link>
           {shouldShowSidebarMenu ? (
             <DropdownMenu open={isSidebarMenuOpen} onOpenChange={setIsSidebarMenuOpen}>
               <DropdownMenuTrigger asChild>
