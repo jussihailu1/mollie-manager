@@ -44,4 +44,11 @@ describe("Mollie Connect operator UX scope", () => {
     assert.match(tenantSettingsSource, /Mollie Connect/);
     assert.match(tenantSettingsSource, /Connect Mollie/);
   });
+
+  it("surfaces missing required payment methods from Settings with a new-tab Mollie Dashboard link", () => {
+    assert.match(settingsSource, /Mollie payment methods need setup/);
+    assert.match(settingsSource, /Enable iDEAL for first payments and SEPA Direct Debit for recurring collections/);
+    assert.match(settingsSource, /href="https:\/\/my\.mollie\.com\/dashboard"/);
+    assert.match(settingsSource, /target="_blank"/);
+  });
 });

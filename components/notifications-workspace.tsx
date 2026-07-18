@@ -384,7 +384,11 @@ export function NotificationsWorkspace({
                               size="sm"
                               className="w-full justify-between group"
                             >
-                              <Link href={alert.href}>
+                              <Link
+                                href={alert.href}
+                                rel={alert.itemType === "mollie_payment_methods_required" ? "noreferrer" : undefined}
+                                target={alert.itemType === "mollie_payment_methods_required" ? "_blank" : undefined}
+                              >
                                 {meta.ctaText}
                                 <ArrowRight className="h-4 w-4 opacity-50 transition-opacity group-hover:opacity-100" />
                               </Link>

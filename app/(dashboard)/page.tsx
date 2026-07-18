@@ -172,7 +172,11 @@ export default async function OverviewPage() {
                               <p className="text-sm">{item.recommendedAction}</p>
                             </div>
                             <Button asChild variant="secondary" size="sm">
-                              <Link href={item.href}>
+                              <Link
+                                href={item.href}
+                                rel={item.itemType === "mollie_payment_methods_required" ? "noreferrer" : undefined}
+                                target={item.itemType === "mollie_payment_methods_required" ? "_blank" : undefined}
+                              >
                                 Open
                                 <ArrowRight className="h-4 w-4" />
                               </Link>

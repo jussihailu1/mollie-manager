@@ -39,7 +39,7 @@ import {
 import { getReliabilityOpsSnapshot } from "@/lib/reliability/ops-snapshot";
 import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 import { disconnectMollieConnectionAction, selectMollieProfileAction } from "@/lib/mollie/connection-actions";
-import { getTenantMollieCapabilitySummary, getTenantMollieConnection, getTenantMollieOrganizationSummary, listTenantMollieProfiles } from "@/lib/mollie/tenant-connections";
+import { getTenantMollieCapabilitySummary, getTenantMollieConnection, getTenantMollieOrganizationSummary, getTenantMolliePaymentMethodReadiness, listTenantMollieProfiles } from "@/lib/mollie/tenant-connections";
 import { env } from "@/lib/env";
 import {
   parseReconciliationSummary,
@@ -64,6 +64,31 @@ export const dynamic = "force-dynamic";
 
 function formatSignedDelta(value: number) {
   return value > 0 ? `+${value}` : String(value);
+}
+
+function MolliePaymentSetupNotice({ required }: Readonly<{ required: boolean }>) {
+  if (!required) return null;
+
+  return (
+    <InlineNotice
+      tone="warning"
+      title="Mollie payment methods need setup"
+      message={
+        <>
+          Enable iDEAL for first payments and SEPA Direct Debit for recurring collections in the Mollie Dashboard, then return to Kify.
+          {" "}
+          <a
+            className="font-medium underline underline-offset-4"
+            href="https://my.mollie.com/dashboard"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Open Mollie Dashboard
+          </a>
+        </>
+      }
+    />
+  );
 }
 
 function ReconciliationDeltaSection<TState extends string>({
@@ -141,6 +166,13 @@ export default async function SettingsPage({
   const mollieCapabilities = mollieConnection && ["connected", "incomplete"].includes(mollieConnection.status)
     ? await getTenantMollieCapabilitySummary(tenantId)
     : null;
+  const molliePaymentMethodReadiness = mollieConnection?.status === "connected"
+    ? await getTenantMolliePaymentMethodReadiness(tenantId)
+    : null;
+  const molliePaymentSetupRequired = Boolean(
+    molliePaymentMethodReadiness &&
+      (!molliePaymentMethodReadiness.idealEnabled || !molliePaymentMethodReadiness.directDebitEnabled),
+  );
   const mollieOrganization = mollieConnection && ["connected", "incomplete"].includes(mollieConnection.status)
     ? await getTenantMollieOrganizationSummary(tenantId)
     : null;
@@ -218,6 +250,8 @@ export default async function SettingsPage({
             }
           />
         ) : null}
+
+        <MolliePaymentSetupNotice required={molliePaymentSetupRequired} />
 
         <Card>
           <CardHeader>
@@ -393,6 +427,8 @@ export default async function SettingsPage({
           }
         />
       ) : null}
+
+      <MolliePaymentSetupNotice required={molliePaymentSetupRequired} />
 
       <Card>
         <CardHeader>
