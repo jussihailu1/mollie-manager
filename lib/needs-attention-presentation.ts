@@ -31,6 +31,7 @@ export function getNeedsAttentionImpact(
 
   if (
     [
+      "mollie_payment_methods_required",
       "eboekhouden_relation_problem",
       "missing_mandate",
       "payment_action_required_subscription",
@@ -39,8 +40,12 @@ export function getNeedsAttentionImpact(
     ].includes(item.itemType)
   ) {
     return {
-      description: "Customer setup or lifecycle review is blocking safe next steps.",
-      label: "Customer setup and lifecycle",
+      description: item.itemType === "mollie_payment_methods_required"
+        ? "Mollie profile setup is blocking new customer payments and recurring collection."
+        : "Customer setup or lifecycle review is blocking safe next steps.",
+      label: item.itemType === "mollie_payment_methods_required"
+        ? "Mollie payment setup"
+        : "Customer setup and lifecycle",
     };
   }
 

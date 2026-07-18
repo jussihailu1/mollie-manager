@@ -100,7 +100,11 @@ back to another credential.
 
 Capabilities are read through Mollie's Capabilities API (`onboarding.read`), not
 the deprecated Onboarding API. Capability requirements/deep links are sanitized
-to an operator-safe next action and are not treated as payment truth.
+to an operator-safe next action and are not treated as payment truth. When the
+connected profile is not payment-ready, Kify shows a tenant-scoped attention
+item that directs the operator to the Mollie Dashboard to enable the current
+V1 requirements: iDEAL for the first payment and SEPA Direct Debit for
+recurring collection.
 
 OAuth-backed test operations send Mollie's `testmode=true` request parameter;
 live operations omit it. Sales Invoice creation also sends the selected tenant

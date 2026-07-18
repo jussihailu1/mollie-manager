@@ -23,6 +23,7 @@ test("needs attention query exposes stable typed sources without raw webhook pay
     "failed_webhook",
     "missing_mandate",
     "mandate_problem",
+    "mollie_payment_methods_required",
     "payment_action_required_subscription",
     "pending_subscription_cancellation",
     "payment_sync_stale",
@@ -35,6 +36,9 @@ test("needs attention query exposes stable typed sources without raw webhook pay
 
   assert.match(source, /recommendedAction/);
   assert.match(source, /listPendingSubscriptionOperationRequests/);
+  assert.match(source, /getTenantMollieCapabilitySummary/);
+  assert.match(source, /https:\/\/my\.mollie\.com\/dashboard/);
+  assert.match(source, /enable iDEAL for first payments and SEPA Direct Debit for recurring collections/i);
   assert.match(source, /tenantId: string/);
   assert.match(source, /p\.tenant_id = \$\{tenantId\}/);
   assert.match(source, /s\.tenant_id = \$\{tenantId\}/);

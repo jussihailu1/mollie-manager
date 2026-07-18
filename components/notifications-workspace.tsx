@@ -164,6 +164,14 @@ function getNotificationIcon(alert: AlertRecord) {
 }
 
 function getAttentionMeta(alert: AttentionRecord) {
+  if (alert.itemType === "mollie_payment_methods_required") {
+    return {
+      borderClass: "border-l-orange-500",
+      ctaText: "Open Mollie Dashboard",
+      icon: <AlertTriangle className="h-5 w-5 text-orange-500" />,
+    };
+  }
+
   if (alert.severity === "critical") {
     return {
       borderClass: "border-l-destructive",

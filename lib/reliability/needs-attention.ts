@@ -6,6 +6,10 @@ import { cache } from "react";
 import type { DashboardModeFilter } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
 import { REPAIR_STALE_AFTER_MS } from "@/lib/freshness";
+import {
+  getTenantMollieCapabilitySummary,
+  getTenantMollieConnection,
+} from "@/lib/mollie/tenant-connections";
 import { listPendingSubscriptionOperationRequests } from "@/lib/pending-subscription-operation-requests";
 
 export type NeedsAttentionItemType =
@@ -19,6 +23,7 @@ export type NeedsAttentionItemType =
   | "failed_webhook"
   | "missing_mandate"
   | "mandate_problem"
+  | "mollie_payment_methods_required"
   | "payment_action_required_subscription"
   | "pending_subscription_cancellation"
   | "payment_sync_stale"
@@ -546,6 +551,34 @@ function toPendingOperationAttentionItem(
   };
 }
 
+async function listMolliePaymentMethodAttentionItems(tenantId: string): Promise<NeedsAttentionItem[]> {
+  const connection = await getTenantMollieConnection(tenantId);
+  if (connection?.status !== "connected" || !connection.selectedProfileId) {
+    return [];
+  }
+
+  const capability = await getTenantMollieCapabilitySummary(tenantId);
+  if (capability.paymentReady) {
+    return [];
+  }
+
+  return [{
+    createdAt: new Date().toISOString(),
+    customerEmail: null,
+    customerId: null,
+    customerName: null,
+    entityId: connection.id,
+    href: "https://my.mollie.com/dashboard",
+    id: `mollie-payment-methods:${connection.id}`,
+    itemType: "mollie_payment_methods_required",
+    recommendedAction: "In the Mollie Dashboard, open this profile's payment methods and enable iDEAL for first payments and SEPA Direct Debit for recurring collections. Complete any Mollie activation steps, then return to Kify.",
+    severity: "warning",
+    summary: "Kify cannot confirm that this Mollie profile is ready to accept the required payments.",
+    title: "Enable Mollie payment methods",
+    type: "system",
+  }];
+}
+
 export async function listNeedsAttentionItems(options: {
   limit?: number;
   mode?: DashboardModeFilter;
@@ -554,12 +587,14 @@ export async function listNeedsAttentionItems(options: {
   const mode = options?.mode ?? "all";
   const limit = options?.limit ?? 20;
   const baseItems = await listBaseNeedsAttentionItemsByMode(mode, limit, options.tenantId);
-  const pendingOperationItems =
+  const [pendingOperationItems, molliePaymentMethodItems] = await Promise.all([
     mode === "all"
-      ? []
-      : await listPendingSubscriptionOperationRequests({ limit, mode, tenantId: options.tenantId });
+      ? Promise.resolve([])
+      : listPendingSubscriptionOperationRequests({ limit, mode, tenantId: options.tenantId }),
+    listMolliePaymentMethodAttentionItems(options.tenantId),
+  ]);
 
-  return [...baseItems, ...pendingOperationItems.map(toPendingOperationAttentionItem)]
+  return [...baseItems, ...pendingOperationItems.map(toPendingOperationAttentionItem), ...molliePaymentMethodItems]
     .sort((left, right) => {
       if (left.severity !== right.severity) {
         return left.severity === "critical" ? -1 : 1;
