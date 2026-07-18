@@ -32,11 +32,13 @@ describe("Mollie Connect operator UX scope", () => {
   });
 
   it("keeps Mollie Connect available before advanced operations are gated", () => {
-    const connectionCard = settingsSource.indexOf("Mollie Connect");
     const advancedOperationsGate = settingsSource.indexOf("if (!canManageAdvancedOperations)");
+    const advancedOperationsLoading = settingsSource.indexOf("const [reliabilityOpsSnapshot", advancedOperationsGate);
+    const tenantSettingsSource = settingsSource.slice(advancedOperationsGate, advancedOperationsLoading);
 
-    assert.ok(connectionCard >= 0);
     assert.ok(advancedOperationsGate >= 0);
-    assert.ok(connectionCard < advancedOperationsGate);
+    assert.ok(advancedOperationsLoading >= 0);
+    assert.match(tenantSettingsSource, /Mollie Connect/);
+    assert.match(tenantSettingsSource, /Connect Mollie/);
   });
 });
