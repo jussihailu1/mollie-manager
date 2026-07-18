@@ -30,4 +30,13 @@ describe("Mollie Connect operator UX scope", () => {
     assert.match(settingsSource, /Payments: \{formatLabel\(mollieCapabilities\.state\)\}/);
     assert.doesNotMatch(settingsSource, /refreshToken|accessToken|_embedded|requirements/);
   });
+
+  it("keeps Mollie Connect available before advanced operations are gated", () => {
+    const connectionCard = settingsSource.indexOf("Mollie Connect");
+    const advancedOperationsGate = settingsSource.indexOf("if (!canManageAdvancedOperations)");
+
+    assert.ok(connectionCard >= 0);
+    assert.ok(advancedOperationsGate >= 0);
+    assert.ok(connectionCard < advancedOperationsGate);
+  });
 });
