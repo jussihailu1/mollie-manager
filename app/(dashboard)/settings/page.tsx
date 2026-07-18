@@ -76,7 +76,7 @@ function MolliePaymentSetupNotice({ required }: Readonly<{ required: boolean }>)
       title="Mollie payment methods need setup"
       message={
         <>
-          Enable iDEAL for first payments and SEPA Direct Debit for recurring collections in the Mollie Dashboard, then return to Kify.
+          Enable iDEAL for first payments and SEPA Direct Debit for recurring collections in the Mollie Dashboard. SEPA Direct Debit may need Mollie review and take a few days; Mollie will email you when it is ready. Then return to Kify.
           {" "}
           <a
             className="font-medium underline underline-offset-4"

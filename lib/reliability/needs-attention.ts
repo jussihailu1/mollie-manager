@@ -574,7 +574,7 @@ async function listMolliePaymentMethodAttentionItems(tenantId: string): Promise<
     href: "https://my.mollie.com/dashboard",
     id: `mollie-payment-methods:${connection.id}`,
     itemType: "mollie_payment_methods_required",
-    recommendedAction: "In the Mollie Dashboard, open this profile's payment methods and enable iDEAL for first payments and SEPA Direct Debit for recurring collections. Complete any Mollie activation steps, then return to Kify.",
+    recommendedAction: "In the Mollie Dashboard, open this profile's payment methods and enable iDEAL for first payments and SEPA Direct Debit for recurring collections. SEPA Direct Debit may need Mollie review and take a few days; Mollie will email you when it is ready. Then return to Kify.",
     severity: "warning",
     summary: "This Mollie profile is missing one or more payment methods required by Kify.",
     title: "Enable Mollie payment methods",

@@ -107,7 +107,9 @@ the selected profile has the current V1 requirements enabled: iDEAL for the
 first payment and SEPA Direct Debit for recurring collection. Kify refreshes
 the live check when the operator returns to the app and every 30 seconds while
 Settings is open; temporary verification failures are not misreported as a
-missing payment method.
+missing payment method. SEPA Direct Debit can require Mollie review; Kify tells
+the operator to wait for Mollie's approval email rather than promising a fixed
+approval timeframe.
 
 When `Mollie` is the active invoice provider, Kify also performs a read-only
 Sales Invoices API probe. A tenant-scoped warning directs the operator to the
