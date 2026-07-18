@@ -36,7 +36,7 @@ test("needs attention query exposes stable typed sources without raw webhook pay
 
   assert.match(source, /recommendedAction/);
   assert.match(source, /listPendingSubscriptionOperationRequests/);
-  assert.match(source, /getTenantMollieCapabilitySummary/);
+  assert.match(source, /getTenantMolliePaymentMethodReadiness/);
   assert.match(source, /https:\/\/my\.mollie\.com\/dashboard/);
   assert.match(source, /enable iDEAL for first payments and SEPA Direct Debit for recurring collections/i);
   assert.match(source, /tenantId: string/);

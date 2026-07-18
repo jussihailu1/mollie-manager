@@ -276,6 +276,34 @@ export async function listTenantMollieProfiles(tenantId: string) {
   );
 }
 
+export async function getTenantMolliePaymentMethodReadiness(tenantId: string) {
+  try {
+    const connection = await getTenantMollieConnection(tenantId);
+    if (connection?.status !== "connected" || !connection.selectedProfileId) {
+      return { directDebitEnabled: false, idealEnabled: false };
+    }
+
+    const accessToken = await getTenantMollieOAuthAccessToken(tenantId);
+    const methodEnabled = async (methodId: "directdebit" | "ideal") => {
+      const url = new URL(`https://api.mollie.com/v2/methods/${methodId}`);
+      url.searchParams.set("profileId", connection.selectedProfileId!);
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+        cache: "no-store",
+      });
+      return response.ok;
+    };
+
+    const [idealEnabled, directDebitEnabled] = await Promise.all([
+      methodEnabled("ideal"),
+      methodEnabled("directdebit"),
+    ]);
+    return { directDebitEnabled, idealEnabled };
+  } catch {
+    return { directDebitEnabled: false, idealEnabled: false };
+  }
+}
+
 export async function getTenantMollieCapabilitySummary(tenantId: string) {
   try {
     const accessToken = await getTenantMollieOAuthAccessToken(tenantId);

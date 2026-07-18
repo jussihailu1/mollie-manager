@@ -7,8 +7,8 @@ import type { DashboardModeFilter } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
 import { REPAIR_STALE_AFTER_MS } from "@/lib/freshness";
 import {
-  getTenantMollieCapabilitySummary,
   getTenantMollieConnection,
+  getTenantMolliePaymentMethodReadiness,
 } from "@/lib/mollie/tenant-connections";
 import { listPendingSubscriptionOperationRequests } from "@/lib/pending-subscription-operation-requests";
 
@@ -557,8 +557,8 @@ async function listMolliePaymentMethodAttentionItems(tenantId: string): Promise<
     return [];
   }
 
-  const capability = await getTenantMollieCapabilitySummary(tenantId);
-  if (capability.paymentReady) {
+  const paymentMethods = await getTenantMolliePaymentMethodReadiness(tenantId);
+  if (paymentMethods.idealEnabled && paymentMethods.directDebitEnabled) {
     return [];
   }
 
@@ -573,7 +573,7 @@ async function listMolliePaymentMethodAttentionItems(tenantId: string): Promise<
     itemType: "mollie_payment_methods_required",
     recommendedAction: "In the Mollie Dashboard, open this profile's payment methods and enable iDEAL for first payments and SEPA Direct Debit for recurring collections. Complete any Mollie activation steps, then return to Kify.",
     severity: "warning",
-    summary: "Kify cannot confirm that this Mollie profile is ready to accept the required payments.",
+    summary: "This Mollie profile is missing one or more payment methods required by Kify.",
     title: "Enable Mollie payment methods",
     type: "system",
   }];

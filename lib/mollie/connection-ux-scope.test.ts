@@ -12,6 +12,9 @@ describe("Mollie Connect operator UX scope", () => {
     assert.match(connectionSource, /https:\/\/api\.mollie\.com\/v2\/profiles\?limit=250/);
     assert.match(connectionSource, /https:\/\/api\.mollie\.com\/v2\/capabilities/);
     assert.match(connectionSource, /https:\/\/api\.mollie\.com\/v2\/organizations\/me/);
+    assert.match(connectionSource, /https:\/\/api\.mollie\.com\/v2\/methods\/\$\{methodId\}/);
+    assert.match(connectionSource, /methodEnabled\("ideal"\)/);
+    assert.match(connectionSource, /methodEnabled\("directdebit"\)/);
     assert.match(connectionSource, /getTenantMollieOAuthAccessToken\(tenantId\)/);
     assert.doesNotMatch(connectionSource, /console\.log/);
   });
