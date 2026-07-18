@@ -104,7 +104,16 @@ to an operator-safe next action and are not treated as payment truth. When the
 connected profile is not payment-ready, Kify shows a tenant-scoped attention
 item that directs the operator to the Mollie Dashboard. The item remains until
 the selected profile has the current V1 requirements enabled: iDEAL for the
-first payment and SEPA Direct Debit for recurring collection.
+first payment and SEPA Direct Debit for recurring collection. Kify refreshes
+the live check when the operator returns to the app and every 30 seconds while
+Settings is open; temporary verification failures are not misreported as a
+missing payment method.
+
+When `Mollie` is the active invoice provider, Kify also performs a read-only
+Sales Invoices API probe. A tenant-scoped warning directs the operator to the
+Mollie Dashboard until Mollie Invoicing is activated, and disappears on the
+next successful live probe. Tenants actively using e-Boekhouden do not receive
+this Mollie Invoicing warning.
 
 OAuth-backed test operations send Mollie's `testmode=true` request parameter;
 live operations omit it. Sales Invoice creation also sends the selected tenant

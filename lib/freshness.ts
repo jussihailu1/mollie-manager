@@ -7,6 +7,7 @@ export function getRouteRefreshIntervalMs(pathname: string) {
   switch (pathname) {
     case "/":
     case "/notifications":
+    case "/settings":
       return ROUTE_REFRESH_FAST_MS;
     case "/customers":
     case "/payments":
@@ -33,4 +34,3 @@ export function isOlderThan(
 
   return now - parsed >= thresholdMs;
 }
-

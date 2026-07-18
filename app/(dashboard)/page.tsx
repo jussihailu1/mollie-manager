@@ -174,8 +174,8 @@ export default async function OverviewPage() {
                             <Button asChild variant="secondary" size="sm">
                               <Link
                                 href={item.href}
-                                rel={item.itemType === "mollie_payment_methods_required" ? "noreferrer" : undefined}
-                                target={item.itemType === "mollie_payment_methods_required" ? "_blank" : undefined}
+                                rel={["mollie_payment_methods_required", "mollie_invoicing_required"].includes(item.itemType) ? "noreferrer" : undefined}
+                                target={["mollie_payment_methods_required", "mollie_invoicing_required"].includes(item.itemType) ? "_blank" : undefined}
                               >
                                 Open
                                 <ArrowRight className="h-4 w-4" />

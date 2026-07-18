@@ -39,7 +39,8 @@ import {
 import { getReliabilityOpsSnapshot } from "@/lib/reliability/ops-snapshot";
 import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 import { disconnectMollieConnectionAction, selectMollieProfileAction } from "@/lib/mollie/connection-actions";
-import { getTenantMollieCapabilitySummary, getTenantMollieConnection, getTenantMollieOrganizationSummary, getTenantMolliePaymentMethodReadiness, listTenantMollieProfiles } from "@/lib/mollie/tenant-connections";
+import { getTenantMollieCapabilitySummary, getTenantMollieConnection, getTenantMollieOrganizationSummary, getTenantMolliePaymentMethodReadiness, listTenantMollieProfiles, molliePaymentMethodsNeedSetup } from "@/lib/mollie/tenant-connections";
+import { getTenantMollieInvoicingReadiness } from "@/lib/invoicing/mollie-readiness";
 import { env } from "@/lib/env";
 import {
   parseReconciliationSummary,
@@ -76,6 +77,31 @@ function MolliePaymentSetupNotice({ required }: Readonly<{ required: boolean }>)
       message={
         <>
           Enable iDEAL for first payments and SEPA Direct Debit for recurring collections in the Mollie Dashboard, then return to Kify.
+          {" "}
+          <a
+            className="font-medium underline underline-offset-4"
+            href="https://my.mollie.com/dashboard"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Open Mollie Dashboard
+          </a>
+        </>
+      }
+    />
+  );
+}
+
+function MollieInvoicingSetupNotice({ required }: Readonly<{ required: boolean }>) {
+  if (!required) return null;
+
+  return (
+    <InlineNotice
+      tone="warning"
+      title="Mollie Invoicing needs setup"
+      message={
+        <>
+          Activate Mollie Invoicing for this organization in the Mollie Dashboard, then return to Kify.
           {" "}
           <a
             className="font-medium underline underline-offset-4"
@@ -166,13 +192,6 @@ export default async function SettingsPage({
   const mollieCapabilities = mollieConnection && ["connected", "incomplete"].includes(mollieConnection.status)
     ? await getTenantMollieCapabilitySummary(tenantId)
     : null;
-  const molliePaymentMethodReadiness = mollieConnection?.status === "connected"
-    ? await getTenantMolliePaymentMethodReadiness(tenantId)
-    : null;
-  const molliePaymentSetupRequired = Boolean(
-    molliePaymentMethodReadiness &&
-      (!molliePaymentMethodReadiness.idealEnabled || !molliePaymentMethodReadiness.directDebitEnabled),
-  );
   const mollieOrganization = mollieConnection && ["connected", "incomplete"].includes(mollieConnection.status)
     ? await getTenantMollieOrganizationSummary(tenantId)
     : null;
@@ -182,6 +201,19 @@ export default async function SettingsPage({
     ensureTenantBillingSettings(tenantId),
     getSelectedMollieMode(),
   ]);
+  const [molliePaymentMethodReadiness, mollieInvoicingReadiness] = await Promise.all([
+    mollieConnection?.status === "connected"
+      ? getTenantMolliePaymentMethodReadiness(tenantId)
+      : null,
+    getTenantMollieInvoicingReadiness({ billingSettings, tenantId }).catch(
+      () => ({ enabled: false, required: billingSettings?.activeInvoiceProvider === "mollie" }),
+    ),
+  ]);
+  const molliePaymentSetupRequired = Boolean(
+    molliePaymentMethodReadiness && molliePaymentMethodsNeedSetup(molliePaymentMethodReadiness),
+  );
+  const mollieInvoicingSetupRequired =
+    mollieInvoicingReadiness.required && !mollieInvoicingReadiness.enabled;
   const billingDiscovery = await discoverEboekhoudenBillingSettings(tenantId).catch(
     (discoveryError) => ({
       error:
@@ -252,6 +284,7 @@ export default async function SettingsPage({
         ) : null}
 
         <MolliePaymentSetupNotice required={molliePaymentSetupRequired} />
+        <MollieInvoicingSetupNotice required={mollieInvoicingSetupRequired} />
 
         <Card>
           <CardHeader>
@@ -429,6 +462,7 @@ export default async function SettingsPage({
       ) : null}
 
       <MolliePaymentSetupNotice required={molliePaymentSetupRequired} />
+      <MollieInvoicingSetupNotice required={mollieInvoicingSetupRequired} />
 
       <Card>
         <CardHeader>

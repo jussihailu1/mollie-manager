@@ -31,6 +31,7 @@ export function getNeedsAttentionImpact(
 
   if (
     [
+      "mollie_invoicing_required",
       "mollie_payment_methods_required",
       "eboekhouden_relation_problem",
       "missing_mandate",
@@ -42,9 +43,13 @@ export function getNeedsAttentionImpact(
     return {
       description: item.itemType === "mollie_payment_methods_required"
         ? "Mollie profile setup is blocking new customer payments and recurring collection."
+        : item.itemType === "mollie_invoicing_required"
+          ? "Mollie organization setup is blocking invoice creation."
         : "Customer setup or lifecycle review is blocking safe next steps.",
       label: item.itemType === "mollie_payment_methods_required"
         ? "Mollie payment setup"
+        : item.itemType === "mollie_invoicing_required"
+          ? "Mollie invoice setup"
         : "Customer setup and lifecycle",
     };
   }

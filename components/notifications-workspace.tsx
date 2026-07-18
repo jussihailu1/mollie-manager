@@ -164,7 +164,7 @@ function getNotificationIcon(alert: AlertRecord) {
 }
 
 function getAttentionMeta(alert: AttentionRecord) {
-  if (alert.itemType === "mollie_payment_methods_required") {
+  if (["mollie_payment_methods_required", "mollie_invoicing_required"].includes(alert.itemType)) {
     return {
       borderClass: "border-l-orange-500",
       ctaText: "Open Mollie Dashboard",
@@ -386,8 +386,8 @@ export function NotificationsWorkspace({
                             >
                               <Link
                                 href={alert.href}
-                                rel={alert.itemType === "mollie_payment_methods_required" ? "noreferrer" : undefined}
-                                target={alert.itemType === "mollie_payment_methods_required" ? "_blank" : undefined}
+                                rel={["mollie_payment_methods_required", "mollie_invoicing_required"].includes(alert.itemType) ? "noreferrer" : undefined}
+                                target={["mollie_payment_methods_required", "mollie_invoicing_required"].includes(alert.itemType) ? "_blank" : undefined}
                               >
                                 {meta.ctaText}
                                 <ArrowRight className="h-4 w-4 opacity-50 transition-opacity group-hover:opacity-100" />

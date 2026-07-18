@@ -276,31 +276,51 @@ export async function listTenantMollieProfiles(tenantId: string) {
   );
 }
 
-export async function getTenantMolliePaymentMethodReadiness(tenantId: string) {
+export type MolliePaymentMethodReadiness = "enabled" | "not_enabled" | "not_available" | "unknown";
+
+export type TenantMolliePaymentMethodReadiness = {
+  directDebit: MolliePaymentMethodReadiness;
+  ideal: MolliePaymentMethodReadiness;
+};
+
+export function molliePaymentMethodsNeedSetup(
+  readiness: TenantMolliePaymentMethodReadiness,
+) {
+  return [readiness.ideal, readiness.directDebit].some(
+    (state) => state === "not_enabled" || state === "not_available",
+  );
+}
+
+export async function getTenantMolliePaymentMethodReadiness(
+  tenantId: string,
+): Promise<TenantMolliePaymentMethodReadiness> {
   try {
     const connection = await getTenantMollieConnection(tenantId);
     if (connection?.status !== "connected" || !connection.selectedProfileId) {
-      return { directDebitEnabled: false, idealEnabled: false };
+      return { directDebit: "unknown", ideal: "unknown" };
     }
 
     const accessToken = await getTenantMollieOAuthAccessToken(tenantId);
-    const methodEnabled = async (methodId: "directdebit" | "ideal") => {
+    const getMethodReadiness = async (methodId: "directdebit" | "ideal") => {
       const url = new URL(`https://api.mollie.com/v2/methods/${methodId}`);
       url.searchParams.set("profileId", connection.selectedProfileId!);
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
         cache: "no-store",
       });
-      return response.ok;
+      if (response.ok) return "enabled" as const;
+      if (response.status === 403) return "not_enabled" as const;
+      if (response.status === 404) return "not_available" as const;
+      return "unknown" as const;
     };
 
-    const [idealEnabled, directDebitEnabled] = await Promise.all([
-      methodEnabled("ideal"),
-      methodEnabled("directdebit"),
+    const [ideal, directDebit] = await Promise.all([
+      getMethodReadiness("ideal"),
+      getMethodReadiness("directdebit"),
     ]);
-    return { directDebitEnabled, idealEnabled };
+    return { directDebit, ideal };
   } catch {
-    return { directDebitEnabled: false, idealEnabled: false };
+    return { directDebit: "unknown", ideal: "unknown" };
   }
 }
 

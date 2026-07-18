@@ -9,7 +9,9 @@ import { REPAIR_STALE_AFTER_MS } from "@/lib/freshness";
 import {
   getTenantMollieConnection,
   getTenantMolliePaymentMethodReadiness,
+  molliePaymentMethodsNeedSetup,
 } from "@/lib/mollie/tenant-connections";
+import { getTenantMollieInvoicingReadiness } from "@/lib/invoicing/mollie-readiness";
 import { listPendingSubscriptionOperationRequests } from "@/lib/pending-subscription-operation-requests";
 
 export type NeedsAttentionItemType =
@@ -23,6 +25,7 @@ export type NeedsAttentionItemType =
   | "failed_webhook"
   | "missing_mandate"
   | "mandate_problem"
+  | "mollie_invoicing_required"
   | "mollie_payment_methods_required"
   | "payment_action_required_subscription"
   | "pending_subscription_cancellation"
@@ -558,7 +561,7 @@ async function listMolliePaymentMethodAttentionItems(tenantId: string): Promise<
   }
 
   const paymentMethods = await getTenantMolliePaymentMethodReadiness(tenantId);
-  if (paymentMethods.idealEnabled && paymentMethods.directDebitEnabled) {
+  if (!molliePaymentMethodsNeedSetup(paymentMethods)) {
     return [];
   }
 
@@ -579,6 +582,31 @@ async function listMolliePaymentMethodAttentionItems(tenantId: string): Promise<
   }];
 }
 
+async function listMollieInvoicingAttentionItems(tenantId: string): Promise<NeedsAttentionItem[]> {
+  const invoicing = await getTenantMollieInvoicingReadiness({ tenantId }).catch(
+    () => ({ enabled: false, required: true }),
+  );
+  if (!invoicing.required || invoicing.enabled) {
+    return [];
+  }
+
+  return [{
+    createdAt: new Date().toISOString(),
+    customerEmail: null,
+    customerId: null,
+    customerName: null,
+    entityId: tenantId,
+    href: "https://my.mollie.com/dashboard",
+    id: `mollie-invoicing:${tenantId}`,
+    itemType: "mollie_invoicing_required",
+    recommendedAction: "Activate Mollie Invoicing for this organization in the Mollie Dashboard, then return to Kify.",
+    severity: "warning",
+    summary: "Mollie Invoicing must be activated before Kify can create Mollie Sales Invoices.",
+    title: "Enable Mollie Invoicing",
+    type: "system",
+  }];
+}
+
 export async function listNeedsAttentionItems(options: {
   limit?: number;
   mode?: DashboardModeFilter;
@@ -587,14 +615,15 @@ export async function listNeedsAttentionItems(options: {
   const mode = options?.mode ?? "all";
   const limit = options?.limit ?? 20;
   const baseItems = await listBaseNeedsAttentionItemsByMode(mode, limit, options.tenantId);
-  const [pendingOperationItems, molliePaymentMethodItems] = await Promise.all([
+  const [pendingOperationItems, molliePaymentMethodItems, mollieInvoicingItems] = await Promise.all([
     mode === "all"
       ? Promise.resolve([])
       : listPendingSubscriptionOperationRequests({ limit, mode, tenantId: options.tenantId }),
     listMolliePaymentMethodAttentionItems(options.tenantId),
+    listMollieInvoicingAttentionItems(options.tenantId),
   ]);
 
-  return [...baseItems, ...pendingOperationItems.map(toPendingOperationAttentionItem), ...molliePaymentMethodItems]
+  return [...baseItems, ...pendingOperationItems.map(toPendingOperationAttentionItem), ...molliePaymentMethodItems, ...mollieInvoicingItems]
     .sort((left, right) => {
       if (left.severity !== right.severity) {
         return left.severity === "critical" ? -1 : 1;

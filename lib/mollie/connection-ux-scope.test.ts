@@ -13,8 +13,11 @@ describe("Mollie Connect operator UX scope", () => {
     assert.match(connectionSource, /https:\/\/api\.mollie\.com\/v2\/capabilities/);
     assert.match(connectionSource, /https:\/\/api\.mollie\.com\/v2\/organizations\/me/);
     assert.match(connectionSource, /https:\/\/api\.mollie\.com\/v2\/methods\/\$\{methodId\}/);
-    assert.match(connectionSource, /methodEnabled\("ideal"\)/);
-    assert.match(connectionSource, /methodEnabled\("directdebit"\)/);
+    assert.match(connectionSource, /getMethodReadiness\("ideal"\)/);
+    assert.match(connectionSource, /getMethodReadiness\("directdebit"\)/);
+    assert.match(connectionSource, /response\.status === 403/);
+    assert.match(connectionSource, /response\.status === 404/);
+    assert.match(connectionSource, /molliePaymentMethodsNeedSetup/);
     assert.match(connectionSource, /getTenantMollieOAuthAccessToken\(tenantId\)/);
     assert.doesNotMatch(connectionSource, /console\.log/);
   });
@@ -50,5 +53,11 @@ describe("Mollie Connect operator UX scope", () => {
     assert.match(settingsSource, /Enable iDEAL for first payments and SEPA Direct Debit for recurring collections/);
     assert.match(settingsSource, /href="https:\/\/my\.mollie\.com\/dashboard"/);
     assert.match(settingsSource, /target="_blank"/);
+  });
+
+  it("shows Mollie Invoicing setup only for the active Mollie invoice provider", () => {
+    assert.match(settingsSource, /Mollie Invoicing needs setup/);
+    assert.match(settingsSource, /getTenantMollieInvoicingReadiness/);
+    assert.match(settingsSource, /mollieInvoicingReadiness\.required/);
   });
 });
