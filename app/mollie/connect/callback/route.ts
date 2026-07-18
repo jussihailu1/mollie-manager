@@ -3,7 +3,12 @@ import { NextResponse } from "next/server";
 import { requireViewerSession } from "@/lib/auth/session";
 import { getMollieConnectConfig } from "@/lib/env";
 import { consumeMollieOAuthState } from "@/lib/mollie/oauth-state";
-import { REQUIRED_MOLLIE_CONNECT_SCOPES, upsertTenantMollieConnection } from "@/lib/mollie/tenant-connections";
+import {
+  listTenantMollieProfiles,
+  REQUIRED_MOLLIE_CONNECT_SCOPES,
+  selectTenantMollieProfile,
+  upsertTenantMollieConnection,
+} from "@/lib/mollie/tenant-connections";
 
 type TokenResponse = {
   access_token?: string;
@@ -50,6 +55,18 @@ export async function GET(request: Request) {
       accessTokenExpiresAt: expiresAt,
       failureReasonCode: hasRequiredScopes ? "profile_selection_required" : "scope_missing",
     });
+    if (hasRequiredScopes) {
+      const profiles = await listTenantMollieProfiles(tenantId);
+      if (profiles.length === 1) {
+        const [profile] = profiles;
+        await selectTenantMollieProfile({
+          tenantId,
+          profileId: profile.id,
+          profileName: profile.name,
+        });
+        return NextResponse.redirect(resultUrl("connected"));
+      }
+    }
     return NextResponse.redirect(resultUrl(hasRequiredScopes ? "profile_required" : "scope_required"));
   } catch {
     return NextResponse.redirect(resultUrl("failed"));

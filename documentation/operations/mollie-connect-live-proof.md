@@ -8,8 +8,9 @@ authorization codes, raw callback URLs, or raw provider responses.
 
 ## Required evidence
 
-- OAuth connect, organization verification, capability check, and explicit
-  profile selection complete.
+- OAuth connect, organization verification, capability check, and profile
+  selection complete: automatically when exactly one verified profile exists,
+  otherwise explicitly by the operator.
 - OAuth-backed customer creation succeeds.
 - First payment and payment link are created; webhook intake re-fetches and
   persists authoritative Mollie state.

@@ -62,9 +62,12 @@ fee, POS, Marketplace, order, shipment, or profile/organization write scope is
 requested. Adding a scope later requires an explicit reconnect, so a scope
 change is a contract change and not an implicit refresh.
 
-Profile-bound payment operations must provide the tenant's explicit selected
-profile id. A missing, inaccessible, or inactive selected profile is a
-fail-closed readiness state; the resolver must not select the first profile.
+Profile-bound payment operations must provide the tenant's selected profile id.
+After OAuth, the server automatically selects the sole server-verified profile
+when exactly one is available; when zero or multiple profiles are available,
+the operator must select one explicitly. A missing, inaccessible, or inactive
+selected profile is a fail-closed readiness state; the resolver must never
+arbitrarily select one from multiple profiles.
 
 ## States and credential lifecycle
 

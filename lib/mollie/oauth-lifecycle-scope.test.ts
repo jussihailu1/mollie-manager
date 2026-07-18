@@ -38,6 +38,9 @@ describe("Mollie Connect OAuth lifecycle scope", () => {
     assert.match(callbackRouteSource, /REQUIRED_MOLLIE_CONNECT_SCOPES\.every\(\(scope\) => grantedScopes\.includes\(scope\)\)/);
     assert.match(connectionSource, /REQUIRED_MOLLIE_CONNECT_SCOPES\.every\(\(scope\) => granted\.has\(scope\)\)/);
     assert.match(connectionSource, /if \(!hasRequiredScopes\(nextScopes\)\) throw new TenantMollieCredentialError\("Tenant Mollie reconnect is required\."\)/);
+    assert.match(callbackRouteSource, /const profiles = await listTenantMollieProfiles\(tenantId\)/);
+    assert.match(callbackRouteSource, /if \(profiles\.length === 1\)/);
+    assert.match(callbackRouteSource, /await selectTenantMollieProfile\(\{[\s\S]*profileId: profile\.id/);
   });
 
   it("does not place OAuth codes, tokens, or provider response bodies in callback redirects", () => {

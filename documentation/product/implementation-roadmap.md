@@ -62,7 +62,8 @@ tenant-fenced resolver; temporary API-key compatibility remains fail-closed.
 
 Normal operator connection controls now show sanitized organization, selected
 profile, scopes/capability readiness, and safe actions. An OAuth connection
-remains incomplete until the operator explicitly selects a valid profile.
+automatically selects its sole server-verified profile; it remains incomplete
+until the operator selects a valid profile when zero or multiple profiles exist.
 
 Goal: record live connected-tenant proof for all existing Mollie flows and the
 API-key migration-retirement decision.
@@ -182,6 +183,8 @@ money-flow value:
 8. discounts, trials, setup fees, and proration after catalog policy exists
 9. customer self-service cancellation and richer entitlement rules
 10. per-subscription policy overrides
+11. global button contrast and accessibility audit through shared design-system
+    tokens; do not apply one-off route-level color fixes
 11. broader roles, self-serve tenant administration, invites, and platform billing
 12. Application Fees or Resell Pricing after commercial and tax policy is approved
 

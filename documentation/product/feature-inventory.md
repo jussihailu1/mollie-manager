@@ -34,7 +34,7 @@ Statuses:
 | Mollie Connect OAuth | partial | Authorization, callback, encrypted refresh, revocation, reconnect, profile selection, and OAuth request context are implemented; M6 live connected-tenant proof remains. |
 | Credential-neutral tenant Mollie client | complete | All tenant Mollie SDK and Sales Invoices requests resolve OAuth or temporary tenant API-key authentication through one fail-closed boundary. |
 | Provider-aware tenant readiness | complete | Tenant readiness checks the selected invoice provider and performs live provider probes where required. |
-| Mollie organization/profile capability UX | complete | Settings provides tenant-scoped connect/reconnect/disconnect, explicit server-verified profile selection, sanitized organization and capability readiness. |
+| Mollie organization/profile capability UX | complete | Settings provides tenant-scoped connect/reconnect/disconnect, automatic selection of exactly one server-verified profile, explicit selection when multiple profiles exist, and sanitized organization/capability readiness. |
 
 ## Customer And Subscription Billing
 
