@@ -117,6 +117,13 @@ Mollie Dashboard until Mollie Invoicing is activated, and disappears on the
 next successful live probe. Tenants actively using e-Boekhouden do not receive
 this Mollie Invoicing warning.
 
+This is current implementation behavior, not Kify's intended long-term invoice
+ownership model. The accepted direction in
+[`../product/kify-owned-invoicing-direction.md`](../product/kify-owned-invoicing-direction.md)
+is for Kify to issue and deliver invoices independently of Mollie Invoicing;
+Mollie remains payment truth. Do not change this contract's current provider
+behavior until that replacement is implemented and verified.
+
 OAuth-backed test operations send Mollie's `testmode=true` request parameter;
 live operations omit it. Sales Invoice creation also sends the selected tenant
 profile id for OAuth. API-key requests keep their existing mode-specific key

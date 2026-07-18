@@ -14,6 +14,7 @@ Supporting documents have narrower roles:
 - `multi-tenant-pilot-scope.md` preserves the tenant-isolation baseline.
 - `subscription-policy.md` defines subscription lifecycle and consent policy.
 - `recurring-billing-policy.md` defines collection, invoice notice, and failed-payment policy.
+- `kify-owned-invoicing-direction.md` records the accepted post-Connect invoice ownership direction.
 - operations documents explain how to run already-approved workflows.
 
 If another document conflicts with this roadmap on development order, this
@@ -46,6 +47,12 @@ The current code already provides:
 - tenant-aware invoice delivery, resend, download, reconciliation, cron, and repair paths
 - provider-aware tenant readiness checks
 - normal Needs Attention, customer timeline, notes, and derived lifecycle views
+
+The accepted future invoice direction is documented in
+[`kify-owned-invoicing-direction.md`](./kify-owned-invoicing-direction.md): Kify
+will own invoice issuance and delivery, Mollie will remain payment truth, and
+e-Boekhouden will be optional accounting synchronization. This does not change
+the current Mollie/e-Boekhouden provider implementation or M6 proof gate.
 
 The current Mollie client still authenticates tenant business calls with stored
 API keys. OAuth connection identity, token lifecycle, scopes, profile selection,
@@ -177,7 +184,9 @@ money-flow value:
 2. controlled refund read/create lifecycle with audit and uncertain-outcome reconciliation
 3. chargeback detail and operator follow-up
 4. balances and settlements reconciliation for payout/accounting visibility
-5. profile and payment-method health improvements beyond the Connect completion gate
+5. Kify-owned invoice provider and optional accounting synchronization under
+   [`kify-owned-invoicing-direction.md`](./kify-owned-invoicing-direction.md)
+6. profile and payment-method health improvements beyond the Connect completion gate
 6. tenant subscription-policy settings UI
 7. plan catalog, invoice-line templates, VAT, and revenue-ledger mapping
 8. discounts, trials, setup fees, and proration after catalog policy exists
