@@ -413,7 +413,7 @@ git diff --check
 
 ### K3: Native PDFKit Renderer
 
-Status: pending
+Status: in_progress
 
 Add PDFKit, bundled fonts/license, pure layout helpers, Dutch labels, supported
 paid/unpaid variants, and a fixture-render command. Renderer input is only the
@@ -606,7 +606,7 @@ facts and commit IDs; link detailed live evidence from an operations document.
 | --- | --- | --- | --- |
 | K1 Canonical invoice foundation | complete | 2026-07-21: paired forward-only Drizzle/raw migrations apply; `npm run db:generate` reports no schema changes; focused canonical-money, numbering, and profile-validation tests pass; `db:check-raw`, typecheck, lint, and diff check pass. | `3b0eda4` + pending verification-snapshot commit |
 | K2 Renderer/storage/document contracts | complete | 2026-07-21: replaceable renderer registry, artifact-store contract, and tenant-fenced Kify/legacy document-service routing pass focused tests; typecheck, lint, and diff check pass. | Pending K2 contract commit |
-| K3 Native PDFKit renderer | pending | Not started | - |
+| K3 Native PDFKit renderer | in_progress | 2026-07-21: native PDFKit renderer embeds bundled Noto Sans fonts, produces a signed 18.8 KiB Dutch PDF fixture without runtime network access, and passes focused test/typecheck/lint. PNG visual review remains pending because the bundled Poppler wrapper fails to start in this environment. | Pending renderer commit |
 | K4 Private artifact storage and access | pending | Not started | - |
 | K5 Automated workflow integration | pending | Not started | - |
 | K6 Delivery, readiness, UX, and legacy regression | pending | Not started | - |
