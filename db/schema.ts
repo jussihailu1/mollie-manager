@@ -40,7 +40,21 @@ export const customerAccountingLinkStatusEnum = pgEnum(
 export const invoiceProviderEnum = pgEnum("invoice_provider", [
   "eboekhouden",
   "mollie",
+  "kify",
 ]);
+
+export const canonicalInvoiceStatusEnum = pgEnum("canonical_invoice_status", [
+  "number_reserved",
+  "render_pending",
+  "render_failed",
+  "issued",
+  "void",
+]);
+
+export const invoiceRenderAttemptStatusEnum = pgEnum(
+  "invoice_render_attempt_status",
+  ["claimed", "rendered", "stored", "failed"],
+);
 
 export const invoiceOwnerTypeEnum = pgEnum("invoice_owner_type", [
   "payment",
@@ -745,6 +759,77 @@ export const tenantMollieCredentials = pgTable(
   ],
 );
 
+export const tenantInvoiceProfiles = pgTable(
+  "tenant_invoice_profiles",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    legalName: text("legal_name").notNull(),
+    tradeName: text("trade_name"),
+    street: text("street").notNull(),
+    houseNumber: text("house_number").notNull(),
+    houseNumberAddition: text("house_number_addition"),
+    postalCode: text("postal_code").notNull(),
+    city: text("city").notNull(),
+    countryCode: char("country_code", { length: 2 }).notNull(),
+    kvkNumber: text("kvk_number").notNull(),
+    vatId: text("vat_id").notNull(),
+    invoiceEmail: text("invoice_email").notNull(),
+    phone: text("phone"),
+    iban: text("iban"),
+    bic: text("bic"),
+    paymentTermDays: integer("payment_term_days").notNull(),
+    invoicePrefix: text("invoice_prefix").notNull(),
+    logoArtifactLocator: text("logo_artifact_locator"),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+      name: "tenant_invoice_profiles_tenant_id_fkey",
+    }).onDelete("cascade"),
+    unique("tenant_invoice_profiles_tenant_id_key").on(table.tenantId),
+    check("tenant_invoice_profiles_payment_term_days_check", sql`${table.paymentTermDays} >= 0`),
+    check("tenant_invoice_profiles_prefix_uppercase_check", sql`${table.invoicePrefix} = upper(${table.invoicePrefix})`),
+  ],
+);
+
+export const customerBillingProfiles = pgTable(
+  "customer_billing_profiles",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    customerId: text("customer_id").notNull(),
+    legalName: text("legal_name").notNull(),
+    contactName: text("contact_name"),
+    street: text("street").notNull(),
+    houseNumber: text("house_number").notNull(),
+    houseNumberAddition: text("house_number_addition"),
+    postalCode: text("postal_code").notNull(),
+    city: text("city").notNull(),
+    countryCode: char("country_code", { length: 2 }).notNull(),
+    email: text("email").notNull(),
+    vatId: text("vat_id"),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({ columns: [table.tenantId], foreignColumns: [tenants.id], name: "customer_billing_profiles_tenant_id_fkey" }).onDelete("cascade"),
+    foreignKey({ columns: [table.customerId], foreignColumns: [customers.id], name: "customer_billing_profiles_customer_id_fkey" }).onDelete("cascade"),
+    unique("customer_billing_profiles_tenant_customer_key").on(table.tenantId, table.customerId),
+  ],
+);
+
 export const tenantMollieConnections = pgTable(
   "tenant_mollie_connections",
   {
@@ -873,6 +958,21 @@ export const invoices = pgTable(
     providerInvoiceNumber: text("provider_invoice_number"),
     providerCustomerId: text("provider_customer_id"),
     providerDocumentUrl: text("provider_document_url"),
+    canonicalInvoiceNumber: text("canonical_invoice_number"),
+    canonicalStatus: canonicalInvoiceStatusEnum("canonical_status"),
+    invoiceDate: date("invoice_date", { mode: "string" }),
+    dueDate: date("due_date", { mode: "string" }),
+    issuedAt: timestamp("issued_at", { mode: "string", withTimezone: true }),
+    voidedAt: timestamp("voided_at", { mode: "string", withTimezone: true }),
+    currency: char("currency", { length: 3 }),
+    subtotalCents: integer("subtotal_cents"),
+    vatCents: integer("vat_cents"),
+    totalCents: integer("total_cents"),
+    amountPaidCents: integer("amount_paid_cents"),
+    balanceCents: integer("balance_cents"),
+    canonicalSnapshot: jsonb("canonical_snapshot").$type<Record<string, unknown>>(),
+    canonicalSnapshotSha256: text("canonical_snapshot_sha256"),
+    voidReason: text("void_reason"),
     providerSnapshot: jsonb("provider_snapshot")
       .$type<Record<string, unknown>>()
       .notNull()
@@ -913,6 +1013,109 @@ export const invoices = pgTable(
       table.provider,
       table.providerInvoiceNumber,
     ),
+    uniqueIndex("invoices_tenant_mode_canonical_number_key")
+      .on(table.tenantId, table.mode, table.canonicalInvoiceNumber)
+      .where(sql`${table.canonicalInvoiceNumber} is not null`),
+    check("invoices_kify_canonical_snapshot_check", sql`${table.provider}::text <> 'kify' or (${table.canonicalInvoiceNumber} is not null and ${table.canonicalStatus} is not null and ${table.canonicalSnapshot} is not null and ${table.canonicalSnapshotSha256} is not null)`),
+  ],
+);
+
+export const tenantInvoiceSequences = pgTable(
+  "tenant_invoice_sequences",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    mode: mollieModeEnum("mode").notNull(),
+    year: integer("year").notNull(),
+    prefix: text("prefix").notNull(),
+    nextValue: integer("next_value").notNull().default(1),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({ columns: [table.tenantId], foreignColumns: [tenants.id], name: "tenant_invoice_sequences_tenant_id_fkey" }).onDelete("cascade"),
+    unique("tenant_invoice_sequences_tenant_mode_year_prefix_key").on(table.tenantId, table.mode, table.year, table.prefix),
+    check("tenant_invoice_sequences_year_check", sql`${table.year} >= 2000`),
+    check("tenant_invoice_sequences_next_value_check", sql`${table.nextValue} >= 1`),
+  ],
+);
+
+export const invoiceLines = pgTable(
+  "invoice_lines",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    invoiceId: text("invoice_id").notNull(),
+    position: integer("position").notNull(),
+    description: text("description").notNull(),
+    quantity: numeric("quantity", { precision: 12, scale: 3 }).notNull(),
+    unitGrossCents: integer("unit_gross_cents").notNull(),
+    netCents: integer("net_cents").notNull(),
+    vatRateBasisPoints: integer("vat_rate_basis_points").notNull(),
+    vatCents: integer("vat_cents").notNull(),
+    grossCents: integer("gross_cents").notNull(),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({ columns: [table.tenantId], foreignColumns: [tenants.id], name: "invoice_lines_tenant_id_fkey" }).onDelete("cascade"),
+    foreignKey({ columns: [table.invoiceId], foreignColumns: [invoices.id], name: "invoice_lines_invoice_id_fkey" }).onDelete("cascade"),
+    unique("invoice_lines_invoice_position_key").on(table.invoiceId, table.position),
+    check("invoice_lines_position_check", sql`${table.position} > 0`),
+    check("invoice_lines_positive_quantity_check", sql`${table.quantity} > 0`),
+    check("invoice_lines_positive_gross_check", sql`${table.grossCents} > 0`),
+    check("invoice_lines_vat_sum_check", sql`${table.netCents} + ${table.vatCents} = ${table.grossCents}`),
+  ],
+);
+
+export const invoiceArtifacts = pgTable(
+  "invoice_artifacts",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    invoiceId: text("invoice_id").notNull(),
+    format: text("format").notNull(),
+    rendererId: text("renderer_id").notNull(),
+    storageBackend: text("storage_backend").notNull(),
+    privateLocator: text("private_locator").notNull(),
+    mimeType: text("mime_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    sha256: text("sha256").notNull(),
+    snapshotSha256: text("snapshot_sha256").notNull(),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({ columns: [table.tenantId], foreignColumns: [tenants.id], name: "invoice_artifacts_tenant_id_fkey" }).onDelete("cascade"),
+    foreignKey({ columns: [table.invoiceId], foreignColumns: [invoices.id], name: "invoice_artifacts_invoice_id_fkey" }).onDelete("cascade"),
+    unique("invoice_artifacts_invoice_snapshot_pdf_key").on(table.invoiceId, table.snapshotSha256, table.format),
+    unique("invoice_artifacts_private_locator_key").on(table.privateLocator),
+    check("invoice_artifacts_pdf_mime_check", sql`${table.format} <> 'pdf' or ${table.mimeType} = 'application/pdf'`),
+    check("invoice_artifacts_byte_size_check", sql`${table.byteSize} > 0`),
+  ],
+);
+
+export const invoiceRenderAttempts = pgTable(
+  "invoice_render_attempts",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    invoiceId: text("invoice_id").notNull(),
+    rendererId: text("renderer_id").notNull(),
+    attemptNumber: integer("attempt_number").notNull(),
+    status: invoiceRenderAttemptStatusEnum("status").notNull(),
+    safeErrorCode: text("safe_error_code"),
+    artifactId: text("artifact_id"),
+    snapshotSha256: text("snapshot_sha256").notNull(),
+    claimedAt: timestamp("claimed_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { mode: "string", withTimezone: true }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({ columns: [table.tenantId], foreignColumns: [tenants.id], name: "invoice_render_attempts_tenant_id_fkey" }).onDelete("cascade"),
+    foreignKey({ columns: [table.invoiceId], foreignColumns: [invoices.id], name: "invoice_render_attempts_invoice_id_fkey" }).onDelete("cascade"),
+    foreignKey({ columns: [table.artifactId], foreignColumns: [invoiceArtifacts.id], name: "invoice_render_attempts_artifact_id_fkey" }).onDelete("restrict"),
+    unique("invoice_render_attempts_invoice_attempt_number_key").on(table.invoiceId, table.attemptNumber),
+    check("invoice_render_attempts_number_check", sql`${table.attemptNumber} > 0`),
   ],
 );
 

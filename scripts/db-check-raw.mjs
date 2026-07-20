@@ -15,6 +15,7 @@ const allowedFiles = new Set(
     "scripts/invoice-automation-backlog.mjs",
     "scripts/invoice-automation-requeue-safe-failed.mjs",
     "scripts/invoice-automation-self-heal.mjs",
+    "scripts/retention-report.mjs",
     "scripts/db-check-raw.mjs",
     "scripts/db-smoke.mjs",
     "scripts/backfill-consent-token-storage.ts",

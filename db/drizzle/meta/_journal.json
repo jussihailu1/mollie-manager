@@ -183,6 +183,13 @@
       "when": 1783983600000,
       "tag": "0025_mollie_oauth_states",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1784587200000,
+      "tag": "0026_kify_canonical_invoice_foundation",
+      "breakpoints": true
     }
   ]
 }
