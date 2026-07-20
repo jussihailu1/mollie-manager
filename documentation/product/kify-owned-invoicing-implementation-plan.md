@@ -2,7 +2,7 @@
 
 Status: active implementation contract; implementation in progress
 Created: 2026-07-21
-Active milestone: K1 canonical invoice foundation
+Active milestone: K2 renderer, storage, and document contracts
 Audience: product and engineering
 Authority: [`implementation-roadmap.md`](./implementation-roadmap.md) remains the sole sequencing authority; this document defines the detailed execution contract for its active Kify-owned invoicing milestone
 
@@ -359,7 +359,7 @@ progress table; do not turn planned behavior into feature-inventory fact early.
 
 ### K1: Canonical Invoice Foundation
 
-Status: in_progress
+Status: complete
 
 Implement profiles, sequence allocation, canonical invoice/line/artifact/attempt
 schema, exact VAT-inclusive money helpers, migrations, and profile validation.
@@ -604,7 +604,7 @@ facts and commit IDs; link detailed live evidence from an operations document.
 
 | Milestone | Status | Verified evidence | Commit |
 | --- | --- | --- | --- |
-| K1 Canonical invoice foundation | in_progress | 2026-07-21: focused canonical-money, numbering, and profile-validation tests pass; migration applied with `npm run db:apply`; raw SQL guard, typecheck, lint, and diff check pass. `npm run db:generate` was run but requires an interactive TTY because the historical Drizzle snapshot prompts on enum reconciliation; no generated SQL was used because paired forward-only Drizzle/raw migrations are present and applied. | Pending foundation commit |
+| K1 Canonical invoice foundation | complete | 2026-07-21: paired forward-only Drizzle/raw migrations apply; `npm run db:generate` reports no schema changes; focused canonical-money, numbering, and profile-validation tests pass; `db:check-raw`, typecheck, lint, and diff check pass. | `3b0eda4` + pending verification-snapshot commit |
 | K2 Renderer/storage/document contracts | pending | Not started | - |
 | K3 Native PDFKit renderer | pending | Not started | - |
 | K4 Private artifact storage and access | pending | Not started | - |
