@@ -21,6 +21,11 @@ function renderToBuffer(document: PDFKit.PDFDocument) {
   });
 }
 
+function drawLineHeader(document: PDFKit.PDFDocument) {
+  document.font(boldFont).fontSize(10).text("Omschrijving", 48).text("Bedrag incl. btw", 390, document.y - 12, { width: 150, align: "right" });
+  document.font(regularFont);
+}
+
 export const nativePdfKitInvoiceRenderer: InvoiceDocumentRenderer = {
   id: "native-pdfkit-v1",
   validate(snapshot) {
@@ -31,6 +36,7 @@ export const nativePdfKitInvoiceRenderer: InvoiceDocumentRenderer = {
   async renderPdf(snapshot): Promise<RenderedInvoiceDocument> {
     this.validate(snapshot);
     const document = new PDFDocument({ autoFirstPage: true, margin: 48, size: "A4" });
+    document.on("pageAdded", () => drawLineHeader(document));
     const output = renderToBuffer(document);
     document.info.Title = `Factuur ${snapshot.invoiceNumber}`;
     document.info.Author = snapshot.issuer.legalName;
@@ -47,8 +53,7 @@ export const nativePdfKitInvoiceRenderer: InvoiceDocumentRenderer = {
     document.font(boldFont).text("Aan");
     document.font(regularFont).text(`${snapshot.recipient.legalName}\n${snapshot.recipient.streetAddress}\n${snapshot.recipient.postalCode} ${snapshot.recipient.city}\n${snapshot.recipient.countryCode}`);
     document.moveDown();
-    document.font(boldFont).text("Omschrijving", 48).text("Bedrag incl. btw", 390, document.y - 12, { width: 150, align: "right" });
-    document.font(regularFont);
+    drawLineHeader(document);
     for (const line of snapshot.lines) {
       const y = document.y + 8;
       document.text(`${line.description} (${line.quantity} × 21% btw)`, 48, y, { width: 320 });
