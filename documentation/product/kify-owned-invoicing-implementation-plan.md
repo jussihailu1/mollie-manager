@@ -442,7 +442,7 @@ Record the reviewed fixture paths and visual result before marking K3 complete.
 
 ### K4: Private Artifact Storage And Access
 
-Status: pending
+Status: blocked
 
 Implement the Vercel Private Blob adapter, hash/size verification, deterministic
 keys, authenticated document route, and private-stream response behavior.
@@ -607,7 +607,7 @@ facts and commit IDs; link detailed live evidence from an operations document.
 | K1 Canonical invoice foundation | complete | 2026-07-21: paired forward-only Drizzle/raw migrations apply; `npm run db:generate` reports no schema changes; focused canonical-money, numbering, and profile-validation tests pass; `db:check-raw`, typecheck, lint, and diff check pass. | `3b0eda4` + pending verification-snapshot commit |
 | K2 Renderer/storage/document contracts | complete | 2026-07-21: replaceable renderer registry, artifact-store contract, and tenant-fenced Kify/legacy document-service routing pass focused tests; typecheck, lint, and diff check pass. | Pending K2 contract commit |
 | K3 Native PDFKit renderer | complete | 2026-07-21: native PDFKit renderer embeds bundled Noto Sans fonts; paid, automatic-collection, Unicode/long-address, and three-page fixtures render without runtime network access. Visual review confirms readable A4 output, repeated page headers, and no clipping/overlap. Focused test, fixture command, typecheck, lint, and diff check pass. | `764cbbf` + pending fixture completion commit |
-| K4 Private artifact storage and access | pending | Not started | - |
+| K4 Private artifact storage and access | blocked | 2026-07-21: private deterministic Vercel Blob adapter, tenant-fenced authenticated document route, focused route/store tests, typecheck, and lint pass. Live private Blob proof is blocked because this environment has no `BLOB_READ_WRITE_TOKEN`, `VERCEL_OIDC_TOKEN`, or `BLOB_STORE_ID`. | `4996bc6`, `1e8730d`, `75e8fa8` |
 | K5 Automated workflow integration | pending | Not started | - |
 | K6 Delivery, readiness, UX, and legacy regression | pending | Not started | - |
 | K7 Migration verification and controlled rollout | pending | Not started | - |
