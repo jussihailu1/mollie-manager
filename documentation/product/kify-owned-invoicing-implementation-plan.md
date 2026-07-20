@@ -2,7 +2,7 @@
 
 Status: active implementation contract; implementation in progress
 Created: 2026-07-21
-Active milestone: K2 renderer, storage, and document contracts
+Active milestone: K3 native PDFKit renderer
 Audience: product and engineering
 Authority: [`implementation-roadmap.md`](./implementation-roadmap.md) remains the sole sequencing authority; this document defines the detailed execution contract for its active Kify-owned invoicing milestone
 
@@ -387,7 +387,7 @@ git diff --check
 
 ### K2: Renderer, Storage, And Document Contracts
 
-Status: pending
+Status: complete
 
 Introduce the provider-neutral interfaces, registries, fake renderer, fake
 artifact store, and document-service routing contract. Preserve legacy adapter
@@ -605,7 +605,7 @@ facts and commit IDs; link detailed live evidence from an operations document.
 | Milestone | Status | Verified evidence | Commit |
 | --- | --- | --- | --- |
 | K1 Canonical invoice foundation | complete | 2026-07-21: paired forward-only Drizzle/raw migrations apply; `npm run db:generate` reports no schema changes; focused canonical-money, numbering, and profile-validation tests pass; `db:check-raw`, typecheck, lint, and diff check pass. | `3b0eda4` + pending verification-snapshot commit |
-| K2 Renderer/storage/document contracts | pending | Not started | - |
+| K2 Renderer/storage/document contracts | complete | 2026-07-21: replaceable renderer registry, artifact-store contract, and tenant-fenced Kify/legacy document-service routing pass focused tests; typecheck, lint, and diff check pass. | Pending K2 contract commit |
 | K3 Native PDFKit renderer | pending | Not started | - |
 | K4 Private artifact storage and access | pending | Not started | - |
 | K5 Automated workflow integration | pending | Not started | - |
