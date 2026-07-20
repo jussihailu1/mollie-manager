@@ -70,7 +70,7 @@ Statuses:
 | First-payment and recurring invoice creation | complete | Provider adapters create invoices with tenant context and duplicate-prevention claims. |
 | e-Boekhouden invoicing | complete | Tenant credentials, relation links, invoice settings, creation, reconciliation, and documents exist. |
 | Mollie Sales Invoices | partial | Adapter and readiness probe exist; live use still depends on Mollie Invoicing activation for each tenant organization. |
-| Kify-owned invoicing | missing | Accepted product direction: Kify will issue and deliver invoices independently of Mollie Invoicing activation and make e-Boekhouden optional; implementation is deferred until the Connect completion gate. See `kify-owned-invoicing-direction.md`. |
+| Kify-owned invoicing | missing | Explicitly promoted to the active roadmap milestone. The accepted implementation contract uses a provider-neutral native PDFKit renderer and private Kify-owned artifacts; no Kify issuance exists until implementation and live proof complete. See `kify-owned-invoicing-implementation-plan.md`. |
 | Invoice delivery, resend, and download | complete | Tenant-scoped delivery evidence, retry, customer invoice links, manual resend, and trusted document fetch exist. |
 | Plan catalog and accounting mappings | missing | Plans, reusable line templates, VAT, discounts, trials, setup fees, proration, and per-plan ledger mapping are later work. |
 
@@ -86,6 +86,7 @@ Statuses:
 
 ## Current Development Pointer
 
-The active goal is Mollie Connect. Start from `implementation-roadmap.md` and
-work only on its active milestone. Do not select work from missing rows in this
-inventory unless the roadmap explicitly promotes it.
+The active goal is Kify-owned invoicing. Start from `implementation-roadmap.md`
+and execute `kify-owned-invoicing-implementation-plan.md` in milestone order.
+Mollie Connect M6 live proof remains an explicit external blocker. Do not select
+other work from missing rows in this inventory unless the roadmap promotes it.

@@ -60,11 +60,11 @@ The pilot baseline uses:
 - Shared platform SMTP is acceptable for this baseline; tenant-specific sender
   credentials and branding remain later work.
 
-Current tenant Mollie authentication uses manually provisioned API keys. Mollie
-Connect OAuth is the immediate product milestone in `implementation-roadmap.md`.
-It replaces manual secret exchange without weakening any rule in this document.
-OAuth was not required to establish the original pilot baseline and is not a
-reason to reinterpret already-completed tenant-isolation work.
+Mollie Connect OAuth foundations and existing-flow migration are implemented;
+manual API keys remain temporary compatibility while M6 live proof is
+externally blocked. Kify-owned invoicing is the active product milestone in
+`implementation-roadmap.md`. Neither change weakens or reinterprets the
+already-completed tenant-isolation baseline in this document.
 
 ## Tenant-Owned Settings
 

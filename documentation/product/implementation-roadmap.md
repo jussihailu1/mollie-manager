@@ -14,7 +14,9 @@ Supporting documents have narrower roles:
 - `multi-tenant-pilot-scope.md` preserves the tenant-isolation baseline.
 - `subscription-policy.md` defines subscription lifecycle and consent policy.
 - `recurring-billing-policy.md` defines collection, invoice notice, and failed-payment policy.
-- `kify-owned-invoicing-direction.md` records the accepted post-Connect invoice ownership direction.
+- `kify-owned-invoicing-direction.md` records the accepted invoice ownership direction.
+- `kify-owned-invoicing-implementation-plan.md` is the detailed execution
+  contract for the active Kify-owned invoicing milestone.
 - operations documents explain how to run already-approved workflows.
 
 If another document conflicts with this roadmap on development order, this
@@ -22,15 +24,16 @@ roadmap wins. Update the conflicting document before continuing.
 
 ## Product End Goal
 
-Each tenant can securely connect its own Mollie organization through OAuth.
-Existing tenant-scoped customer, payment, payment-link, mandate, subscription,
-invoice, webhook, reconciliation, repair, and readiness flows use that
-connection without API-key sharing, credential mixing, or implicit fallback.
+Each tenant can issue and deliver compliant invoices through Kify without
+depending on Mollie Invoicing or e-Boekhouden activation. Kify owns invoice
+identity, immutable data, rendered documents, delivery, resend, download, and
+history. Mollie remains authoritative for payment collection, mandates,
+subscriptions, and payment state; e-Boekhouden is optional accounting sync.
 
-Normal operators can see whether Mollie is connected, which organization and
-profile are active, and what action is required when access is incomplete or
-revoked. Existing API-key connections remain temporary migration compatibility,
-not the final onboarding model.
+Tenant business flows remain explicitly tenant-scoped and use each tenant's
+Mollie organization without API-key sharing, credential mixing, or implicit
+fallback. Normal operators see invoice readiness separately from Mollie payment
+readiness.
 
 ## Verified Baseline
 
@@ -48,42 +51,48 @@ The current code already provides:
 - provider-aware tenant readiness checks
 - normal Needs Attention, customer timeline, notes, and derived lifecycle views
 
-The accepted future invoice direction is documented in
+The accepted invoice direction is documented in
 [`kify-owned-invoicing-direction.md`](./kify-owned-invoicing-direction.md): Kify
 will own invoice issuance and delivery, Mollie will remain payment truth, and
-e-Boekhouden will be optional accounting synchronization. This does not change
-the current Mollie/e-Boekhouden provider implementation or M6 proof gate.
+e-Boekhouden will be optional accounting synchronization. Current code still
+uses Mollie/e-Boekhouden invoice-provider adapters; Kify-owned issuance is not
+implemented yet.
 
-The current Mollie client still authenticates tenant business calls with stored
-API keys. OAuth connection identity, token lifecycle, scopes, profile selection,
-capability state, revocation, and reconnect behavior do not exist yet.
+Mollie Connect M1 through M5 are implemented. OAuth connection identity, token
+lifecycle, scopes, profile selection, capability state, revocation, reconnect,
+and credential-neutral business calls exist. M6 still requires live proof with
+a real connected tenant.
 
-## Active Milestone: M6 Production Proof And Migration Gate
+## Active Milestone: Kify-Owned Invoicing
 
 This is the only active product milestone.
 
-M1 through M5 are complete. The accepted contract is in
+Goal: implement and prove Kify-native automated invoicing using the detailed
+contract in
+[`kify-owned-invoicing-implementation-plan.md`](./kify-owned-invoicing-implementation-plan.md).
+Kify will issue new invoices, render Dutch PDFs through a provider-neutral
+native PDFKit renderer, store artifacts privately, and preserve existing
+delivery, retry, legacy-document, tenant-isolation, and money-flow safeguards.
+
+Work through K1 through K8 in order. K1 is the current implementation milestone.
+The active program is complete only after controlled live-tenant proof and K8
+archives the implementation plan and promotes the next roadmap milestone.
+
+## Externally Blocked Milestone: Mollie Connect M6
+
+Mollie Connect M1 through M5 are complete under
 [`../integrations/mollie-connect-contract.md`](../integrations/mollie-connect-contract.md).
-All tenant SDK and Sales Invoices requests now share the credential-neutral,
-tenant-fenced resolver; temporary API-key compatibility remains fail-closed.
+M6 production proof remains externally blocked pending a real connected tenant
+and the provider-side capabilities needed to exercise the full live-proof
+runbook. Do not represent Mollie Connect as complete until that evidence exists.
 
-Normal operator connection controls now show sanitized organization, selected
-profile, scopes/capability readiness, and safe actions. An OAuth connection
-automatically selects its sole server-verified profile; it remains incomplete
-until the operator selects a valid profile when zero or multiple profiles exist.
+This explicit reprioritization permits the Kify-owned invoicing milestone to
+advance while preserving M6 code and its unclosed live gate. Resume M6 through
+the live-proof runbook when the external prerequisites are available.
 
-Goal: record live connected-tenant proof for all existing Mollie flows and the
-API-key migration-retirement decision.
+## Mollie Connect Milestone Record
 
-M6 is complete only when the live-proof runbook has evidence for customer
-creation, first payment, mandate, subscription, payment link, webhook,
-reconciliation, Mollie invoicing, readiness, revocation, and reconnect.
-
-## Ordered Mollie Connect Milestones
-
-Work in this order. Do not open a later milestone while an earlier milestone has
-unfinished acceptance criteria unless an external blocker is recorded and the
-new work still belongs to the same end goal.
+M1 through M5 are implemented. M6 is externally blocked as recorded above.
 
 ### M1: Connection Contract
 
@@ -123,6 +132,8 @@ Prove OAuth-backed customer creation, first payment, mandate establishment,
 subscription activation, payment links, webhooks, reconciliation, Mollie
 invoicing, readiness, revocation, and reconnect for a real connected tenant.
 Document evidence and the explicit gate for retiring manual API-key onboarding.
+
+Status: externally blocked; not the active implementation milestone.
 
 ## Mollie Connect Completion Gate
 
@@ -171,31 +182,31 @@ explicit blocker, not disguised as completed work.
 - When blocked externally, continue only with another unmet criterion inside the
   active milestone; otherwise stop with the exact blocker.
 
-Until the Mollie Connect completion gate closes, do not implement refunds,
+During the active Kify-owned invoicing milestone, do not implement refunds,
 chargeback workspaces, balances/settlements, application fees, Resell Pricing,
 POS, Marketplace flows, broad role systems, or unrelated operator polish.
 
 ## Later Backlog
 
-After Mollie Connect is complete, reassess this queue in order of customer and
-money-flow value:
+After Kify-owned invoicing is complete and its plan is retired, reassess this
+queue in order of customer and money-flow value while keeping the blocked M6
+live proof visible:
 
 1. provider-side subscription cancellation execution under `subscription-policy.md`
 2. controlled refund read/create lifecycle with audit and uncertain-outcome reconciliation
 3. chargeback detail and operator follow-up
 4. balances and settlements reconciliation for payout/accounting visibility
-5. Kify-owned invoice provider and optional accounting synchronization under
-   [`kify-owned-invoicing-direction.md`](./kify-owned-invoicing-direction.md)
+5. optional e-Boekhouden synchronization for Kify-owned invoices
 6. profile and payment-method health improvements beyond the Connect completion gate
-6. tenant subscription-policy settings UI
-7. plan catalog, invoice-line templates, VAT, and revenue-ledger mapping
-8. discounts, trials, setup fees, and proration after catalog policy exists
-9. customer self-service cancellation and richer entitlement rules
-10. per-subscription policy overrides
-11. global button contrast and accessibility audit through shared design-system
+7. tenant subscription-policy settings UI
+8. plan catalog, invoice-line templates, VAT, and revenue-ledger mapping
+9. discounts, trials, setup fees, and proration after catalog policy exists
+10. customer self-service cancellation and richer entitlement rules
+11. per-subscription policy overrides
+12. global button contrast and accessibility audit through shared design-system
     tokens; do not apply one-off route-level color fixes
-11. broader roles, self-serve tenant administration, invites, and platform billing
-12. Application Fees or Resell Pricing after commercial and tax policy is approved
+13. broader roles, self-serve tenant administration, invites, and platform billing
+14. Application Fees or Resell Pricing after commercial and tax policy is approved
 
 Pause/resume remains out of scope while Mollie cancellation is irreversible.
 Marketplace, Split Payments, balance transfers, programmatic payouts, Orders,

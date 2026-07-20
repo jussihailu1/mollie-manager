@@ -1,6 +1,6 @@
 # Kify-Owned Invoicing Direction
 
-Status: accepted product direction; implementation deferred until Mollie Connect closes
+Status: accepted product direction; explicitly promoted to active implementation
 Audience: product and engineering
 
 ## Decision
@@ -42,22 +42,37 @@ Do not remove the current probe or claim that Kify-owned invoices exist before
 the replacement has safely preserved invoice ownership, customer delivery,
 idempotency, retry, reconciliation, and tenant isolation.
 
-## First Implementation Milestone After Connect
+The implementation roadmap now records Mollie Connect M6 live proof as an
+external blocker and explicitly promotes Kify-owned invoicing. This is a
+sequencing decision only: Kify-owned issuance remains missing until implemented
+and proven.
 
-Implement a Kify-native invoice provider behind the existing provider-neutral
-invoice boundary:
+## Active Implementation Decision
 
-1. create tenant-owned invoice records and a compliant rendered document;
-2. keep app-owned email delivery, resend, download, idempotency, retry, and
+Implement Kify-owned invoicing through the detailed contract in
+[`kify-owned-invoicing-implementation-plan.md`](./kify-owned-invoicing-implementation-plan.md):
+
+1. create tenant-owned canonical invoice records and a compliant rendered PDF;
+2. use a provider-neutral `InvoiceDocumentRenderer` with native PDFKit as the
+   first production renderer;
+3. keep artifact storage behind `InvoiceArtifactStore`, with Vercel Private Blob
+   as the first backend;
+4. route Kify and legacy documents through `InvoiceDocumentService`;
+5. keep app-owned email delivery, resend, download, idempotency, retry, and
    audit evidence intact;
-3. attach Mollie payment links or payment state without making Mollie the
+6. attach Mollie payment links or payment state without making Mollie the
    invoice issuer;
-4. keep existing Mollie/e-Boekhouden invoices owned by their original provider;
-5. make e-Boekhouden export/synchronization optional and explicitly
+7. keep existing Mollie/e-Boekhouden invoices owned by their original provider;
+8. make e-Boekhouden export/synchronization optional and explicitly
    tenant-scoped;
-6. remove Mollie Invoicing from normal onboarding/readiness only after live
+9. remove Mollie Invoicing from normal onboarding/readiness only after live
    proof of the Kify-native path.
 
-This is a product and architecture change, not a copy-only change. It starts
-only after the Mollie Connect completion gate unless the roadmap is explicitly
-reprioritized.
+Invoice-Generator.com is not part of the first implementation. It may be added
+later only as another renderer behind the same boundary and only after a
+separate commercial, privacy, quota, failure-semantics, and live-proof milestone.
+
+The initial implementation is limited to automated real-installment
+first-payment and recurring invoices. Manual invoices, accounting export,
+UBL/Peppol, mixed VAT, discounts, credit notes, and PDF/A certification remain
+out of scope.

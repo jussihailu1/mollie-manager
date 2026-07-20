@@ -7,9 +7,11 @@ This folder contains the active documentation for the project plus an archive of
 For product development, read active docs in this order:
 
 1. `product/implementation-roadmap.md`: sole authority for active goal, milestone, and feature order
-2. relevant policy: `product/subscription-policy.md` and/or `product/recurring-billing-policy.md`
-3. `product/feature-inventory.md`: current capability evidence only
-4. `product/multi-tenant-pilot-scope.md`: tenant-isolation baseline when the work touches tenant business data or providers
+2. active implementation contract linked by the roadmap; currently
+   `product/kify-owned-invoicing-implementation-plan.md`
+3. relevant policy: `product/subscription-policy.md` and/or `product/recurring-billing-policy.md`
+4. `product/feature-inventory.md`: current capability evidence only
+5. `product/multi-tenant-pilot-scope.md`: tenant-isolation baseline when the work touches tenant business data or providers
 
 Other active references:
 
