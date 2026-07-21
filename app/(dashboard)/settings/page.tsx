@@ -10,7 +10,9 @@ import {
   createDueRecurringInvoicesAction,
   queueFailedFirstPaymentInvoiceRetriesAction,
   queueFailedRecurringInvoiceRetriesAction,
+  saveTenantInvoiceProfileAction,
 } from "@/lib/billing-actions";
+import { getTenantInvoiceProfile } from "@/lib/invoicing/tenant-invoice-profile";
 import {
   replayWebhookEventAction,
   repairReliabilityTargetAction,
@@ -197,9 +199,10 @@ export default async function SettingsPage({
     : null;
 
   const invoiceEmailOverrideTo = env.INVOICE_EMAIL_OVERRIDE_TO ?? null;
-  const [billingSettings, selectedMode] = await Promise.all([
+  const [billingSettings, selectedMode, tenantInvoiceProfile] = await Promise.all([
     ensureTenantBillingSettings(tenantId),
     getSelectedMollieMode(),
+    getTenantInvoiceProfile(tenantId),
   ]);
   const [molliePaymentMethodReadiness, mollieInvoicingReadiness] = await Promise.all([
     mollieConnection?.status === "connected"
@@ -361,7 +364,13 @@ export default async function SettingsPage({
             ) : null}
 
             {activeInvoiceProvider === "kify" ? (
-              <p className="text-sm text-muted-foreground">Kify issuance is platform-controlled while its invoice profile and rollout checks are completed.</p>
+              <form action={saveTenantInvoiceProfileAction} className="grid gap-3 md:grid-cols-2">
+                <p className="md:col-span-2 text-sm text-muted-foreground">Complete the issuer profile for future Kify invoices. Issued invoices are never changed.</p>
+                {([['legalName','Legal name'],['street','Street'],['houseNumber','House number'],['postalCode','Postal code'],['city','City'],['countryCode','Country code'],['kvkNumber','KvK number'],['vatId','VAT ID'],['invoiceEmail','Invoice email'],['invoicePrefix','Invoice prefix']] as const).map(([name,label]) => <label key={name} className="grid gap-1 text-sm">{label}<input name={name} required defaultValue={tenantInvoiceProfile?.[name] ?? ''} className="h-10 rounded-md border border-input bg-background px-3" /></label>)}
+                <label className="grid gap-1 text-sm">Payment term days<input name="paymentTermDays" required type="number" min="0" defaultValue={tenantInvoiceProfile?.paymentTermDays ?? 14} className="h-10 rounded-md border border-input bg-background px-3" /></label>
+                <input type="hidden" name="returnTo" value="/settings" />
+                <div className="md:col-span-2"><Button type="submit">Save invoice profile</Button></div>
+              </form>
             ) : (
               <BillingSettingsForm
                 defaultActiveInvoiceProvider={activeInvoiceProvider}

@@ -15,6 +15,7 @@ import {
   queueRetryForFailedFirstPaymentInvoicesBatch,
 } from "@/lib/eboekhouden/first-payment-invoices";
 import { updateTenantBillingSettings } from "@/lib/billing-settings";
+import { saveTenantInvoiceProfile } from "@/lib/invoicing/tenant-invoice-profile";
 import {
   createDueRecurringInvoicesBatch,
   queueRetryForFailedRecurringInvoicesBatch,
@@ -33,6 +34,15 @@ const billingSettingsSchema = z.object({
     .union([z.string().trim().length(0), z.coerce.number().int().positive()])
     .transform((value) => (value === "" ? null : Number(value))),
   returnTo: z.string().trim().startsWith("/").default("/settings"),
+});
+
+const tenantInvoiceProfileSchema = z.object({
+  city: z.string().trim().min(1).max(120), countryCode: z.string().trim().length(2),
+  houseNumber: z.string().trim().min(1).max(40), invoiceEmail: z.string().trim().email(),
+  invoicePrefix: z.string().trim().min(1).max(20), kvkNumber: z.string().trim().min(1).max(40),
+  legalName: z.string().trim().min(1).max(180), paymentTermDays: z.coerce.number().int().min(0).max(365),
+  postalCode: z.string().trim().min(1).max(20), returnTo: z.string().trim().startsWith("/").default("/settings"),
+  street: z.string().trim().min(1).max(180), vatId: z.string().trim().min(1).max(40),
 });
 
 const dueRecurringInvoicesSchema = z.object({
@@ -155,6 +165,22 @@ export async function updateBillingSettingsAction(formData: FormData) {
     redirectWithMessage(parsed.data.returnTo, {
       error: serializeError(error),
     });
+  }
+}
+
+export async function saveTenantInvoiceProfileAction(formData: FormData) {
+  const parsed = tenantInvoiceProfileSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirectWithMessage("/settings", { error: "Invoice profile input is incomplete." });
+  const session = await requireViewerSession();
+  const { currentTenant } = await getCurrentTenantSelectionForViewer();
+  try {
+    await saveTenantInvoiceProfile({ ...parsed.data, tenantId: currentTenant.id });
+    await writeAuditLog({ action: "tenant_invoice_profile.update", details: { fields: ["legalName", "address", "kvkNumber", "vatId", "invoiceEmail", "paymentTermDays", "invoicePrefix"] }, entityId: currentTenant.id, entityType: "tenant_invoice_profile", outcome: "success", summary: "Updated the tenant invoice profile for future Kify invoices." }, undefined, { email: session.user.email ?? null, kind: "user" });
+    revalidatePath("/settings");
+    redirectWithMessage(parsed.data.returnTo, { notice: "Invoice profile saved for future invoices." });
+  } catch (error) {
+    unstable_rethrow(error);
+    redirectWithMessage(parsed.data.returnTo, { error: serializeError(error) });
   }
 }
 
