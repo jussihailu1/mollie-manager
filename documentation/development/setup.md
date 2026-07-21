@@ -82,6 +82,15 @@ rotate it with a credential re-encryption/backfill plan rather than ad hoc.
 ## Authentication Notes
 
 - Google sign-in is the current supported provider in code.
+- Use the **Mollie Manager local** Google OAuth client for local development.
+  Keep its `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` in `.env`. Do not copy the
+  production client values into `.env.local`: Next.js loads `.env.local` after
+  `.env`, so its values override the local client and can cause Google
+  `redirect_uri_mismatch` errors or send OAuth callbacks to the wrong app URL.
+- For ngrok testing, update only the local public URL settings (`AUTH_URL` and
+  `APP_URL`) to the current tunnel URL and register
+  `https://<ngrok-host>/api/auth/callback/google` on the **Mollie Manager local**
+  Google OAuth client. Restart the dev server after changing environment values.
 - Future providers may be added later; product authorization must not depend on
   Google specifically.
 - Target product authorization for the shared multi-tenant pilot is membership

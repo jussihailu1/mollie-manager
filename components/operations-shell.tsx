@@ -613,6 +613,32 @@ export function OperationsShell({
 
         <main className="flex-1 overflow-y-auto overflow-x-hidden">{children}</main>
       </div>
+
+      {isTestMode ? (
+        <div
+          className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center"
+        >
+          <button
+            type="button"
+            aria-label={isLiveModeDisabled ? "Test mode active" : "Exit test mode"}
+            disabled={isModePending || isLiveModeDisabled}
+            onClick={() => {
+              startModeTransition(async () => {
+                await updateSelectedMode("live", returnTo);
+              });
+            }}
+            className="pointer-events-auto group relative flex items-center gap-0 rounded-t-lg border border-b-0 border-amber-300 bg-amber-400 px-4 py-2 text-sm font-semibold text-amber-950 shadow-lg transition-[transform,box-shadow,background-color] duration-200 ease-out after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-2 after:bg-amber-400 after:transition-colors after:duration-200 after:content-[''] hover:-translate-y-2 hover:bg-amber-300 hover:shadow-xl hover:after:bg-amber-300 focus-visible:-translate-y-2 focus-visible:bg-amber-300 focus-visible:shadow-xl focus-visible:after:bg-amber-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 disabled:cursor-default disabled:hover:translate-y-0 disabled:hover:bg-amber-400 disabled:hover:shadow-lg"
+          >
+            <FlaskConical aria-hidden="true" className="mr-1 size-4" />
+            {isLiveModeDisabled ? null : (
+              <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-200 ease-out group-hover:max-w-12 group-hover:opacity-100 group-focus-visible:max-w-12 group-focus-visible:opacity-100">
+                {" Exit"}
+              </span>
+            )}
+            <span className="ml-1">Test mode</span>
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
