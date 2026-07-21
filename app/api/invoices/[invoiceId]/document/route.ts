@@ -1,12 +1,11 @@
 import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
-import { getKifyInvoiceArtifact } from "@/lib/invoicing/kify-document-query";
-import { vercelBlobInvoiceArtifactStore } from "@/lib/invoicing/vercel-blob-artifact-store";
+import { invoiceDocumentService } from "@/lib/invoicing/invoice-document-runtime";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ invoiceId: string }> }) {
   const { currentTenant } = await getCurrentTenantSelectionForViewer();
   const { invoiceId } = await params;
-  const artifact = await getKifyInvoiceArtifact({ invoiceId, tenantId: currentTenant.id });
-  if (!artifact) return new Response("Not found", { status: 404 });
-  const stream = await vercelBlobInvoiceArtifactStore.read({ key: artifact.locator });
-  return new Response(stream, { headers: { "Cache-Control": "private, no-store", "Content-Type": "application/pdf", ETag: `\"${artifact.sha256}\"`, "Content-Disposition": `inline; filename=\"${artifact.invoiceNumber}.pdf\"` } });
+  const document = await invoiceDocumentService.getDocument({ invoiceId, tenantId: currentTenant.id });
+  if (!document) return new Response("Not found", { status: 404 });
+  if (document.source === "legacy") return Response.redirect(document.url, 302);
+  return new Response(document.stream, { headers: { "Cache-Control": "private, no-store", "Content-Type": document.contentType, ...(document.sha256 ? { ETag: `\"${document.sha256}\"` } : {}), "Content-Disposition": `inline; filename=\"${document.filename}\"` } });
 }

@@ -62,6 +62,31 @@ export async function getStoredInvoiceByOwner(input: {
   return result.rows[0] ?? null;
 }
 
+export async function getStoredInvoiceById(input: { invoiceId: string; tenantId: string }) {
+  const result = await getDb().execute<StoredInvoiceRecord>(sql`
+    select
+      id,
+      tenant_id as "tenantId",
+      mode,
+      owner_type as "ownerType",
+      owner_id as "ownerId",
+      provider,
+      provider_invoice_id as "providerInvoiceId",
+      provider_invoice_number as "providerInvoiceNumber",
+      provider_customer_id as "providerCustomerId",
+      provider_document_url as "providerDocumentUrl",
+      provider_snapshot as "providerSnapshot",
+      synced_at as "syncedAt",
+      created_at as "createdAt",
+      updated_at as "updatedAt"
+    from invoices
+    where id = ${input.invoiceId} and tenant_id = ${input.tenantId}
+    limit 1
+  `);
+
+  return result.rows[0] ?? null;
+}
+
 export async function saveStoredInvoice(
   input: {
     createdAt?: string | null;

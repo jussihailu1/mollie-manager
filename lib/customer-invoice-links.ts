@@ -11,6 +11,7 @@ export type CustomerInvoiceLink = {
   createdAt: string | null;
   eboekhoudenInvoiceId: string | null;
   eboekhoudenInvoiceNumber: string | null;
+  invoiceNumber: string | null;
   invoicePdfUrl: string | null;
   invoiceState: string;
   ownerId: string;
@@ -20,6 +21,8 @@ export type CustomerInvoiceLink = {
 
 type CustomerInvoiceLinkRow = Omit<CustomerInvoiceLink, "invoicePdfUrl"> & {
   candidateInvoicePdfUrl: string | null;
+  invoiceRecordId: string;
+  invoiceProvider: "eboekhouden" | "kify" | "mollie";
 };
 
 function toModeParam(mode?: DashboardModeFilter) {
@@ -31,7 +34,10 @@ function sanitizeInvoiceLink(row: CustomerInvoiceLinkRow): CustomerInvoiceLink {
     createdAt: row.createdAt,
     eboekhoudenInvoiceId: row.eboekhoudenInvoiceId,
     eboekhoudenInvoiceNumber: row.eboekhoudenInvoiceNumber,
-    invoicePdfUrl: normalizeTrustedInvoicePdfUrl(row.candidateInvoicePdfUrl),
+    invoicePdfUrl: row.invoiceProvider === "kify"
+      ? `/api/invoices/${encodeURIComponent(row.invoiceRecordId)}/document`
+      : normalizeTrustedInvoicePdfUrl(row.candidateInvoicePdfUrl),
+    invoiceNumber: row.invoiceNumber,
     invoiceState: row.invoiceState,
     ownerId: row.ownerId,
     ownerType: row.ownerType,
@@ -56,6 +62,9 @@ const listCustomerInvoiceLinksByMode = cache(async (
         p.invoice_state::text as "invoiceState",
         i.provider_invoice_id as "eboekhoudenInvoiceId",
         i.provider_invoice_number as "eboekhoudenInvoiceNumber",
+        coalesce(i.canonical_invoice_number, i.provider_invoice_number, i.provider_invoice_id) as "invoiceNumber",
+        i.id as "invoiceRecordId",
+        i.provider as "invoiceProvider",
         coalesce(
           nullif(i.provider_document_url, ''),
           nullif(p.metadata ->> 'invoiceDocumentUrl', '')
@@ -81,6 +90,9 @@ const listCustomerInvoiceLinksByMode = cache(async (
         rbs.invoice_state::text as "invoiceState",
         i.provider_invoice_id as "eboekhoudenInvoiceId",
         i.provider_invoice_number as "eboekhoudenInvoiceNumber",
+        coalesce(i.canonical_invoice_number, i.provider_invoice_number, i.provider_invoice_id) as "invoiceNumber",
+        i.id as "invoiceRecordId",
+        i.provider as "invoiceProvider",
         coalesce(
           nullif(i.provider_document_url, ''),
           nullif(rbs.metadata ->> 'invoiceDocumentUrl', '')

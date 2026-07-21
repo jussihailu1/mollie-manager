@@ -4,12 +4,15 @@ import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
 describe("customer invoice links surface", () => {
-  it("sanitizes invoice pdf urls before returning customer invoice links", () => {
+  it("returns Kify document routes and sanitized legacy invoice urls", () => {
     const source = readFileSync(resolve("lib/customer-invoice-links.ts"), "utf8");
 
     assert.match(source, /normalizeTrustedInvoicePdfUrl/);
     assert.match(source, /candidateInvoicePdfUrl/);
-    assert.match(source, /invoicePdfUrl: normalizeTrustedInvoicePdfUrl/);
+    assert.match(source, /normalizeTrustedInvoicePdfUrl\(row\.candidateInvoicePdfUrl\)/);
+    assert.match(source, /invoiceProvider === "kify"/);
+    assert.match(source, /\/api\/invoices\/\$\{encodeURIComponent\(row\.invoiceRecordId\)\}\/document/);
+    assert.match(source, /canonical_invoice_number/);
     assert.match(source, /from payments p/);
     assert.match(source, /from recurring_billing_schedules rbs/);
     assert.doesNotMatch(source, /getSingleTenantIdOrThrow/);

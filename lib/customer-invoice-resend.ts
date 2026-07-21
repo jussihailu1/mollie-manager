@@ -22,7 +22,7 @@ type ResendTargetRow = {
   invoiceDocumentUrl: string | null;
   invoiceId: string | null;
   invoiceNumber: string | null;
-  invoiceProvider: "eboekhouden" | "mollie";
+  invoiceProvider: "eboekhouden" | "kify" | "mollie";
   invoiceType: "first_payment" | "recurring";
   mode: "live" | "test";
   plannedCollectionDate: string | null;
@@ -52,8 +52,8 @@ export async function loadCustomerInvoiceResendTarget(
         p.subscription_id as "subscriptionId",
         c.email as "customerEmail",
         i.provider as "invoiceProvider",
-        i.provider_invoice_id as "invoiceId",
-        i.provider_invoice_number as "invoiceNumber",
+        i.id as "invoiceId",
+        coalesce(i.canonical_invoice_number, i.provider_invoice_number, i.provider_invoice_id) as "invoiceNumber",
         coalesce(
           nullif(i.provider_document_url, ''),
           nullif(p.metadata ->> 'invoiceDocumentUrl', '')
@@ -87,8 +87,8 @@ export async function loadCustomerInvoiceResendTarget(
         rbs.subscription_id as "subscriptionId",
         c.email as "customerEmail",
         i.provider as "invoiceProvider",
-        i.provider_invoice_id as "invoiceId",
-        i.provider_invoice_number as "invoiceNumber",
+        i.id as "invoiceId",
+        coalesce(i.canonical_invoice_number, i.provider_invoice_number, i.provider_invoice_id) as "invoiceNumber",
         coalesce(
           nullif(i.provider_document_url, ''),
           nullif(rbs.metadata ->> 'invoiceDocumentUrl', '')

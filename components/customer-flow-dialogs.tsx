@@ -237,6 +237,7 @@ type CustomerInvoiceLinks = {
     createdAt: string | null;
     eboekhoudenInvoiceId: string | null;
     eboekhoudenInvoiceNumber: string | null;
+    invoiceNumber: string | null;
     invoicePdfUrl: string | null;
     invoiceState: string;
     ownerId: string;
@@ -2672,7 +2673,7 @@ export function CustomerDrawer({
                       invoiceLinks.invoices.slice(0, 6).map((invoice) => (
                         <HistoryRow
                           key={`${invoice.ownerType}:${invoice.ownerId}`}
-                          label={invoice.eboekhoudenInvoiceNumber ?? "Invoice"}
+                          label={invoice.invoiceNumber ?? "Invoice"}
                           meta={
                             invoice.ownerType === "recurring_schedule"
                               ? `Recurring period ${formatDate(invoice.plannedCollectionDate)}`

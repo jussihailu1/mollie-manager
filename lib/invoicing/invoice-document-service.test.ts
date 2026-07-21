@@ -16,4 +16,18 @@ describe("invoice document service", () => {
     assert.equal((await service.getDocument({ invoiceId: "legacy", tenantId: "tenant-a" }))?.source, "legacy");
     assert.equal(await service.getDocument({ invoiceId: "legacy", tenantId: "tenant-b" }), null);
   });
+
+  it("retains Kify document metadata with the private stream", async () => {
+    const store = createFakeInvoiceArtifactStore();
+    await store.put({ bytes: Buffer.from("%PDF-fake"), contentType: "application/pdf", key: "kify.pdf", sha256: "h" });
+    const service = createInvoiceDocumentService({
+      artifactStore: store,
+      async getLegacyDocumentUrl() { return null; },
+      async getRecord() {
+        return { artifactKey: "kify.pdf", artifactSha256: "h", id: "kify", invoiceNumber: "K-2026-001", provider: "kify", tenantId: "tenant-a" };
+      },
+    });
+    const document = await service.getDocument({ invoiceId: "kify", tenantId: "tenant-a" });
+    assert.deepEqual(document && document.source === "kify" ? { filename: document.filename, sha256: document.sha256 } : null, { filename: "K-2026-001.pdf", sha256: "h" });
+  });
 });

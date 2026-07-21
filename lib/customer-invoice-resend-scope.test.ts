@@ -12,6 +12,8 @@ describe("customer invoice resend surface", () => {
     assert.doesNotMatch(source, /getSingleTenantIdOrThrow/);
     assert.doesNotMatch(source, /createFirstPaymentInvoice|createRecurringInvoice/);
     assert.doesNotMatch(source, /invoice\.create|batch_create/);
+    assert.match(source, /canonical_invoice_number/);
+    assert.match(source, /i\.id as "invoiceId"/);
   });
 
   it("serves manual resend through an authenticated customer api", () => {
