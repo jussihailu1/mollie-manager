@@ -142,6 +142,16 @@ export async function buildTrustedInvoicePdfAttachment(input: {
   }
 }
 
+export async function buildPrivateInvoicePdfAttachment(input: {
+  invoiceNumber: string;
+  stream: ReadableStream<Uint8Array>;
+}) {
+  const bytes = await readStreamBytesWithinLimit(input.stream, INVOICE_PDF_MAX_BYTES);
+  if (!bytes) return { attachment: null, attachmentStatus: "too_large" as const };
+  if (!hasPdfSignature(bytes)) return { attachment: null, attachmentStatus: "invalid_pdf" as const };
+  return { attachment: { content: Buffer.from(bytes), contentType: "application/pdf" as const, filename: `factuur-${input.invoiceNumber}.pdf` }, attachmentStatus: "attached" as const };
+}
+
 function isTrustedInvoicePdfHost(hostname: string) {
   return (
     hostname === "e-boekhouden.nl" ||
@@ -256,5 +266,26 @@ async function readResponseBytesWithinLimit(response: Response, maxBytes: number
     offset += chunk.byteLength;
   }
 
+  return bytes;
+}
+
+async function readStreamBytesWithinLimit(stream: ReadableStream<Uint8Array>, maxBytes: number) {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) { await reader.cancel(); return null; }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  if (totalBytes === 0) return null;
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
   return bytes;
 }
