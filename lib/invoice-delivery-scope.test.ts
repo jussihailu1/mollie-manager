@@ -18,6 +18,10 @@ describe("invoice delivery scope", () => {
     );
     assert.match(
       source,
+      /storedInvoice\.provider === "kify"\) \{\s+return null;/,
+    );
+    assert.match(
+      source,
       /async function getInvoiceEntityMetadata\(input: \{\s+entityId: string;\s+invoiceType: "first_payment" \| "recurring";\s+tenantId: string;\s+\}\)/,
     );
     assert.match(

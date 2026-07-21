@@ -53,10 +53,11 @@ The current code already provides:
 
 The accepted invoice direction is documented in
 [`kify-owned-invoicing-direction.md`](./kify-owned-invoicing-direction.md): Kify
-will own invoice issuance and delivery, Mollie will remain payment truth, and
-e-Boekhouden will be optional accounting synchronization. Current code still
-uses Mollie/e-Boekhouden invoice-provider adapters; Kify-owned issuance is not
-implemented yet.
+owns new invoice issuance and delivery, Mollie remains payment truth, and
+e-Boekhouden is optional accounting synchronization. Historical Mollie and
+e-Boekhouden invoices continue to use their provider adapters; new Kify
+first-payment and recurring issuance freezes canonical data before rendering,
+stores private artifacts, and uses a server-side attachment path.
 
 Mollie Connect M1 through M5 are implemented. OAuth connection identity, token
 lifecycle, scopes, profile selection, capability state, revocation, reconnect,

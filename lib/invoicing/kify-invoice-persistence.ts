@@ -68,6 +68,7 @@ export async function claimKifyInvoice(input: {
           update payments
           set invoice_state = 'invoice_creating', invoice_failed_at = null, updated_at = now()
           where id = ${input.ownerId} and tenant_id = ${input.tenantId} and mode = ${input.mode}
+            and payment_type = 'first' and mollie_status = 'paid'
             and invoice_state in ('pending_invoice', 'invoice_failed')
           returning id
         `)

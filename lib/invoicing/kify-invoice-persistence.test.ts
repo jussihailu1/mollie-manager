@@ -10,6 +10,7 @@ describe("Kify invoice persistence", () => {
     assert.match(source, /allocateKifyInvoiceNumber\(\{ client: tx/);
     assert.match(source, /canonical_snapshot_sha256/);
     assert.match(source, /invoice_render_attempts/);
+    assert.match(source, /payment_type = 'first' and mollie_status = 'paid'/);
   });
 
   it("keeps retries on the recorded snapshot and only completes after artifact persistence", () => {

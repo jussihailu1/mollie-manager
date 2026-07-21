@@ -166,6 +166,12 @@ async function resolveInvoicePdfUrl(input: {
     return null;
   }
 
+  // Kify artifacts are private and are attached from storage below. They must
+  // never fall through to a legacy provider adapter or a remote document URL.
+  if (storedInvoice.provider === "kify") {
+    return null;
+  }
+
   const provider = getInvoiceProviderAdapterById(storedInvoice.provider);
   const documentUrl = await provider.getInvoiceDocument({
     invoice: storedInvoice,
