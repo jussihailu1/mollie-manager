@@ -21,9 +21,12 @@ import type {
 import { retryInvoiceDeliveryEmailsBatchWithDependencies } from "@/lib/invoice-delivery-batch";
 import { getInvoiceProviderAdapterById } from "@/lib/invoicing/provider-resolver";
 import {
+  buildPrivateInvoicePdfAttachment,
   buildTrustedInvoicePdfAttachment,
   normalizeTrustedInvoicePdfUrl,
 } from "@/lib/invoice-pdf";
+import { getKifyInvoiceArtifact } from "@/lib/invoicing/kify-document-query";
+import { vercelBlobInvoiceArtifactStore } from "@/lib/invoicing/vercel-blob-artifact-store";
 import { sendEmailTo } from "@/lib/notifications/email";
 import { deliverAlertEmail, openAlert } from "@/lib/reliability/alerts";
 
@@ -462,10 +465,13 @@ export async function deliverCustomerInvoiceEmail(input: DeliveryInput) {
     invoiceType: input.invoiceType,
     tenantId: input.tenantId,
   });
-  const attachmentResult = await buildTrustedInvoicePdfAttachment({
-    invoiceNumber,
-    invoicePdfUrl,
-  });
+  const storedInvoice = await getStoredInvoiceByOwner({ ownerId: input.entityId, ownerType: toInvoiceOwnerType(input.invoiceType), tenantId: input.tenantId });
+  const kifyArtifact = storedInvoice?.provider === "kify"
+    ? await getKifyInvoiceArtifact({ invoiceId: storedInvoice.id, tenantId: input.tenantId })
+    : null;
+  const attachmentResult = kifyArtifact
+    ? await buildPrivateInvoicePdfAttachment({ invoiceNumber, stream: await vercelBlobInvoiceArtifactStore.read({ key: kifyArtifact.locator }) })
+    : await buildTrustedInvoicePdfAttachment({ invoiceNumber, invoicePdfUrl });
   const finalRecipient = env.INVOICE_EMAIL_OVERRIDE_TO ?? input.customerEmail;
   const content = buildEmailContent({
     invoicePdfUrl: attachmentResult.trustedInvoicePdfUrl,

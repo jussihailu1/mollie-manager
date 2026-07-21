@@ -147,9 +147,9 @@ export async function buildPrivateInvoicePdfAttachment(input: {
   stream: ReadableStream<Uint8Array>;
 }) {
   const bytes = await readStreamBytesWithinLimit(input.stream, INVOICE_PDF_MAX_BYTES);
-  if (!bytes) return { attachment: null, attachmentStatus: "too_large" as const };
-  if (!hasPdfSignature(bytes)) return { attachment: null, attachmentStatus: "invalid_pdf" as const };
-  return { attachment: { content: Buffer.from(bytes), contentType: "application/pdf" as const, filename: `factuur-${input.invoiceNumber}.pdf` }, attachmentStatus: "attached" as const };
+  if (!bytes) return { attachment: null, attachmentStatus: "too_large" as const, trustedInvoicePdfUrl: null };
+  if (!hasPdfSignature(bytes)) return { attachment: null, attachmentStatus: "invalid_pdf" as const, trustedInvoicePdfUrl: null };
+  return { attachment: { content: Buffer.from(bytes), contentType: "application/pdf" as const, filename: `factuur-${input.invoiceNumber}.pdf` }, attachmentStatus: "attached" as const, trustedInvoicePdfUrl: null };
 }
 
 function isTrustedInvoicePdfHost(hostname: string) {
