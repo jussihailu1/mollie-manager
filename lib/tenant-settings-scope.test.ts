@@ -49,5 +49,15 @@ describe("tenant settings helper scope", () => {
       settingsPageSource,
       /discoverEboekhoudenBillingSettings\(tenantId\)/,
     );
+
+    const billingSettingsFormSource = readFileSync(
+      "app/(dashboard)/settings/billing-settings-form.tsx",
+      "utf8",
+    );
+    assert.match(billingSettingsFormSource, /Legacy Mollie \(existing setup\)/);
+    assert.match(
+      billingSettingsFormSource,
+      /Choose Kify for future invoices, or choose e-Boekhouden only after tenant-scoped accounting setup is complete\./,
+    );
   });
 });

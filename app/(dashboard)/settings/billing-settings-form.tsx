@@ -108,10 +108,15 @@ export function BillingSettingsForm({
               value={activeInvoiceProvider}
               onChange={(event) =>
                 setActiveInvoiceProvider(
-                  event.target.value as "eboekhouden" | "kify",
+                  event.target.value as "eboekhouden" | "kify" | "mollie",
                 )
               }
             >
+              {defaultActiveInvoiceProvider === "mollie" ? (
+                <option disabled value="mollie">
+                  Legacy Mollie (existing setup)
+                </option>
+              ) : null}
               <option value="kify">Kify (default)</option>
               <option value="eboekhouden">e-Boekhouden</option>
             </select>
@@ -176,6 +181,8 @@ export function BillingSettingsForm({
       <p className="text-xs text-muted-foreground">
         {activeInvoiceProvider === "eboekhouden"
           ? `Loaded ${invoiceTemplates.length} invoice templates and ${ledgers.length} ledger accounts from e-Boekhouden. VAT is fixed to 21% for now.`
+          : activeInvoiceProvider === "mollie"
+            ? "Legacy Mollie remains selected for this existing tenant. Choose Kify for future invoices, or choose e-Boekhouden only after tenant-scoped accounting setup is complete."
           : "Kify is the default issuer. e-Boekhouden remains optional for tenants with completed tenant-scoped accounting setup."}
       </p>
 
