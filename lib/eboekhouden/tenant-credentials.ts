@@ -77,6 +77,17 @@ export async function getTenantEboekhoudenCredentials(tenantId: string) {
   };
 }
 
+export async function hasTenantEboekhoudenCredentials(tenantId: string) {
+  const result = await getDb().execute(sql`
+    select 1
+    from tenant_eboekhouden_credentials
+    where tenant_id = ${tenantId}
+    limit 1
+  `);
+
+  return Boolean(result.rows[0]);
+}
+
 export async function upsertTenantEboekhoudenCredentials(
   input: {
     apiSource: string;

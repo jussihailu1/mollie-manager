@@ -10,8 +10,10 @@ import {
   createDueRecurringInvoicesAction,
   queueFailedFirstPaymentInvoiceRetriesAction,
   queueFailedRecurringInvoiceRetriesAction,
+  saveEboekhoudenConnectionAction,
   saveTenantInvoiceProfileAction,
 } from "@/lib/billing-actions";
+import { hasTenantEboekhoudenCredentials } from "@/lib/eboekhouden/tenant-credentials";
 import { getTenantInvoiceProfile } from "@/lib/invoicing/tenant-invoice-profile";
 import {
   replayWebhookEventAction,
@@ -119,6 +121,36 @@ function MollieInvoicingSetupNotice({ required }: Readonly<{ required: boolean }
   );
 }
 
+function EboekhoudenConnectionCard({ connected }: Readonly<{ connected: boolean }>) {
+  return (
+    <Card id="eboekhouden-connection">
+      <CardHeader>
+        <CardTitle className="text-lg">e-Boekhouden connection</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Optional. Connect only to import existing customers or use e-Boekhouden for future invoices.
+        </p>
+        <Badge variant={connected ? "default" : "outline"}>
+          {connected ? "Configured" : "Not configured"}
+        </Badge>
+        <form action={saveEboekhoudenConnectionAction} className="grid gap-3 md:grid-cols-2">
+          <label className="grid gap-1 text-sm">
+            API source
+            <input name="apiSource" required maxLength={10} defaultValue="Kify" className="h-10 rounded-md border border-input bg-background px-3" />
+          </label>
+          <label className="grid gap-1 text-sm">
+            API token
+            <input name="apiToken" required type="password" autoComplete="off" className="h-10 rounded-md border border-input bg-background px-3" />
+          </label>
+          <input type="hidden" name="returnTo" value="/settings#eboekhouden-connection" />
+          <div className="md:col-span-2"><Button type="submit">{connected ? "Update connection" : "Connect e-Boekhouden"}</Button></div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ReconciliationDeltaSection<TState extends string>({
   emptyLabel,
   summary,
@@ -199,10 +231,11 @@ export default async function SettingsPage({
     : null;
 
   const invoiceEmailOverrideTo = env.INVOICE_EMAIL_OVERRIDE_TO ?? null;
-  const [billingSettings, selectedMode, tenantInvoiceProfile] = await Promise.all([
+  const [billingSettings, selectedMode, tenantInvoiceProfile, hasEboekhoudenConnection] = await Promise.all([
     ensureTenantBillingSettings(tenantId),
     getSelectedMollieMode(),
     getTenantInvoiceProfile(tenantId),
+    hasTenantEboekhoudenCredentials(tenantId),
   ]);
   const [molliePaymentMethodReadiness, mollieInvoicingReadiness] = await Promise.all([
     mollieConnection?.status === "connected"
@@ -325,6 +358,8 @@ export default async function SettingsPage({
             )}
           </CardContent>
         </Card>
+
+        <EboekhoudenConnectionCard connected={hasEboekhoudenConnection} />
 
         <RetentionPolicyCard />
 
@@ -513,6 +548,8 @@ export default async function SettingsPage({
           )}
         </CardContent>
       </Card>
+
+      <EboekhoudenConnectionCard connected={hasEboekhoudenConnection} />
 
       <RetentionPolicyCard />
 

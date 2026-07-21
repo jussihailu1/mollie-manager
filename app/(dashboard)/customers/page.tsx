@@ -4,6 +4,7 @@ import { getSingleSearchParam } from "@/lib/format";
 import { listCustomers } from "@/lib/onboarding/data";
 import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 import { toUiCustomerRecord } from "@/lib/ui-data";
+import { hasTenantEboekhoudenCredentials } from "@/lib/eboekhouden/tenant-credentials";
 
 export default async function CustomersPage({
   searchParams,
@@ -13,10 +14,11 @@ export default async function CustomersPage({
   const { currentTenant } = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
   const tenantId = currentTenant.id;
-  const [resolvedSearchParams, customersResult, archivedCustomersResult] = await Promise.all([
+  const [resolvedSearchParams, customersResult, archivedCustomersResult, hasEboekhoudenConnection] = await Promise.all([
     searchParams,
     listCustomers({ mode: selectedMode, tenantId }),
     listCustomers({ archived: true, mode: selectedMode, tenantId }),
+    hasTenantEboekhoudenCredentials(tenantId),
   ]);
 
   return (
@@ -29,6 +31,7 @@ export default async function CustomersPage({
       archivedCustomers={archivedCustomersResult.map(toUiCustomerRecord)}
       customers={customersResult.map(toUiCustomerRecord)}
       error={getSingleSearchParam(resolvedSearchParams.error) ?? null}
+      hasEboekhoudenConnection={hasEboekhoudenConnection}
       initialFocusId={getSingleSearchParam(resolvedSearchParams.focus) ?? null}
       initialView={getSingleSearchParam(resolvedSearchParams.view) ?? "all"}
       notice={getSingleSearchParam(resolvedSearchParams.notice) ?? null}

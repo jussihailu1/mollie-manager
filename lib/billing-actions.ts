@@ -15,7 +15,10 @@ import {
   queueRetryForFailedFirstPaymentInvoicesBatch,
 } from "@/lib/eboekhouden/first-payment-invoices";
 import { updateTenantBillingSettings } from "@/lib/billing-settings";
-import { getTenantEboekhoudenCredentials } from "@/lib/eboekhouden/tenant-credentials";
+import {
+  getTenantEboekhoudenCredentials,
+  upsertTenantEboekhoudenCredentials,
+} from "@/lib/eboekhouden/tenant-credentials";
 import { saveTenantInvoiceProfile } from "@/lib/invoicing/tenant-invoice-profile";
 import {
   createDueRecurringInvoicesBatch,
@@ -44,6 +47,12 @@ const tenantInvoiceProfileSchema = z.object({
   legalName: z.string().trim().min(1).max(180), paymentTermDays: z.coerce.number().int().min(0).max(365),
   postalCode: z.string().trim().min(1).max(20), returnTo: z.string().trim().startsWith("/").default("/settings"),
   street: z.string().trim().min(1).max(180), vatId: z.string().trim().min(1).max(40),
+});
+
+const eboekhoudenConnectionSchema = z.object({
+  apiSource: z.string().trim().min(1).max(10).regex(/^[\w ]+$/),
+  apiToken: z.string().trim().min(1).max(500),
+  returnTo: z.string().trim().startsWith("/").default("/settings"),
 });
 
 const dueRecurringInvoicesSchema = z.object({
@@ -186,6 +195,42 @@ export async function saveTenantInvoiceProfileAction(formData: FormData) {
     await writeAuditLog({ action: "tenant_invoice_profile.update", details: { fields: ["legalName", "address", "kvkNumber", "vatId", "invoiceEmail", "paymentTermDays", "invoicePrefix"] }, entityId: currentTenant.id, entityType: "tenant_invoice_profile", outcome: "success", summary: "Updated the tenant invoice profile for future Kify invoices." }, undefined, { email: session.user.email ?? null, kind: "user" });
     revalidatePath("/settings");
     redirectWithMessage(parsed.data.returnTo, { notice: "Invoice profile saved for future invoices." });
+  } catch (error) {
+    unstable_rethrow(error);
+    redirectWithMessage(parsed.data.returnTo, { error: serializeError(error) });
+  }
+}
+
+export async function saveEboekhoudenConnectionAction(formData: FormData) {
+  const parsed = eboekhoudenConnectionSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirectWithMessage("/settings", {
+      error: "Enter a valid e-Boekhouden API source and token.",
+    });
+  }
+
+  const session = await requireViewerSession();
+  const { currentTenant } = await getCurrentTenantSelectionForViewer();
+
+  try {
+    await upsertTenantEboekhoudenCredentials(parsed.data, currentTenant.id);
+    await writeAuditLog(
+      {
+        action: "tenant_eboekhouden_connection.update",
+        details: { apiSource: parsed.data.apiSource },
+        entityId: currentTenant.id,
+        entityType: "tenant_eboekhouden_connection",
+        outcome: "success",
+        summary: "Updated the optional e-Boekhouden connection.",
+      },
+      undefined,
+      { email: session.user.email ?? null, kind: "user" },
+    );
+    revalidatePath("/customers");
+    revalidatePath("/settings");
+    redirectWithMessage(parsed.data.returnTo, {
+      notice: "e-Boekhouden connection saved. You can now import customers.",
+    });
   } catch (error) {
     unstable_rethrow(error);
     redirectWithMessage(parsed.data.returnTo, { error: serializeError(error) });

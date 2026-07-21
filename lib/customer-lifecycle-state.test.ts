@@ -55,7 +55,7 @@ describe("customer lifecycle state", () => {
     assert.equal(result.reason, "subscription_payment_action_required");
   });
 
-  it("derives setup need for missing accounting relation", () => {
+  it("does not require an accounting relation for an active subscription", () => {
     const result = deriveCustomerLifecycleState(
       {
         eboekhoudenLinkStatus: "unlinked",
@@ -66,8 +66,8 @@ describe("customer lifecycle state", () => {
       { now },
     );
 
-    assert.equal(result.state, "needs_setup");
-    assert.equal(result.reason, "relation_missing_or_problem");
+    assert.equal(result.state, "active");
+    assert.equal(result.reason, "active_subscription");
   });
 
   it("derives setup need for pending mandate or invalid active mandate", () => {

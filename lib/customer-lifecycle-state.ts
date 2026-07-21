@@ -126,18 +126,6 @@ export function deriveCustomerLifecycleState(
     };
   }
 
-  if (
-    facts.eboekhoudenLinkStatus === "unlinked" ||
-    facts.eboekhoudenLinkStatus === "needs_review" ||
-    facts.eboekhoudenLinkStatus === "sync_error"
-  ) {
-    return {
-      reason: "relation_missing_or_problem",
-      state: "needs_setup",
-      summary: "Customer needs a verified e-Boekhouden relation before billing is complete.",
-    };
-  }
-
   if (isSetupPending(facts)) {
     return {
       reason: "subscription_setup_pending",

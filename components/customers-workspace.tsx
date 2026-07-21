@@ -265,6 +265,7 @@ export function CustomersWorkspace({
   archivedCustomers,
   customers,
   error,
+  hasEboekhoudenConnection,
   initialFocusId,
   initialView = "all",
   notice,
@@ -272,6 +273,7 @@ export function CustomersWorkspace({
   archivedCustomers: CustomerFlowRecord[];
   customers: CustomerFlowRecord[];
   error?: string | null;
+  hasEboekhoudenConnection: boolean;
   initialFocusId?: string | null;
   initialView?: string | null;
   notice?: string | null;
@@ -800,7 +802,11 @@ export function CustomersWorkspace({
         returnTo={returnTo}
       />
 
-      <CreateCustomerDialog open={isCreateCustomerOpen} onOpenChange={setIsCreateCustomerOpen} />
+      <CreateCustomerDialog
+        hasEboekhoudenConnection={hasEboekhoudenConnection}
+        open={isCreateCustomerOpen}
+        onOpenChange={setIsCreateCustomerOpen}
+      />
 
       <CreatePaymentLinkDialog
         key={`customers-payment-${selectedCustomer?.id ?? "none"}-${Number(isCreatePaymentOpen)}`}

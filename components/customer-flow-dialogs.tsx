@@ -70,11 +70,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  REPAIR_RETRY_AFTER_MS,
-  REPAIR_STALE_AFTER_MS,
-  isOlderThan,
-} from "@/lib/freshness";
-import {
   deriveCustomerLifecycleState,
   type CustomerLifecycleStateResult,
 } from "@/lib/customer-lifecycle-state";
@@ -722,38 +717,6 @@ export function getCustomerStage(customer: CustomerFlowRecord): CustomerStage {
   return "new";
 }
 
-function getCustomerRepairStorageKey(customer: CustomerFlowRecord, fingerprint: string) {
-  return `repair:customer:${customer.mode}:${customer.id}:${fingerprint}`;
-}
-
-function shouldAutoRepairCustomer(customer: CustomerFlowRecord) {
-  if (customer.archivedAt) {
-    return false;
-  }
-
-  if (!customer.mollieCustomerId) {
-    return false;
-  }
-
-  if (customer.eboekhoudenLinkStatus === "needs_review") {
-    return true;
-  }
-
-  if (customer.eboekhoudenLinkStatus === "sync_error") {
-    return true;
-  }
-
-  if (customer.latestSubscriptionStatus === "out_of_sync") {
-    return true;
-  }
-
-  if (customer.latestSubscriptionStatus === "payment_action_required") {
-    return true;
-  }
-
-  return isOlderThan(customer.lastSyncedAt, REPAIR_STALE_AFTER_MS);
-}
-
 function localFieldsFromCustomer(customer: CustomerFlowRecord): LocalRelationFields {
   return {
     address: customer.address ?? "",
@@ -1055,9 +1018,11 @@ function MergeEboekhoudenRelationForm({
 }
 
 export function CreateCustomerDialog({
+  hasEboekhoudenConnection,
   open,
   onOpenChange,
 }: Readonly<{
+  hasEboekhoudenConnection: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }>) {
@@ -1103,14 +1068,26 @@ export function CreateCustomerDialog({
 
             <button
               type="button"
-              onClick={() => setStep("import")}
+              onClick={() => {
+                if (hasEboekhoudenConnection) {
+                  setStep("import");
+                } else {
+                  window.location.assign("/settings#eboekhouden-connection");
+                }
+              }}
               className="flex flex-col items-center gap-3 rounded-lg border-2 border-border p-6 transition-colors hover:border-primary hover:bg-accent"
             >
               <FileText className="h-8 w-8 text-muted-foreground" />
               <div className="text-center">
-                <p className="text-sm font-medium">Import from e-Boekhouden</p>
+                <p className="text-sm font-medium">
+                  {hasEboekhoudenConnection
+                    ? "Import from e-Boekhouden"
+                    : "Connect e-Boekhouden to import"}
+                </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Pre-fill from your bookkeeping
+                  {hasEboekhoudenConnection
+                    ? "Pre-fill from your bookkeeping"
+                    : "Set up the optional connection in Settings"}
                 </p>
               </div>
             </button>
@@ -1119,9 +1096,6 @@ export function CreateCustomerDialog({
 
         {step === "scratch" ? (
           <div className="space-y-4">
-            <div className="rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-950">
-              This customer will be unlinked from e-Boekhouden until you link it later.
-            </div>
             <CustomerForm
               action={createCustomerAction}
               onCancel={() => setStep("source")}
@@ -1697,8 +1671,6 @@ export function CustomerDrawer({
   onOpenRestoreCustomer: (customer: CustomerFlowRecord) => void;
 }>) {
   const router = useRouter();
-  const [repairError, setRepairError] = useState<string | null>(null);
-  const [isRepairing, setIsRepairing] = useState(false);
   const [latestConsentUrl, setLatestConsentUrl] = useState<string | null>(null);
   const [isConsentLinkLoading, setIsConsentLinkLoading] = useState(false);
   const [billingHistory, setBillingHistory] = useState<CustomerBillingHistory | null>(null);
@@ -1718,89 +1690,9 @@ export function CustomerDrawer({
   const [resendingInvoiceKey, setResendingInvoiceKey] = useState<string | null>(null);
   const [invoiceResendError, setInvoiceResendError] = useState<string | null>(null);
   const currentCustomerId = customer?.id ?? null;
-
-  useEffect(() => {
-    const currentCustomer = customer;
-
-    if (!open || !currentCustomer) {
-      return;
-    }
-
-    if (!shouldAutoRepairCustomer(currentCustomer)) {
-      return;
-    }
-
-    const fingerprint = [
-      currentCustomer.lastSyncedAt ?? "never",
-      currentCustomer.eboekhoudenLinkStatus,
-      currentCustomer.latestSubscriptionStatus ?? "none",
-    ].join(":");
-    const customerId = currentCustomer.id;
-    const storageKey = getCustomerRepairStorageKey(currentCustomer, fingerprint);
-    const lastAttempt = Number(window.localStorage.getItem(storageKey) ?? "0");
-
-    if (Number.isFinite(lastAttempt) && Date.now() - lastAttempt < REPAIR_RETRY_AFTER_MS) {
-      return;
-    }
-
-    let active = true;
-    window.localStorage.setItem(storageKey, String(Date.now()));
-    setIsRepairing(true);
-    setRepairError(null);
-
-    async function repair() {
-      try {
-        const response = await fetch("/api/reliability/repair", {
-          body: JSON.stringify({
-            id: customerId,
-            kind: "customer",
-          }),
-          headers: {
-            "content-type": "application/json",
-          },
-          method: "POST",
-        });
-        const body = (await response.json().catch(() => null)) as
-          | { error?: string; status?: string }
-          | null;
-
-        if (!response.ok) {
-          throw new Error(
-            body && typeof body.error === "string"
-              ? body.error
-              : "Failed to repair customer state.",
-          );
-        }
-
-        if (active && body?.status === "repaired") {
-          router.refresh();
-        }
-      } catch (repairError) {
-        if (active) {
-          setRepairError(
-            repairError instanceof Error
-              ? repairError.message
-              : "Failed to repair customer state.",
-          );
-        }
-      } finally {
-        if (active) {
-          setIsRepairing(false);
-        }
-      }
-    }
-
-    repair();
-
-    return () => {
-      active = false;
-    };
-  }, [customer, open, router]);
-
-  useEffect(() => {
-    setRepairError(null);
-    setIsRepairing(false);
-  }, [customer?.id]);
+  const hasBillingHistoryToLoad = Boolean(
+    customer?.latestPaymentId || customer?.latestSubscriptionId || customer?.latestFirstPaymentLinkStatus,
+  );
 
   useEffect(() => {
     const customerId = currentCustomerId;
@@ -1864,7 +1756,7 @@ export function CustomerDrawer({
   useEffect(() => {
     const customerId = currentCustomerId;
 
-    if (!open || !customerId) {
+    if (!open || !customerId || !hasBillingHistoryToLoad) {
       setBillingHistory(null);
       setBillingHistoryError(null);
       setIsBillingHistoryLoading(false);
@@ -1925,7 +1817,7 @@ export function CustomerDrawer({
   useEffect(() => {
     const customerId = currentCustomerId;
 
-    if (!open || !customerId) {
+    if (!open || !customerId || !hasBillingHistoryToLoad) {
       setActivityTimeline(null);
       setActivityTimelineError(null);
       setIsActivityTimelineLoading(false);
@@ -1981,7 +1873,7 @@ export function CustomerDrawer({
     return () => {
       active = false;
     };
-  }, [activityTimelineRefreshKey, currentCustomerId, open]);
+  }, [activityTimelineRefreshKey, currentCustomerId, hasBillingHistoryToLoad, open]);
 
   useEffect(() => {
     const customerId = currentCustomerId;
@@ -2183,7 +2075,19 @@ export function CustomerDrawer({
       customer.latestConsentAcceptedAt ||
       customer.latestFirstPaymentPaidAt,
   );
-  const lifecycle = getCustomerLifecycleState(customer);
+  const workflowStatus = showOnboardingSections ? (
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Workflow status</h3>
+      <div className="space-y-0">
+        {["Customer Created", "Consent Link Generated", "First Payment Completed", "Subscription Activation Pending", "Subscription Active"].map((label, index) => {
+          const isCompleted = index <= currentStepIndex;
+          const isCurrent = index === currentStepIndex;
+          const isLast = index === 4;
+          return <div key={label} className="flex gap-3"><div className="flex flex-col items-center"><div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${isCompleted ? "border-primary bg-primary" : "border-muted bg-background"}`}>{isCompleted ? <CheckCircle className="h-3.5 w-3.5 text-primary-foreground" /> : null}</div>{!isLast ? <div className={`min-h-6 w-0.5 flex-1 ${index < currentStepIndex ? "bg-primary" : "bg-muted"}`} /> : null}</div><div className={`pb-6 pt-0.5 text-sm ${isCurrent ? "font-semibold text-foreground" : isCompleted ? "font-medium text-foreground" : "text-muted-foreground"}`}>{label}</div></div>;
+        })}
+      </div>
+    </div>
+  ) : null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -2198,36 +2102,26 @@ export function CustomerDrawer({
         </SheetHeader>
 
         <div className="space-y-8">
-          {isRepairing ? (
-            <div className="flex items-center gap-2 rounded-md border p-4 text-sm text-muted-foreground">
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-              Repairing local customer graph from Mollie...
-            </div>
-          ) : null}
+          {workflowStatus}
 
-          {repairError ? (
-            <Alert variant="destructive">
-              <AlertTitle>Repair failed</AlertTitle>
-              <AlertDescription>{repairError}</AlertDescription>
-            </Alert>
-          ) : null}
+          <Separator />
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Invoice profile
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Complete this before Kify issues the customer&apos;s first invoice.
+            </p>
+            <form action={saveCustomerBillingProfileAction} className="grid gap-2 md:grid-cols-2">
+              <input type="hidden" name="customerId" value={customer.id} />
+              <input type="hidden" name="returnTo" value={`/customers?focus=${encodeURIComponent(customer.id)}`} />
+              {([['legalName','Legal name'],['email','Invoice email'],['street','Street'],['houseNumber','House number'],['postalCode','Postal code'],['city','City'],['countryCode','Country code']] as const).map(([name,label]) => <label key={name} className="grid gap-1 text-xs">{label}<Input name={name} required /></label>)}
+              <div className="md:col-span-2"><Button size="sm" type="submit" variant="outline">Save invoice profile</Button></div>
+            </form>
+          </div>
 
+          <Separator />
           <div className="space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-3 rounded-md border bg-muted/30 p-4">
-              <div className="min-w-0 space-y-1">
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Lifecycle
-                </h3>
-                <p className="text-sm font-medium">{formatLabel(lifecycle.state)}</p>
-                <p className="text-sm text-muted-foreground">{lifecycle.summary}</p>
-                <p className="text-xs text-muted-foreground">
-                  Source: {formatLabel(lifecycle.reason)}
-                </p>
-              </div>
-              {getCustomerLifecycleBadge(customer)}
-            </div>
-
-            <Separator />
 
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
               Personal details
@@ -2422,18 +2316,6 @@ export function CustomerDrawer({
               </div>
             </>
           ) : null}
-
-          <Separator />
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Invoice profile</h3>
-            <form action={saveCustomerBillingProfileAction} className="grid gap-2 md:grid-cols-2">
-              <input type="hidden" name="customerId" value={customer.id} />
-              <input type="hidden" name="returnTo" value={`/customers?focus=${encodeURIComponent(customer.id)}`} />
-              {([['legalName','Legal name'],['email','Invoice email'],['street','Street'],['houseNumber','House number'],['postalCode','Postal code'],['city','City'],['countryCode','Country code']] as const).map(([name,label]) => <label key={name} className="grid gap-1 text-xs">{label}<Input name={name} required /></label>)}
-              <div className="md:col-span-2"><Button size="sm" type="submit" variant="outline">Save invoice profile</Button></div>
-            </form>
-            <p className="text-xs text-muted-foreground">Used only for future Kify invoices; issued documents are unchanged.</p>
-          </div>
 
           <Separator />
           <div className="space-y-4">
@@ -2754,64 +2636,6 @@ export function CustomerDrawer({
               </div>
             ) : null}
           </div>
-
-          {showOnboardingSections ? (
-            <>
-              <Separator />
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Workflow status
-                </h3>
-                <div className="space-y-0">
-                  {[
-                    "Customer Created",
-                    "Consent Link Generated",
-                    "First Payment Completed",
-                    "Subscription Activation Pending",
-                    "Subscription Active",
-                  ].map((label, index) => {
-                    const isCompleted = index <= currentStepIndex;
-                    const isCurrent = index === currentStepIndex;
-                    const isLast = index === 4;
-
-                    return (
-                      <div key={label} className="flex gap-3">
-                        <div className="flex flex-col items-center">
-                          <div
-                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${
-                              isCompleted ? "border-primary bg-primary" : "border-muted bg-background"
-                            }`}
-                          >
-                            {isCompleted ? (
-                              <CheckCircle className="h-3.5 w-3.5 text-primary-foreground" />
-                            ) : null}
-                          </div>
-                          {!isLast ? (
-                            <div
-                              className={`min-h-6 w-0.5 flex-1 ${
-                                index < currentStepIndex ? "bg-primary" : "bg-muted"
-                              }`}
-                            />
-                          ) : null}
-                        </div>
-                        <div
-                          className={`pb-6 pt-0.5 text-sm ${
-                            isCurrent
-                              ? "font-semibold text-foreground"
-                              : isCompleted
-                                ? "font-medium text-foreground"
-                                : "text-muted-foreground"
-                          }`}
-                        >
-                          {label}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </>
-          ) : null}
 
           {showOnboardingSections && hasConsentLinkSection ? (
             <>
