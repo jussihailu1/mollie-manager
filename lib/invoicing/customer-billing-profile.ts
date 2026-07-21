@@ -5,6 +5,27 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { validateCustomerBillingProfile, type CustomerBillingProfileInput } from "@/lib/invoicing/invoice-profile-validation";
 
+export type CustomerBillingProfile = CustomerBillingProfileInput;
+
+export async function getCustomerBillingProfile(input: { customerId: string; tenantId: string }) {
+  const result = await getDb().execute<CustomerBillingProfile>(sql`
+    select
+      legal_name as "legalName",
+      street,
+      house_number as "houseNumber",
+      postal_code as "postalCode",
+      city,
+      country_code as "countryCode",
+      email
+    from customer_billing_profiles
+    where customer_id = ${input.customerId}
+      and tenant_id = ${input.tenantId}
+    limit 1
+  `);
+
+  return result.rows[0] ?? null;
+}
+
 export async function saveCustomerBillingProfile(input: CustomerBillingProfileInput & { customerId: string; tenantId: string }) {
   validateCustomerBillingProfile(input);
   const owned = await getDb().execute(sql`select id from customers where id = ${input.customerId} and tenant_id = ${input.tenantId} limit 1`);

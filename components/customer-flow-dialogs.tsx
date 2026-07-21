@@ -5,14 +5,12 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   Activity,
-  AlertTriangle,
   Archive,
   Check,
   CheckCircle,
   Copy,
   ExternalLink,
   FileText,
-  Link as LinkIcon,
   Mail,
   MapPin,
   PenLine,
@@ -187,6 +185,16 @@ type CustomerBillingHistory = {
   }[];
 };
 
+type CustomerInvoiceProfile = {
+  city: string;
+  countryCode: string;
+  email: string;
+  houseNumber: string;
+  legalName: string;
+  postalCode: string;
+  street: string;
+};
+
 type CustomerActivityTimeline = {
   items: {
     entityId: string;
@@ -248,62 +256,6 @@ export type CustomerStage =
   | "payment_completed"
   | "subscription_activation_pending"
   | "subscription_active";
-
-type CustomerActionKind =
-  | "create_payment"
-  | "confirm_payment"
-  | "activation_pending"
-  | "create_subscription"
-  | "active";
-
-export function getEboekhoudenStatusBadge(customer: CustomerFlowRecord) {
-  switch (customer.eboekhoudenLinkStatus) {
-    case "linked":
-      return (
-        <Badge variant="secondary">
-          <LinkIcon className="mr-1 h-3 w-3" />
-          e-Boekhouden
-        </Badge>
-      );
-    case "needs_review":
-      return (
-        <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100/80">
-          Needs review
-        </Badge>
-      );
-    case "sync_error":
-      return <Badge variant="destructive">Sync error</Badge>;
-    default:
-      return (
-        <Badge variant="outline" className="border-yellow-300 text-yellow-700">
-          <AlertTriangle className="mr-1 h-3 w-3" />
-          Unlinked
-        </Badge>
-      );
-  }
-}
-
-function getCustomerActionKind(customer: CustomerFlowRecord): CustomerActionKind {
-  const stage = getCustomerStage(customer);
-
-  if (stage === "subscription_active") {
-    return "active";
-  }
-
-  if (stage === "subscription_activation_pending") {
-    return "activation_pending";
-  }
-
-  if (stage === "payment_completed") {
-    return "create_subscription";
-  }
-
-  if (stage === "payment_pending") {
-    return "confirm_payment";
-  }
-
-  return "create_payment";
-}
 
 function formatSubscriptionInterval(value: string | null) {
   switch (value) {
@@ -684,6 +636,76 @@ function CustomerForm({
         <Button type="submit">{submitLabel}</Button>
       </DialogFooter>
     </form>
+  );
+}
+
+function CustomerInvoiceProfileDialog({
+  customer,
+  onOpenChange,
+  open,
+  profile,
+}: Readonly<{
+  customer: CustomerFlowRecord;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  profile: CustomerInvoiceProfile | null;
+}>) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{profile ? "Edit invoice profile" : "Complete invoice profile"}</DialogTitle>
+          <DialogDescription>
+            Used only for future Kify invoices. Issued invoices are never changed.
+          </DialogDescription>
+        </DialogHeader>
+        <form action={saveCustomerBillingProfileAction} className="space-y-4">
+          <input type="hidden" name="customerId" value={customer.id} />
+          <input type="hidden" name="countryCode" value="NL" />
+          <input
+            type="hidden"
+            name="returnTo"
+            value={`/customers?focus=${encodeURIComponent(customer.id)}`}
+          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            {([
+              ["legalName", "Legal name", customer.businessName ?? customer.contactName ?? ""],
+              ["email", "Invoice email", customer.email],
+              ["street", "Street", ""],
+              ["houseNumber", "House number", ""],
+              ["postalCode", "Postal code", ""],
+              ["city", "City", ""],
+            ] as const).map(([name, label, fallback]) => (
+              <div key={name} className="space-y-2">
+                <Label htmlFor={`invoice-profile-${name}`}>
+                  {label}
+                  <span
+                    aria-label="Required to issue future Kify invoices"
+                    className="ml-1 cursor-help text-foreground"
+                    title="Required to issue future Kify invoices"
+                  >
+                    *
+                  </span>
+                </Label>
+                <Input
+                  defaultValue={profile?.[name] ?? fallback}
+                  id={`invoice-profile-${name}`}
+                  name={name}
+                  required
+                  type={name === "email" ? "email" : "text"}
+                />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit">Save invoice profile</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1653,7 +1675,6 @@ export function CustomerDrawer({
   onOpenChange,
   onOpenCreatePayment,
   onOpenConfirmPayment,
-  onOpenLinkEboekhouden,
   onOpenCreateSubscription,
   onOpenRecordCancellationRequest,
   onOpenArchiveCustomer,
@@ -1664,7 +1685,6 @@ export function CustomerDrawer({
   onOpenChange: (open: boolean) => void;
   onOpenCreatePayment: (customer: CustomerFlowRecord) => void;
   onOpenConfirmPayment: (customer: CustomerFlowRecord) => void;
-  onOpenLinkEboekhouden: (customer: CustomerFlowRecord) => void;
   onOpenCreateSubscription: (customer: CustomerFlowRecord) => void;
   onOpenRecordCancellationRequest: (customer: CustomerFlowRecord) => void;
   onOpenArchiveCustomer: (customer: CustomerFlowRecord) => void;
@@ -1689,6 +1709,11 @@ export function CustomerDrawer({
   const [isInvoiceLinksLoading, setIsInvoiceLinksLoading] = useState(false);
   const [resendingInvoiceKey, setResendingInvoiceKey] = useState<string | null>(null);
   const [invoiceResendError, setInvoiceResendError] = useState<string | null>(null);
+  const [invoiceProfile, setInvoiceProfile] = useState<CustomerInvoiceProfile | null>(null);
+  const [invoiceProfileError, setInvoiceProfileError] = useState<string | null>(null);
+  const [isInvoiceProfileLoading, setIsInvoiceProfileLoading] = useState(false);
+  const [isInvoiceProfileOpen, setIsInvoiceProfileOpen] = useState(false);
+  const [invoiceProfileRefreshKey, setInvoiceProfileRefreshKey] = useState(0);
   const currentCustomerId = customer?.id ?? null;
   const hasBillingHistoryToLoad = Boolean(
     customer?.latestPaymentId || customer?.latestSubscriptionId || customer?.latestFirstPaymentLinkStatus,
@@ -1752,6 +1777,59 @@ export function CustomerDrawer({
       active = false;
     };
   }, [currentCustomerId, open]);
+
+  useEffect(() => {
+    const customerId = currentCustomerId;
+
+    if (!open || !customerId) {
+      setInvoiceProfile(null);
+      setInvoiceProfileError(null);
+      setIsInvoiceProfileLoading(false);
+      return;
+    }
+
+    let active = true;
+    const resolvedCustomerId = customerId;
+    setInvoiceProfile(null);
+    setInvoiceProfileError(null);
+    setIsInvoiceProfileLoading(true);
+
+    async function loadInvoiceProfile() {
+      try {
+        const response = await fetch(
+          `/api/customers/${encodeURIComponent(resolvedCustomerId)}/invoice-profile`,
+          { cache: "no-store" },
+        );
+        const payload = (await response.json().catch(() => null)) as
+          | { profile?: CustomerInvoiceProfile | null }
+          | null;
+
+        if (!response.ok) {
+          throw new Error("Could not load the invoice profile.");
+        }
+
+        if (active) {
+          setInvoiceProfile(payload?.profile ?? null);
+        }
+      } catch (error) {
+        if (active) {
+          setInvoiceProfileError(
+            error instanceof Error ? error.message : "Could not load the invoice profile.",
+          );
+        }
+      } finally {
+        if (active) {
+          setIsInvoiceProfileLoading(false);
+        }
+      }
+    }
+
+    loadInvoiceProfile();
+
+    return () => {
+      active = false;
+    };
+  }, [currentCustomerId, invoiceProfileRefreshKey, open]);
 
   useEffect(() => {
     const customerId = currentCustomerId;
@@ -2048,13 +2126,14 @@ export function CustomerDrawer({
   const stage = getCustomerStage(customer);
   const isArchived = Boolean(customer.archivedAt);
   const showOnboardingSections = stage !== "subscription_active";
-  const currentStepIndex = [
-    "new",
-    "payment_pending",
+  const invoiceProfileReady = Boolean(invoiceProfile) && !invoiceProfileError;
+  const consentCreated = stage !== "new";
+  const firstPaymentCompleted = [
     "payment_completed",
     "subscription_activation_pending",
     "subscription_active",
-  ].indexOf(stage);
+  ].includes(stage);
+  const subscriptionActive = stage === "subscription_active";
   const latestPaymentDateLabel =
     customer.latestPaymentStatus === "paid" && customer.latestPaymentPaidAt
       ? "Paid on"
@@ -2075,19 +2154,96 @@ export function CustomerDrawer({
       customer.latestConsentAcceptedAt ||
       customer.latestFirstPaymentPaidAt,
   );
-  const workflowStatus = showOnboardingSections ? (
+  const workflowSteps = [
+    { complete: true, label: "Customer created" },
+    {
+      action:
+        !isArchived && !isInvoiceProfileLoading
+          ? () => setIsInvoiceProfileOpen(true)
+          : undefined,
+      actionLabel: invoiceProfileReady ? "View / edit" : "Complete profile",
+      complete: invoiceProfileReady,
+      label: "Invoice profile",
+    },
+    {
+      action:
+        !isArchived && invoiceProfileReady && stage === "new"
+          ? () => onOpenCreatePayment(customer)
+          : undefined,
+      actionLabel: "Create consent link",
+      complete: consentCreated,
+      label: "Consent link",
+      locked: !invoiceProfileReady,
+    },
+    {
+      action:
+        !isArchived && stage === "payment_pending"
+          ? () => onOpenConfirmPayment(customer)
+          : undefined,
+      actionLabel: "Refresh payment",
+      complete: firstPaymentCompleted,
+      label: "First payment",
+      locked: !consentCreated,
+    },
+    {
+      action:
+        !isArchived && (stage === "payment_completed" || stage === "subscription_activation_pending")
+          ? () => onOpenCreateSubscription(customer)
+          : undefined,
+      actionLabel: stage === "subscription_activation_pending" ? "Retry activation" : "Activate subscription",
+      complete: subscriptionActive,
+      label: "Subscription activation",
+      locked: !firstPaymentCompleted,
+    },
+    { complete: subscriptionActive, label: "Subscription active", locked: !subscriptionActive },
+  ];
+  const workflowStatus = (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Workflow status</h3>
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        Workflow status
+      </h3>
       <div className="space-y-0">
-        {["Customer Created", "Consent Link Generated", "First Payment Completed", "Subscription Activation Pending", "Subscription Active"].map((label, index) => {
-          const isCompleted = index <= currentStepIndex;
-          const isCurrent = index === currentStepIndex;
-          const isLast = index === 4;
-          return <div key={label} className="flex gap-3"><div className="flex flex-col items-center"><div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${isCompleted ? "border-primary bg-primary" : "border-muted bg-background"}`}>{isCompleted ? <CheckCircle className="h-3.5 w-3.5 text-primary-foreground" /> : null}</div>{!isLast ? <div className={`min-h-6 w-0.5 flex-1 ${index < currentStepIndex ? "bg-primary" : "bg-muted"}`} /> : null}</div><div className={`pb-6 pt-0.5 text-sm ${isCurrent ? "font-semibold text-foreground" : isCompleted ? "font-medium text-foreground" : "text-muted-foreground"}`}>{label}</div></div>;
+        {workflowSteps.map((step, index) => {
+          const isLast = index === workflowSteps.length - 1;
+          const isActionable = Boolean(step.action);
+
+          return (
+            <div key={step.label} className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <div
+                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${
+                    step.complete
+                      ? "border-primary bg-primary"
+                      : isActionable
+                        ? "border-primary bg-background"
+                        : "border-muted bg-background"
+                  }`}
+                >
+                  {step.complete ? <CheckCircle className="h-3.5 w-3.5 text-primary-foreground" /> : null}
+                </div>
+                {!isLast ? <div className={`min-h-8 w-0.5 flex-1 ${step.complete ? "bg-primary" : "bg-muted"}`} /> : null}
+              </div>
+              <div className="min-w-0 flex-1 pb-6 pt-0.5">
+                <p className={step.complete ? "text-sm font-medium" : step.locked ? "text-sm text-muted-foreground" : "text-sm font-semibold"}>
+                  {step.label}
+                </p>
+                {step.locked && !step.complete ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {step.label === "Consent link" ? "Complete the invoice profile first." : "Complete the previous step first."}
+                  </p>
+                ) : null}
+                {step.action ? (
+                  <Button type="button" size="sm" variant="outline" className="mt-2" onClick={step.action}>
+                    {step.actionLabel}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          );
         })}
       </div>
     </div>
-  ) : null;
+  );
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -2106,18 +2262,46 @@ export function CustomerDrawer({
 
           <Separator />
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Invoice profile
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              Complete this before Kify issues the customer&apos;s first invoice.
-            </p>
-            <form action={saveCustomerBillingProfileAction} className="grid gap-2 md:grid-cols-2">
-              <input type="hidden" name="customerId" value={customer.id} />
-              <input type="hidden" name="returnTo" value={`/customers?focus=${encodeURIComponent(customer.id)}`} />
-              {([['legalName','Legal name'],['email','Invoice email'],['street','Street'],['houseNumber','House number'],['postalCode','Postal code'],['city','City'],['countryCode','Country code']] as const).map(([name,label]) => <label key={name} className="grid gap-1 text-xs">{label}<Input name={name} required /></label>)}
-              <div className="md:col-span-2"><Button size="sm" type="submit" variant="outline">Save invoice profile</Button></div>
-            </form>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Invoice profile
+                </h3>
+                {isInvoiceProfileLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading invoice profile...</p>
+                ) : invoiceProfileError ? (
+                  <p className="text-sm text-destructive">{invoiceProfileError}</p>
+                ) : invoiceProfile ? (
+                  <>
+                    <p className="text-sm font-medium">{invoiceProfile.legalName}</p>
+                    <p className="text-sm text-muted-foreground">{invoiceProfile.email}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {invoiceProfile.street} {invoiceProfile.houseNumber}, {invoiceProfile.postalCode} {invoiceProfile.city}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Required before Kify issues the customer&apos;s first invoice.
+                  </p>
+                )}
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant={invoiceProfile ? "outline" : "default"}
+                className="w-full"
+                disabled={isInvoiceProfileLoading}
+                onClick={() => setIsInvoiceProfileOpen(true)}
+              >
+                <PenLine className="mr-2 h-4 w-4" />
+                {invoiceProfile ? "View / edit" : "Complete profile"}
+              </Button>
+              {invoiceProfileError ? (
+                <Button type="button" size="sm" variant="ghost" onClick={() => setInvoiceProfileRefreshKey((value) => value + 1)}>
+                  Retry
+                </Button>
+              ) : null}
+            </div>
           </div>
 
           <Separator />
@@ -2153,31 +2337,6 @@ export function CustomerDrawer({
                   <span className="italic text-muted-foreground">{customer.notes}</span>
                 </div>
               ) : null}
-              <div className="flex items-start gap-3">
-                <LinkIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm">
-                      {customer.eboekhoudenRelationCode
-                        ? `e-Boekhouden linked${customer.eboekhoudenRelationCode ? ` · Relation ${customer.eboekhoudenRelationCode}` : ""}`
-                        : "No e-Boekhouden relation linked."}
-                    </span>
-                    {customer.eboekhoudenLinkStatus !== "linked"
-                      ? getEboekhoudenStatusBadge(customer)
-                      : null}
-                  </div>
-                </div>
-                {!isArchived && customer.eboekhoudenLinkStatus === "unlinked" ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onOpenLinkEboekhouden(customer)}
-                  >
-                    Link
-                  </Button>
-                ) : null}
-              </div>
             </div>
           </div>
 
@@ -2677,34 +2836,6 @@ export function CustomerDrawer({
               </Button>
             ) : null}
 
-            {!isArchived && getCustomerActionKind(customer) === "create_payment" ? (
-              <Button className="w-full" onClick={() => onOpenCreatePayment(customer)}>
-                <LinkIcon className="mr-2 h-4 w-4" />
-                Create Consent Link
-              </Button>
-            ) : null}
-
-            {!isArchived && getCustomerActionKind(customer) === "confirm_payment" ? (
-              <Button className="w-full" onClick={() => onOpenConfirmPayment(customer)}>
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Refresh Payment
-              </Button>
-            ) : null}
-
-            {!isArchived && getCustomerActionKind(customer) === "create_subscription" ? (
-              <Button className="w-full" onClick={() => onOpenCreateSubscription(customer)}>
-                <Repeat className="mr-2 h-4 w-4" />
-                Create Subscription
-              </Button>
-            ) : null}
-
-            {!isArchived && getCustomerActionKind(customer) === "activation_pending" ? (
-              <Button className="w-full" variant="outline" onClick={() => onOpenCreateSubscription(customer)}>
-                <Repeat className="mr-2 h-4 w-4" />
-                Retry Subscription Activation
-              </Button>
-            ) : null}
-
             {!isArchived && canRecordCancellationRequest(customer) ? (
               <Button
                 className="w-full"
@@ -2717,17 +2848,26 @@ export function CustomerDrawer({
             ) : null}
 
             {!isArchived ? (
-              <Button
-                className="w-full border-destructive/40 text-destructive hover:border-destructive hover:bg-destructive hover:text-destructive-foreground"
-                variant="outline"
-                onClick={() => onOpenArchiveCustomer(customer)}
-              >
-                <Archive className="mr-2 h-4 w-4" />
-                Archive Customer
-              </Button>
+              <>
+                <Separator className="my-4" />
+                <Button
+                  className="w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  variant="ghost"
+                  onClick={() => onOpenArchiveCustomer(customer)}
+                >
+                  <Archive className="mr-2 h-4 w-4" />
+                  Archive Customer
+                </Button>
+              </>
             ) : null}
           </div>
         </div>
+        <CustomerInvoiceProfileDialog
+          customer={customer}
+          onOpenChange={setIsInvoiceProfileOpen}
+          open={isInvoiceProfileOpen}
+          profile={invoiceProfile}
+        />
       </SheetContent>
     </Sheet>
   );

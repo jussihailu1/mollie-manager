@@ -211,6 +211,9 @@ live proof visible:
     tokens; do not apply one-off route-level color fixes
 13. broader roles, self-serve tenant administration, invites, and platform billing
 14. Application Fees or Resell Pricing after commercial and tax policy is approved
+15. low-priority Dutch address lookup for invoice-profile forms; use PDOK as an
+    optional assist, keep manual entry available, and do not let lookup failure
+    block invoice issuance
 
 Pause/resume remains out of scope while Mollie cancellation is irreversible.
 Marketplace, Split Payments, balance transfers, programmatic payouts, Orders,

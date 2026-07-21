@@ -41,7 +41,7 @@ const billingSettingsSchema = z.object({
 });
 
 const tenantInvoiceProfileSchema = z.object({
-  city: z.string().trim().min(1).max(120), countryCode: z.string().trim().length(2),
+  city: z.string().trim().min(1).max(120), countryCode: z.literal("NL").default("NL"),
   houseNumber: z.string().trim().min(1).max(40), invoiceEmail: z.string().trim().email(),
   invoicePrefix: z.string().trim().min(1).max(20), kvkNumber: z.string().trim().min(1).max(40),
   legalName: z.string().trim().min(1).max(180), paymentTermDays: z.coerce.number().int().min(0).max(365),

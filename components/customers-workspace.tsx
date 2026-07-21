@@ -20,7 +20,6 @@ import {
   CreatePaymentLinkDialog,
   CreateSubscriptionDialog,
   CustomerDrawer,
-  LinkEboekhoudenRelationDialog,
   RecordCancellationRequestDialog,
   type CustomerFlowRecord,
   getCustomerDisplayName,
@@ -297,7 +296,6 @@ export function CustomersWorkspace({
   const [isConfirmPaymentOpen, setIsConfirmPaymentOpen] = useState(false);
   const [isCreateSubscriptionOpen, setIsCreateSubscriptionOpen] = useState(false);
   const [isRecordCancellationRequestOpen, setIsRecordCancellationRequestOpen] = useState(false);
-  const [isLinkEboekhoudenOpen, setIsLinkEboekhoudenOpen] = useState(false);
   const [archiveAction, setArchiveAction] = useState<"archive" | "restore">("archive");
   const [isArchiveDialogOpen, setIsArchiveDialogOpen] = useState(false);
   const [isCustomerDrawerOpen, setIsCustomerDrawerOpen] = useState(Boolean(focusedCustomer));
@@ -769,11 +767,6 @@ export function CustomersWorkspace({
           setSelectedCustomerId(customer.id);
           setTimeout(() => setIsConfirmPaymentOpen(true), 150);
         }}
-        onOpenLinkEboekhouden={(customer) => {
-          setIsCustomerDrawerOpen(false);
-          setSelectedCustomerId(customer.id);
-          setTimeout(() => setIsLinkEboekhoudenOpen(true), 150);
-        }}
         onOpenCreateSubscription={(customer) => {
           setIsCustomerDrawerOpen(false);
           setSelectedCustomerId(customer.id);
@@ -821,15 +814,6 @@ export function CustomersWorkspace({
         customer={selectedCustomer}
         open={isConfirmPaymentOpen}
         onOpenChange={setIsConfirmPaymentOpen}
-      />
-
-      <LinkEboekhoudenRelationDialog
-        key={`customers-eboekhouden-${selectedCustomer?.id ?? "none"}-${Number(
-          isLinkEboekhoudenOpen,
-        )}`}
-        customer={selectedCustomer}
-        open={isLinkEboekhoudenOpen}
-        onOpenChange={setIsLinkEboekhoudenOpen}
       />
 
       <CreateSubscriptionDialog

@@ -92,7 +92,7 @@ const createSubscriptionSchema = z.object({
 });
 
 const customerBillingProfileSchema = z.object({
-  city: z.string().trim().min(1).max(120), countryCode: z.string().trim().length(2), customerId: z.string().uuid(),
+  city: z.string().trim().min(1).max(120), countryCode: z.literal("NL").default("NL"), customerId: z.string().uuid(),
   email: z.string().trim().email(), houseNumber: z.string().trim().min(1).max(40), legalName: z.string().trim().min(1).max(180),
   postalCode: z.string().trim().min(1).max(20), returnTo: z.string().trim().startsWith("/").default("/customers"), street: z.string().trim().min(1).max(180),
 });
