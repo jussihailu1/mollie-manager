@@ -30,6 +30,7 @@ import {
   createFirstPaymentAction,
   createSubscriptionAction,
   linkEboekhoudenRelationAction,
+  saveCustomerBillingProfileAction,
   syncCustomerBillingStateAction,
 } from "@/lib/onboarding/actions";
 import {
@@ -2421,6 +2422,18 @@ export function CustomerDrawer({
               </div>
             </>
           ) : null}
+
+          <Separator />
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Invoice profile</h3>
+            <form action={saveCustomerBillingProfileAction} className="grid gap-2 md:grid-cols-2">
+              <input type="hidden" name="customerId" value={customer.id} />
+              <input type="hidden" name="returnTo" value={`/customers?focus=${encodeURIComponent(customer.id)}`} />
+              {([['legalName','Legal name'],['email','Invoice email'],['street','Street'],['houseNumber','House number'],['postalCode','Postal code'],['city','City'],['countryCode','Country code']] as const).map(([name,label]) => <label key={name} className="grid gap-1 text-xs">{label}<Input name={name} required /></label>)}
+              <div className="md:col-span-2"><Button size="sm" type="submit" variant="outline">Save invoice profile</Button></div>
+            </form>
+            <p className="text-xs text-muted-foreground">Used only for future Kify invoices; issued documents are unchanged.</p>
+          </div>
 
           <Separator />
           <div className="space-y-4">

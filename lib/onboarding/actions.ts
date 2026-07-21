@@ -25,6 +25,7 @@ import {
   getLocalCustomer,
 } from "@/lib/onboarding/action-helpers";
 import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
+import { saveCustomerBillingProfile } from "@/lib/invoicing/customer-billing-profile";
 export const repairCustomerBillingState = repairCustomerBillingStateImpl;
 
 const createCustomerSchema = z.object({
@@ -89,6 +90,27 @@ const createSubscriptionSchema = z.object({
   customerId: z.string().uuid(),
   returnTo: z.string().trim().startsWith("/").default("/customers"),
 });
+
+const customerBillingProfileSchema = z.object({
+  city: z.string().trim().min(1).max(120), countryCode: z.string().trim().length(2), customerId: z.string().uuid(),
+  email: z.string().trim().email(), houseNumber: z.string().trim().min(1).max(40), legalName: z.string().trim().min(1).max(180),
+  postalCode: z.string().trim().min(1).max(20), returnTo: z.string().trim().startsWith("/").default("/customers"), street: z.string().trim().min(1).max(180),
+});
+
+export async function saveCustomerBillingProfileAction(formData: FormData) {
+  const parsed = customerBillingProfileSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirectWithMessage("/customers", { error: "Customer invoice profile input is incomplete." });
+  await requireViewerSession();
+  const { currentTenant } = await getCurrentTenantSelectionForViewer();
+  try {
+    await saveCustomerBillingProfile({ ...parsed.data, tenantId: currentTenant.id });
+    revalidatePath("/customers");
+    redirectWithMessage(parsed.data.returnTo, { notice: "Customer invoice profile saved for future invoices." });
+  } catch (error) {
+    unstable_rethrow(error);
+    redirectWithMessage(parsed.data.returnTo, { error: serializeError(error) });
+  }
+}
 
 export async function archiveCustomerAction(formData: FormData) {
   const parsed = customerArchiveSchema.safeParse({
