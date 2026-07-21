@@ -11,18 +11,22 @@ approval decision.
 
 The target model is:
 
-- Kify owns invoice creation, the rendered document, customer delivery, resend,
+- Kify is the default issuer for invoices created by new tenants and owns invoice creation, the rendered document, customer delivery, resend,
   download, and invoice history.
 - Mollie Connect owns payment collection, payment links, customers, mandates,
   subscriptions, and authoritative payment state.
-- e-Boekhouden is an optional tenant accounting integration, not a prerequisite
-  for issuing a Kify invoice.
+- e-Boekhouden is an optional, tenant-scoped issuer choice only after that tenant
+  supplies valid credentials and completes its template and ledger setup.
 - Mollie Sales Invoices is an optional later integration, never the default
   invoice path or a tenant onboarding gate.
 
 This lets a tenant issue an invoice before its first Mollie transaction. Mollie
 payment-method and account approval can still control whether the tenant can
 collect a payment; Kify must state that separately from invoice readiness.
+
+Provider selection affects only new invoices. Existing invoice ownership and
+documents never change. The provider interface remains the extension point for
+future bookkeeping providers; there is no global credential fallback.
 
 ## Why
 

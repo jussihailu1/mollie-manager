@@ -337,9 +337,10 @@ legacy provider IDs, numbers, snapshots, links, and ownership remain unchanged.
 ## Rollout Rules
 
 - Keep the Kify path behind platform-controlled tenant activation until K7.
-- Use the existing active invoice-provider setting internally for migration,
-  adding `kify`; remove the normal-operator provider selector and keep issuer
-  migration and renderer choice in platform-only controls.
+- Default new tenants to `kify`. A tenant may explicitly select e-Boekhouden
+  for future invoices only after tenant-scoped credentials, template, and
+  revenue-ledger setup validate. Keep the provider interface extensible and
+  never change historical invoice ownership.
 - Do not silently switch a tenant. Run readiness first and record the actor,
   prior provider, new issuer, mode, and timestamp in audit evidence.
 - Pilot one controlled test-mode tenant, then one controlled live tenant.

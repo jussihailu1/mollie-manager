@@ -15,6 +15,7 @@ import {
   queueRetryForFailedFirstPaymentInvoicesBatch,
 } from "@/lib/eboekhouden/first-payment-invoices";
 import { updateTenantBillingSettings } from "@/lib/billing-settings";
+import { getTenantEboekhoudenCredentials } from "@/lib/eboekhouden/tenant-credentials";
 import { saveTenantInvoiceProfile } from "@/lib/invoicing/tenant-invoice-profile";
 import {
   createDueRecurringInvoicesBatch,
@@ -23,7 +24,7 @@ import {
 import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
 const billingSettingsSchema = z.object({
-  activeInvoiceProvider: z.enum(["eboekhouden", "mollie"]).default("mollie"),
+  activeInvoiceProvider: z.enum(["eboekhouden", "kify"]).default("kify"),
   invoiceEmailDeliveryMode: z
     .enum(["app_smtp", "eboekhouden", "none"])
     .default("app_smtp"),
@@ -125,6 +126,13 @@ export async function updateBillingSettingsAction(formData: FormData) {
 
   const session = await requireViewerSession();
   const tenantSelection = await getCurrentTenantSelectionForViewer();
+
+  if (parsed.data.activeInvoiceProvider === "eboekhouden") {
+    const credentials = await getTenantEboekhoudenCredentials(tenantSelection.currentTenant.id);
+    if (!credentials || !parsed.data.invoiceTemplateId || !parsed.data.revenueLedgerId) {
+      redirectWithMessage(parsed.data.returnTo, { error: "e-Boekhouden requires tenant credentials, an invoice template, and a revenue ledger." });
+    }
+  }
 
   try {
     const settings = await updateTenantBillingSettings({

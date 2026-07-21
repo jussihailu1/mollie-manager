@@ -74,6 +74,8 @@ contract in
 Kify will issue new invoices, render Dutch PDFs through a provider-neutral
 native PDFKit renderer, store artifacts privately, and preserve existing
 delivery, retry, legacy-document, tenant-isolation, and money-flow safeguards.
+Kify is the default issuer for new tenants; e-Boekhouden remains an explicit,
+tenant-scoped optional issuer after its own credentials and setup validate.
 
 Work through K1 through K8 in order. K1 through K6 are complete; K7 migration
 verification and controlled rollout is the current implementation milestone.

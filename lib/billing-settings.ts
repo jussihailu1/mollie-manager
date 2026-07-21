@@ -69,7 +69,7 @@ export async function ensureTenantBillingSettings(tenantId: string) {
       ) values (
         ${resolvedTenantId},
         ${resolvedTenantId},
-        'mollie',
+        'kify',
         ${DEFAULT_SUBSCRIPTION_VAT_CODE},
         ${DEFAULT_SUBSCRIPTION_VAT_PERCENTAGE},
         'subscription_description',
@@ -125,7 +125,7 @@ export async function getTenantBillingSettings(tenantId: string) {
 
 export async function getTenantActiveInvoiceProvider(tenantId: string) {
   const settings = await ensureTenantBillingSettings(tenantId);
-  return settings?.activeInvoiceProvider ?? "mollie";
+  return settings?.activeInvoiceProvider ?? "kify";
 }
 
 export async function updateTenantBillingSettings(

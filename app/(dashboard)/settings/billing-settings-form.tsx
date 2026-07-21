@@ -51,7 +51,7 @@ export function BillingSettingsForm({
   hasSavedTemplateOutsideDiscovery,
   hasSavedLedgerOutsideDiscovery,
 }: {
-  defaultActiveInvoiceProvider: "eboekhouden" | "mollie";
+  defaultActiveInvoiceProvider: "eboekhouden" | "kify" | "mollie";
   defaultInvoiceTemplateId: number | null | undefined;
   defaultRevenueLedgerId: number | null | undefined;
   hasSavedLedgerOutsideDiscovery: boolean;
@@ -86,7 +86,7 @@ export function BillingSettingsForm({
     <form className="space-y-4" action={updateBillingSettingsAction} ref={formRef}>
       <input type="hidden" name="returnTo" value="/settings" />
       <input type="hidden" name="invoiceEmailDeliveryMode" value="app_smtp" />
-      {activeInvoiceProvider === "mollie" ? (
+      {activeInvoiceProvider !== "eboekhouden" ? (
         <>
           <input type="hidden" name="invoiceTemplateId" value={selectedInvoiceTemplateId} />
           <input type="hidden" name="revenueLedgerId" value={selectedRevenueLedgerId} />
@@ -108,11 +108,11 @@ export function BillingSettingsForm({
               value={activeInvoiceProvider}
               onChange={(event) =>
                 setActiveInvoiceProvider(
-                  event.target.value as "eboekhouden" | "mollie",
+                  event.target.value as "eboekhouden" | "kify",
                 )
               }
             >
-              <option value="mollie">Mollie</option>
+              <option value="kify">Kify (default)</option>
               <option value="eboekhouden">e-Boekhouden</option>
             </select>
           </div>
@@ -176,7 +176,7 @@ export function BillingSettingsForm({
       <p className="text-xs text-muted-foreground">
         {activeInvoiceProvider === "eboekhouden"
           ? `Loaded ${invoiceTemplates.length} invoice templates and ${ledgers.length} ledger accounts from e-Boekhouden. VAT is fixed to 21% for now.`
-          : "Mollie is the active invoice provider. e-Boekhouden-only template and ledger settings stay stored for later but are not required while Mollie is active."}
+          : "Kify is the default issuer. e-Boekhouden remains optional for tenants with completed tenant-scoped accounting setup."}
       </p>
 
       <div className="flex items-center gap-2">

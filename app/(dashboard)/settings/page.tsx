@@ -246,7 +246,7 @@ export default async function SettingsPage({
   const billingSettingsComplete = billingSettingsAreComplete(billingSettings);
   const activeInvoiceProvider = billingSettings?.activeInvoiceProvider ?? "mollie";
   const activeInvoiceProviderLabel =
-    activeInvoiceProvider === "eboekhouden" ? "e-Boekhouden" : "Mollie";
+    activeInvoiceProvider === "eboekhouden" ? "e-Boekhouden" : activeInvoiceProvider === "kify" ? "Kify" : "Mollie";
 
   if (!canManageAdvancedOperations) {
     return (
@@ -363,6 +363,16 @@ export default async function SettingsPage({
               </Alert>
             ) : null}
 
+            <BillingSettingsForm
+              defaultActiveInvoiceProvider={activeInvoiceProvider}
+              defaultInvoiceTemplateId={billingSettings?.invoiceTemplateId}
+              defaultRevenueLedgerId={billingSettings?.revenueLedgerId}
+              hasSavedLedgerOutsideDiscovery={hasSavedLedgerOutsideDiscovery}
+              hasSavedTemplateOutsideDiscovery={hasSavedTemplateOutsideDiscovery}
+              invoiceTemplates={invoiceTemplates}
+              ledgers={ledgers}
+            />
+
             {activeInvoiceProvider === "kify" ? (
               <form action={saveTenantInvoiceProfileAction} className="grid gap-3 md:grid-cols-2">
                 <p className="md:col-span-2 text-sm text-muted-foreground">Complete the issuer profile for future Kify invoices. Issued invoices are never changed.</p>
@@ -371,17 +381,7 @@ export default async function SettingsPage({
                 <input type="hidden" name="returnTo" value="/settings" />
                 <div className="md:col-span-2"><Button type="submit">Save invoice profile</Button></div>
               </form>
-            ) : (
-              <BillingSettingsForm
-                defaultActiveInvoiceProvider={activeInvoiceProvider}
-                defaultInvoiceTemplateId={billingSettings?.invoiceTemplateId}
-                defaultRevenueLedgerId={billingSettings?.revenueLedgerId}
-                hasSavedLedgerOutsideDiscovery={hasSavedLedgerOutsideDiscovery}
-                hasSavedTemplateOutsideDiscovery={hasSavedTemplateOutsideDiscovery}
-                invoiceTemplates={invoiceTemplates}
-                ledgers={ledgers}
-              />
-            )}
+            ) : null}
           </CardContent>
         </Card>
       </div>
