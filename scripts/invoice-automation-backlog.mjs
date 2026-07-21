@@ -36,8 +36,8 @@ try {
           p.id as payment_id,
           p.invoice_state,
           p.invoice_failed_at,
-          p.eboekhouden_invoice_id,
-          p.eboekhouden_invoice_number,
+          i.provider_invoice_id,
+          coalesce(i.canonical_invoice_number, i.provider_invoice_number) as invoice_number,
           c.email as customer_email,
           (p.metadata ->> 'invoiceCreationError') as invoice_creation_error,
           (
@@ -45,6 +45,7 @@ try {
             or coalesce(p.metadata ->> 'invoiceCreationError', '') like '%FACT_VERWERK_004%'
           ) as retry_safe
         from payments p
+        left join invoices i on i.tenant_id = p.tenant_id and i.owner_type = 'payment' and i.owner_id = p.id
         left join customers c on c.id = p.customer_id and c.mode = p.mode
         where p.mode = $1
           and p.payment_type = 'first'
@@ -62,8 +63,8 @@ try {
           rbs.invoice_failed_at,
           rbs.planned_collection_date::text as planned_collection_date,
           rbs.invoice_send_due_date::text as invoice_send_due_date,
-          rbs.eboekhouden_invoice_id,
-          rbs.eboekhouden_invoice_number,
+          i.provider_invoice_id,
+          coalesce(i.canonical_invoice_number, i.provider_invoice_number) as invoice_number,
           c.email as customer_email,
           (rbs.metadata ->> 'invoiceCreationError') as invoice_creation_error,
           (
@@ -71,6 +72,7 @@ try {
             or coalesce(rbs.metadata ->> 'invoiceCreationError', '') like '%FACT_VERWERK_004%'
           ) as retry_safe
         from recurring_billing_schedules rbs
+        left join invoices i on i.tenant_id = rbs.tenant_id and i.owner_type = 'recurring_schedule' and i.owner_id = rbs.id
         inner join subscriptions s on s.id = rbs.subscription_id
         inner join customers c on c.id = s.customer_id and c.mode = rbs.mode
         where rbs.mode = $1
@@ -85,8 +87,8 @@ try {
         select
           p.id as payment_id,
           p.invoice_created_at,
-          p.eboekhouden_invoice_id,
-          p.eboekhouden_invoice_number,
+          i.provider_invoice_id,
+          coalesce(i.canonical_invoice_number, i.provider_invoice_number) as invoice_number,
           c.email as customer_email,
           coalesce(p.metadata ->> 'invoiceDeliveryStatus', 'unknown') as invoice_delivery_status,
           coalesce(p.metadata ->> 'invoiceDeliveryError', null) as invoice_delivery_error,
@@ -102,6 +104,7 @@ try {
             else false
           end as invoice_delivery_permanent_failure
         from payments p
+        left join invoices i on i.tenant_id = p.tenant_id and i.owner_type = 'payment' and i.owner_id = p.id
         left join customers c on c.id = p.customer_id and c.mode = p.mode
         where p.mode = $1
           and p.payment_type = 'first'
@@ -118,8 +121,8 @@ try {
           rbs.id as schedule_id,
           rbs.invoice_created_at,
           rbs.planned_collection_date::text as planned_collection_date,
-          rbs.eboekhouden_invoice_id,
-          rbs.eboekhouden_invoice_number,
+          i.provider_invoice_id,
+          coalesce(i.canonical_invoice_number, i.provider_invoice_number) as invoice_number,
           c.email as customer_email,
           coalesce(rbs.metadata ->> 'invoiceDeliveryStatus', 'unknown') as invoice_delivery_status,
           coalesce(rbs.metadata ->> 'invoiceDeliveryError', null) as invoice_delivery_error,
@@ -135,6 +138,7 @@ try {
             else false
           end as invoice_delivery_permanent_failure
         from recurring_billing_schedules rbs
+        left join invoices i on i.tenant_id = rbs.tenant_id and i.owner_type = 'recurring_schedule' and i.owner_id = rbs.id
         inner join subscriptions s on s.id = rbs.subscription_id
         inner join customers c on c.id = s.customer_id and c.mode = rbs.mode
         where rbs.mode = $1

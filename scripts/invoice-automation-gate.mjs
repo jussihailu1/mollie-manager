@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+import nextEnv from "@next/env";
+
+nextEnv.loadEnvConfig(process.cwd());
+
 const appUrl = process.env.APP_URL ?? process.env.AUTH_URL;
 const cronSecret =
   process.env.INVOICE_CRON_SHARED_SECRET ?? process.env.CRON_SECRET;

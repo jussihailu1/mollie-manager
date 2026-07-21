@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 import { readFileSync, existsSync } from "node:fs";
+import nextEnv from "@next/env";
+
+nextEnv.loadEnvConfig(process.cwd());
 
 function hasValue(name) {
   const value = process.env[name];
