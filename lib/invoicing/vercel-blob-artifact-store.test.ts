@@ -8,6 +8,8 @@ describe("Vercel Blob invoice artifact store", () => {
   it("uses deterministic tenant keys and private access without replacement", () => {
     assert.match(source, /invoices\/\$\{input\.tenantId\}\/\$\{input\.mode\}/);
     assert.match(source, /access: "private"/);
+    assert.match(source, /BLOB_READ_WRITE_TOKEN/);
+    assert.match(source, /token: process\.env\.BLOB_READ_WRITE_TOKEN/);
     assert.match(source, /addRandomSuffix: false/);
     assert.match(source, /allowOverwrite: false/);
     assert.match(source, /Invoice artifact replacement is not allowed/);
