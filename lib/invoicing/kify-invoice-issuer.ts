@@ -39,12 +39,15 @@ export function createKifyInvoiceIssuer(input: {
           snapshotSha256: claimed.snapshotSha256,
           tenantId: claimed.snapshot.tenantId,
         });
-        const stored = await input.artifactStore.put({
-          bytes: rendered.bytes,
-          contentType: rendered.contentType,
-          key: artifactKey,
-          sha256: artifactSha256,
-        });
+        const existingArtifact = await input.artifactStore.head({ key: artifactKey });
+        const stored = existingArtifact && existingArtifact.byteSize === rendered.bytes.byteLength && existingArtifact.sha256 === artifactSha256
+          ? { key: artifactKey, ...existingArtifact }
+          : await input.artifactStore.put({
+              bytes: rendered.bytes,
+              contentType: rendered.contentType,
+              key: artifactKey,
+              sha256: artifactSha256,
+            });
         if (stored.byteSize !== rendered.bytes.byteLength || stored.sha256 !== artifactSha256) {
           throw new Error("Kify artifact verification failed after storage.");
         }
