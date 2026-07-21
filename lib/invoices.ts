@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 
 import { getDb, type DbClient } from "@/lib/db";
 
-export type InvoiceProvider = "eboekhouden" | "mollie";
+export type InvoiceProvider = "eboekhouden" | "kify" | "mollie";
 export type InvoiceOwnerType = "payment" | "recurring_schedule";
 
 export type StoredInvoiceRecord = {

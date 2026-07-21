@@ -1,4 +1,6 @@
 import type { MollieMode } from "@/lib/env";
+import { getTenantActiveInvoiceProvider } from "@/lib/billing-settings";
+import { getKifyInvoiceReadiness } from "@/lib/invoicing/kify-readiness-query";
 import { getLocalCustomer } from "@/lib/onboarding/action-helpers";
 import { getCustomerDetail } from "@/lib/onboarding/data";
 import { resolveFirstPaymentCreationBlocker } from "@/lib/onboarding/first-payment-blocker";
@@ -67,6 +69,11 @@ export async function createFirstPaymentActionFlow(input: {
       reason: firstPaymentBlocker,
       status: "blocked",
     };
+  }
+
+  if (input.planInput.firstPaymentMode === "real_installment" && await getTenantActiveInvoiceProvider(input.tenantId) === "kify") {
+    const readiness = await getKifyInvoiceReadiness({ customerId: customer.id, tenantId: input.tenantId });
+    if (!readiness.ok) return { reason: readiness.reason, status: "blocked" };
   }
 
   await createFirstPaymentOnboardingFlow({

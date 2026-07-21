@@ -6,9 +6,10 @@ import { eboekhoudenInvoiceProvider } from "@/lib/invoicing/providers/eboekhoude
 import { mollieInvoiceProvider } from "@/lib/invoicing/providers/mollie";
 
 export function getInvoiceProviderAdapterById(provider: InvoiceProvider) {
-  return provider === "eboekhouden"
-    ? eboekhoudenInvoiceProvider
-    : mollieInvoiceProvider;
+  if (provider === "eboekhouden") return eboekhoudenInvoiceProvider;
+  if (provider === "mollie") return mollieInvoiceProvider;
+
+  throw new Error("Kify invoice issuance must use the Kify workflow; no legacy provider fallback is allowed.");
 }
 
 export async function getTenantInvoiceProviderAdapter(tenantId: string) {

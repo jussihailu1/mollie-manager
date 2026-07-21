@@ -360,15 +360,19 @@ export default async function SettingsPage({
               </Alert>
             ) : null}
 
-            <BillingSettingsForm
-              defaultActiveInvoiceProvider={activeInvoiceProvider}
-              defaultInvoiceTemplateId={billingSettings?.invoiceTemplateId}
-              defaultRevenueLedgerId={billingSettings?.revenueLedgerId}
-              hasSavedLedgerOutsideDiscovery={hasSavedLedgerOutsideDiscovery}
-              hasSavedTemplateOutsideDiscovery={hasSavedTemplateOutsideDiscovery}
-              invoiceTemplates={invoiceTemplates}
-              ledgers={ledgers}
-            />
+            {activeInvoiceProvider === "kify" ? (
+              <p className="text-sm text-muted-foreground">Kify issuance is platform-controlled while its invoice profile and rollout checks are completed.</p>
+            ) : (
+              <BillingSettingsForm
+                defaultActiveInvoiceProvider={activeInvoiceProvider}
+                defaultInvoiceTemplateId={billingSettings?.invoiceTemplateId}
+                defaultRevenueLedgerId={billingSettings?.revenueLedgerId}
+                hasSavedLedgerOutsideDiscovery={hasSavedLedgerOutsideDiscovery}
+                hasSavedTemplateOutsideDiscovery={hasSavedTemplateOutsideDiscovery}
+                invoiceTemplates={invoiceTemplates}
+                ledgers={ledgers}
+              />
+            )}
           </CardContent>
         </Card>
       </div>
