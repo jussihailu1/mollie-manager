@@ -4,10 +4,11 @@ import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
 describe("tenant readiness scope", () => {
-  it("checks tenant-owned live credentials and active provider setup completeness", () => {
+  it("checks tenant-scoped Mollie authentication and active provider setup completeness", () => {
     const source = readFileSync(resolve("lib/tenant-readiness.ts"), "utf8");
 
-    assert.match(source, /getTenantMollieCredentials\(tenantId, "live"\)/);
+    assert.match(source, /getTenantMollieRequestAuthentication\(tenantId, "live"\)/);
+    assert.match(source, /getTenantMollieCapabilitySummary\(tenantId\)/);
     assert.match(source, /getTenantEboekhoudenCredentials\(tenantId\)/);
     assert.match(source, /getTenantBillingSettings\(tenantId\)/);
     assert.match(source, /getInvoiceProviderAdapterById\(activeInvoiceProvider\)\.validateTenantSetup/);
@@ -16,6 +17,7 @@ describe("tenant readiness scope", () => {
     assert.match(source, /billingSettingsAreComplete\(billingSettings\)/);
     assert.match(source, /getTenantSubscriptionPolicyDefaults\(tenantId\)/);
     assert.match(source, /name: "tenant_live_mode_only"/);
+    assert.match(source, /name: "tenant_mollie_payments_capability_ready"/);
     assert.match(source, /name: "tenant_active_invoice_provider_ready"/);
     assert.doesNotMatch(source, /EBOEKHOUDEN_API_TOKEN/);
     assert.doesNotMatch(source, /MOLLIE_DEFAULT_MODE/);

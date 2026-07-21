@@ -11,7 +11,8 @@ import { getTenantEboekhoudenCredentials } from "@/lib/eboekhouden/tenant-creden
 import { env, getSetupStatus } from "@/lib/env";
 import { getInvoiceProviderAdapterById } from "@/lib/invoicing/provider-resolver";
 import { getKifyTenantInvoiceReadiness } from "@/lib/invoicing/kify-readiness-query";
-import { getTenantMollieCredentials } from "@/lib/mollie/tenant-credentials";
+import { getTenantMollieRequestAuthentication } from "@/lib/mollie/client";
+import { getTenantMollieCapabilitySummary } from "@/lib/mollie/tenant-connections";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { getTenantSubscriptionPolicyDefaults } from "@/lib/subscription-policy-defaults";
 
@@ -98,11 +99,14 @@ export function getPlatformReadiness() {
 
 export async function getTenantReadiness(tenantId: string) {
   const tenant = await getTenantLookup(tenantId);
-  const [mollieCredentials, eboekhoudenCredentials, billingSettings] =
+  const [mollieAuthentication, mollieCapability, eboekhoudenCredentials, billingSettings] =
     tenant === null
-      ? [null, null, null]
+      ? [null, null, null, null]
       : await Promise.all([
-          getTenantMollieCredentials(tenantId, "live"),
+          getTenantMollieRequestAuthentication(tenantId, "live")
+            .then((authentication) => authentication.kind)
+            .catch(() => null),
+          getTenantMollieCapabilitySummary(tenantId),
           getTenantEboekhoudenCredentials(tenantId),
           getTenantBillingSettings(tenantId),
         ]);
@@ -152,12 +156,26 @@ export async function getTenantReadiness(tenantId: string) {
     },
     {
       details: {
+        authentication: mollieAuthentication,
         mode: "live",
-        present: mollieCredentials !== null,
+        present: mollieAuthentication !== null,
         required: activeInvoiceProvider === "mollie" || activeInvoiceProvider === "kify",
       },
       name: "tenant_mollie_live_configured",
-      pass: activeInvoiceProvider === "mollie" || activeInvoiceProvider === "kify" ? mollieCredentials !== null : true,
+      pass:
+        activeInvoiceProvider === "mollie" || activeInvoiceProvider === "kify"
+          ? mollieAuthentication !== null
+          : true,
+    },
+    {
+      details: {
+        state: mollieCapability?.state ?? null,
+      },
+      name: "tenant_mollie_payments_capability_ready",
+      pass:
+        activeInvoiceProvider === "mollie" || activeInvoiceProvider === "kify"
+          ? mollieCapability?.paymentReady === true
+          : true,
     },
     {
       details: {
