@@ -3,6 +3,7 @@ import "server-only";
 import { get, head, put } from "@vercel/blob";
 
 import type { InvoiceArtifactStore, StoredInvoiceArtifact } from "@/lib/invoicing/invoice-artifact-store";
+export { buildKifyInvoiceArtifactKey } from "@/lib/invoicing/invoice-artifact-key";
 
 // Prefer an explicitly configured token when both local credentials and Vercel
 // OIDC are present. The Blob SDK otherwise selects OIDC first, which is not
@@ -21,10 +22,6 @@ async function findBlob(key: string) {
     }
     throw error;
   }
-}
-
-export function buildKifyInvoiceArtifactKey(input: { invoiceId: string; mode: "live" | "test"; snapshotSha256: string; tenantId: string }) {
-  return `invoices/${input.tenantId}/${input.mode}/${input.invoiceId}/${input.snapshotSha256}.pdf`;
 }
 
 export const vercelBlobInvoiceArtifactStore: InvoiceArtifactStore = {
