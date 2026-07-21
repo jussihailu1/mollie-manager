@@ -11,6 +11,8 @@ describe("tenant readiness scope", () => {
     assert.match(source, /getTenantEboekhoudenCredentials\(tenantId\)/);
     assert.match(source, /getTenantBillingSettings\(tenantId\)/);
     assert.match(source, /getInvoiceProviderAdapterById\(activeInvoiceProvider\)\.validateTenantSetup/);
+    assert.match(source, /activeInvoiceProvider === "kify"/);
+    assert.match(source, /getKifyTenantInvoiceReadiness\(tenantId\)/);
     assert.match(source, /billingSettingsAreComplete\(billingSettings\)/);
     assert.match(source, /getTenantSubscriptionPolicyDefaults\(tenantId\)/);
     assert.match(source, /name: "tenant_live_mode_only"/);

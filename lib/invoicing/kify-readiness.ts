@@ -22,3 +22,18 @@ export function describeKifyInvoiceReadiness(input: {
     };
   }
 }
+
+export function describeKifyTenantInvoiceReadiness(input: {
+  tenantProfile: TenantInvoiceProfileInput | null;
+}) {
+  try {
+    if (!input.tenantProfile) throw new Error("Complete the tenant invoice profile before enabling Kify invoicing.");
+    validateTenantInvoiceProfile(input.tenantProfile);
+    return { ok: true as const };
+  } catch (error) {
+    return {
+      ok: false as const,
+      reason: error instanceof Error ? error.message : "Kify invoice profile is incomplete.",
+    };
+  }
+}

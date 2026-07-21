@@ -3,7 +3,10 @@ import "server-only";
 import { sql } from "drizzle-orm";
 
 import { getDb } from "@/lib/db";
-import { describeKifyInvoiceReadiness } from "@/lib/invoicing/kify-readiness";
+import {
+  describeKifyInvoiceReadiness,
+  describeKifyTenantInvoiceReadiness,
+} from "@/lib/invoicing/kify-readiness";
 type KifyProfileRow = {
   city: string | null;
   countryCode: string | null;
@@ -53,4 +56,23 @@ export async function getKifyInvoiceReadiness(input: { customerId: string; tenan
     tenantProfile,
     customerProfile,
   });
+}
+
+export async function getKifyTenantInvoiceReadiness(tenantId: string) {
+  const result = await getDb().execute<Pick<KifyProfileRow, "city" | "countryCode" | "houseNumber" | "invoiceEmail" | "invoicePrefix" | "kvkNumber" | "paymentTermDays" | "postalCode" | "street" | "tenantLegalName" | "vatId">>(sql`
+    select
+      tip.legal_name as "tenantLegalName", tip.street, tip.house_number as "houseNumber",
+      tip.postal_code as "postalCode", tip.city, tip.country_code as "countryCode",
+      tip.kvk_number as "kvkNumber", tip.vat_id as "vatId", tip.invoice_email as "invoiceEmail",
+      tip.invoice_prefix as "invoicePrefix", tip.payment_term_days as "paymentTermDays"
+    from tenants t
+    left join tenant_invoice_profiles tip on tip.tenant_id = t.id
+    where t.id = ${tenantId}
+    limit 1
+  `);
+  const row = result.rows[0];
+  const tenantProfile = row?.tenantLegalName && row.city && row.countryCode && row.houseNumber && row.invoiceEmail && row.invoicePrefix && row.kvkNumber && row.paymentTermDays !== null && row.postalCode && row.street && row.vatId
+    ? { city: row.city, countryCode: row.countryCode, houseNumber: row.houseNumber, invoiceEmail: row.invoiceEmail, invoicePrefix: row.invoicePrefix, kvkNumber: row.kvkNumber, legalName: row.tenantLegalName, paymentTermDays: row.paymentTermDays, postalCode: row.postalCode, street: row.street, vatId: row.vatId }
+    : null;
+  return describeKifyTenantInvoiceReadiness({ tenantProfile });
 }

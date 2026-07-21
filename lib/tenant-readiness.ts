@@ -10,6 +10,7 @@ import { getDb } from "@/lib/db";
 import { getTenantEboekhoudenCredentials } from "@/lib/eboekhouden/tenant-credentials";
 import { env, getSetupStatus } from "@/lib/env";
 import { getInvoiceProviderAdapterById } from "@/lib/invoicing/provider-resolver";
+import { getKifyTenantInvoiceReadiness } from "@/lib/invoicing/kify-readiness-query";
 import { getTenantMollieCredentials } from "@/lib/mollie/tenant-credentials";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { getTenantSubscriptionPolicyDefaults } from "@/lib/subscription-policy-defaults";
@@ -115,11 +116,13 @@ export async function getTenantReadiness(tenantId: string) {
               ? "Tenant does not exist."
               : "Tenant billing settings are missing.",
         }
-      : await getInvoiceProviderAdapterById(activeInvoiceProvider).validateTenantSetup({
-          mode: "live",
-          settings: billingSettings,
-          tenantId,
-        });
+      : activeInvoiceProvider === "kify"
+        ? await getKifyTenantInvoiceReadiness(tenantId)
+        : await getInvoiceProviderAdapterById(activeInvoiceProvider).validateTenantSetup({
+            mode: "live",
+            settings: billingSettings,
+            tenantId,
+          });
 
   let subscriptionPolicyDefaultsReady = false;
   let subscriptionPolicyDefaultsIssue: string | null = null;
@@ -151,10 +154,10 @@ export async function getTenantReadiness(tenantId: string) {
       details: {
         mode: "live",
         present: mollieCredentials !== null,
-        required: activeInvoiceProvider === "mollie",
+        required: activeInvoiceProvider === "mollie" || activeInvoiceProvider === "kify",
       },
       name: "tenant_mollie_live_configured",
-      pass: activeInvoiceProvider === "mollie" ? mollieCredentials !== null : true,
+      pass: activeInvoiceProvider === "mollie" || activeInvoiceProvider === "kify" ? mollieCredentials !== null : true,
     },
     {
       details: {

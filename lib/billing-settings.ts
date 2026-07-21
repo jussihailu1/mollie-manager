@@ -233,7 +233,7 @@ export function billingSettingsAreComplete(
     return false;
   }
 
-  if (settings.activeInvoiceProvider === "mollie") {
+  if (settings.activeInvoiceProvider === "mollie" || settings.activeInvoiceProvider === "kify") {
     return true;
   }
 
