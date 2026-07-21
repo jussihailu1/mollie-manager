@@ -70,7 +70,7 @@ Statuses:
 | First-payment and recurring invoice creation | complete | Provider adapters create invoices with tenant context and duplicate-prevention claims. |
 | e-Boekhouden invoicing | complete | Tenant credentials, relation links, invoice settings, creation, reconciliation, and documents exist. |
 | Mollie Sales Invoices | partial | Adapter and readiness probe exist; live use still depends on Mollie Invoicing activation for each tenant organization. |
-| Kify-owned invoicing | partial | K1 canonical foundation exists: tenant/customer billing-profile schema, tenant/mode/year/prefix sequences, immutable canonical invoice fields, line/artifact/attempt records, and exact VAT-inclusive cents validation. No renderer, private storage, issuance, delivery, or live proof exists yet. See `kify-owned-invoicing-implementation-plan.md`. |
+| Kify-owned invoicing | partial | K1-K4 exist: canonical tenant/customer billing data and exact VAT-inclusive cents validation; native PDFKit rendering; replaceable document/storage contracts; deterministic private Blob artifacts with authenticated tenant-fenced document streaming. Issuance, delivery integration, tenant cutover, and controlled rollout remain pending. See `kify-owned-invoicing-implementation-plan.md`. |
 | Invoice delivery, resend, and download | complete | Tenant-scoped delivery evidence, retry, customer invoice links, manual resend, and trusted document fetch exist. |
 | Plan catalog and accounting mappings | missing | Plans, reusable line templates, VAT, discounts, trials, setup fees, proration, and per-plan ledger mapping are later work. |
 

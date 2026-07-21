@@ -10,6 +10,7 @@ describe("Vercel Blob invoice artifact store", () => {
     assert.match(source, /access: "private"/);
     assert.match(source, /BLOB_READ_WRITE_TOKEN/);
     assert.match(source, /token: process\.env\.BLOB_READ_WRITE_TOKEN/);
+    assert.match(source, /BlobNotFoundError/);
     assert.match(source, /addRandomSuffix: false/);
     assert.match(source, /allowOverwrite: false/);
     assert.match(source, /Invoice artifact replacement is not allowed/);

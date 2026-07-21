@@ -9,17 +9,31 @@ import type { InvoiceArtifactStore, StoredInvoiceArtifact } from "@/lib/invoicin
 // available in a local development environment.
 const blobAuthOptions = process.env.BLOB_READ_WRITE_TOKEN ? { token: process.env.BLOB_READ_WRITE_TOKEN } : {};
 
+async function findBlob(key: string) {
+  try {
+    return await head(key, blobAuthOptions);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.name === "BlobNotFoundError" || error.message === "Vercel Blob: The requested blob does not exist")
+    ) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 export function buildKifyInvoiceArtifactKey(input: { invoiceId: string; mode: "live" | "test"; snapshotSha256: string; tenantId: string }) {
   return `invoices/${input.tenantId}/${input.mode}/${input.invoiceId}/${input.snapshotSha256}.pdf`;
 }
 
 export const vercelBlobInvoiceArtifactStore: InvoiceArtifactStore = {
   async head(locator) {
-    const result = await head(locator.key, blobAuthOptions);
+    const result = await findBlob(locator.key);
     return result ? { byteSize: result.size, contentType: "application/pdf", sha256: result.pathname.split("/").at(-1)?.replace(".pdf", "") ?? "" } : null;
   },
   async put(input): Promise<StoredInvoiceArtifact> {
-    const existing = await head(input.key, blobAuthOptions);
+    const existing = await findBlob(input.key);
     if (existing) throw new Error("Invoice artifact replacement is not allowed.");
     await put(input.key, input.bytes, {
       ...blobAuthOptions,
@@ -28,7 +42,7 @@ export const vercelBlobInvoiceArtifactStore: InvoiceArtifactStore = {
       contentType: input.contentType,
       allowOverwrite: false,
     });
-    const stored = await head(input.key, blobAuthOptions);
+    const stored = await findBlob(input.key);
     if (!stored || stored.size !== input.bytes.byteLength) throw new Error("Stored invoice artifact size mismatch.");
     return { key: input.key, byteSize: stored.size, contentType: input.contentType, sha256: input.sha256 };
   },

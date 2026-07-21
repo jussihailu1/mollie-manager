@@ -74,8 +74,8 @@ Kify will issue new invoices, render Dutch PDFs through a provider-neutral
 native PDFKit renderer, store artifacts privately, and preserve existing
 delivery, retry, legacy-document, tenant-isolation, and money-flow safeguards.
 
-Work through K1 through K8 in order. K1 through K3 are complete; K4 private
-artifact storage and access is the current implementation milestone.
+Work through K1 through K8 in order. K1 through K4 are complete; K5 automated
+workflow integration is the current implementation milestone.
 The active program is complete only after controlled live-tenant proof and K8
 archives the implementation plan and promotes the next roadmap milestone.
 

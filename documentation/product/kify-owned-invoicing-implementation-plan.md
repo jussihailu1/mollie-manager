@@ -2,7 +2,7 @@
 
 Status: active implementation contract; implementation in progress
 Created: 2026-07-21
-Active milestone: K4 private artifact storage and access
+Active milestone: K5 automated workflow integration
 Audience: product and engineering
 Authority: [`implementation-roadmap.md`](./implementation-roadmap.md) remains the sole sequencing authority; this document defines the detailed execution contract for its active Kify-owned invoicing milestone
 
@@ -442,7 +442,7 @@ Record the reviewed fixture paths and visual result before marking K3 complete.
 
 ### K4: Private Artifact Storage And Access
 
-Status: blocked
+Status: complete
 
 Implement the Vercel Private Blob adapter, hash/size verification, deterministic
 keys, authenticated document route, and private-stream response behavior.
@@ -467,7 +467,7 @@ git diff --check
 
 ### K5: Automated Workflow Integration
 
-Status: pending
+Status: active
 
 Add the thin Kify issuer adapter/service and connect it to existing
 first-payment and recurring claim flows. Add readiness blockers before real
@@ -607,8 +607,8 @@ facts and commit IDs; link detailed live evidence from an operations document.
 | K1 Canonical invoice foundation | complete | 2026-07-21: paired forward-only Drizzle/raw migrations apply; `npm run db:generate` reports no schema changes; focused canonical-money, numbering, and profile-validation tests pass; `db:check-raw`, typecheck, lint, and diff check pass. | `3b0eda4` + pending verification-snapshot commit |
 | K2 Renderer/storage/document contracts | complete | 2026-07-21: replaceable renderer registry, artifact-store contract, and tenant-fenced Kify/legacy document-service routing pass focused tests; typecheck, lint, and diff check pass. | Pending K2 contract commit |
 | K3 Native PDFKit renderer | complete | 2026-07-21: native PDFKit renderer embeds bundled Noto Sans fonts; paid, automatic-collection, Unicode/long-address, and three-page fixtures render without runtime network access. Visual review confirms readable A4 output, repeated page headers, and no clipping/overlap. Focused test, fixture command, typecheck, lint, and diff check pass. | `764cbbf` + pending fixture completion commit |
-| K4 Private artifact storage and access | blocked | 2026-07-21: private deterministic Vercel Blob adapter, tenant-fenced authenticated document route, focused route/store tests, typecheck, and lint pass. The adapter explicitly prefers `BLOB_READ_WRITE_TOKEN` when local OIDC is also set. Live proof remains blocked: the configured token receives Blob access denied, while OIDC is not enabled for the development environment. | `4996bc6`, `1e8730d`, `75e8fa8` + pending credential-precedence fix |
-| K5 Automated workflow integration | pending | Not started | - |
+| K4 Private artifact storage and access | complete | 2026-07-21: private deterministic Vercel Blob adapter, tenant-fenced authenticated document route, focused route/store tests, full node suite, typecheck, lint, and diff check pass. Live proof confirms missing-key recovery, private write/read, exact hash/size recovery, and replacement rejection. | `4996bc6`, `1e8730d`, `75e8fa8`, `ba62e38` + pending missing-key fix |
+| K5 Automated workflow integration | active | Started after K4 verification | - |
 | K6 Delivery, readiness, UX, and legacy regression | pending | Not started | - |
 | K7 Migration verification and controlled rollout | pending | Not started | - |
 | K8 Documentation synchronization and plan retirement | pending | Not started | - |
