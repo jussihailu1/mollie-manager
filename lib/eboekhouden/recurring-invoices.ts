@@ -51,6 +51,7 @@ import { createInvoiceBatchWithDependencies } from "@/lib/invoice-creation-batch
 import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
 import { saveStoredInvoice, type InvoiceProvider } from "@/lib/invoices";
 import { getInvoiceProviderAdapterById } from "@/lib/invoicing/provider-resolver";
+import { issueKifyInvoice } from "@/lib/invoicing/kify-invoice-workflow";
 import type {
   InvoiceProviderCreateResult,
 } from "@/lib/invoicing/provider-types";
@@ -484,6 +485,11 @@ export async function createInvoiceForSchedule(
   const candidate = await getScheduledInvoiceCandidate(scheduleId, options.tenantId);
   if (!candidate) {
     throw new Error("Recurring billing schedule was not found.");
+  }
+
+  if (provider === "kify") {
+    const result = await issueKifyInvoice({ amountValue: candidate.amountValue, customerId: candidate.customerId, description: candidate.subscriptionDescription, dueDate: candidate.plannedCollectionDate, invoiceDate: candidate.invoiceSendDueDate, mode: candidate.mode, ownerId: candidate.scheduleId, ownerType: "recurring_schedule", paymentContext: { kind: "scheduled_collection", plannedCollectionDate: candidate.plannedCollectionDate }, tenantId: candidate.tenantId });
+    return result.status === "created" ? { invoiceId: result.invoiceId, invoiceNumber: result.invoiceNumber, scheduleId, status: "created" } : { reason: result.status === "failed" ? result.reason : "Schedule was already invoiced.", scheduleId, status: result.status };
   }
 
   const adapter = getInvoiceProviderAdapterById(provider);

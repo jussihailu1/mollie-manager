@@ -16,4 +16,13 @@ describe("Kify invoice workflow guard", () => {
     assert.match(workflow, /firstPaymentMode === "real_installment"/);
     assert.match(workflow, /getTenantActiveInvoiceProvider\(input\.tenantId\) === "kify"/);
   });
+
+  it("routes first payments and due schedules to Kify before legacy adapter resolution", () => {
+    const firstPayment = readFileSync("lib/eboekhouden/first-payment-invoices.ts", "utf8");
+    const recurring = readFileSync("lib/eboekhouden/recurring-invoices.ts", "utf8");
+    assert.ok(firstPayment.indexOf('provider === "kify"') < firstPayment.lastIndexOf("getInvoiceProviderAdapterById(provider)"));
+    assert.ok(recurring.indexOf('provider === "kify"') < recurring.lastIndexOf("getInvoiceProviderAdapterById(provider)"));
+    assert.match(firstPayment, /issueKifyInvoice/);
+    assert.match(recurring, /issueKifyInvoice/);
+  });
 });

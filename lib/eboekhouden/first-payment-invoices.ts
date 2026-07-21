@@ -61,6 +61,7 @@ import { saveStoredInvoice, type InvoiceProvider } from "@/lib/invoices";
 import {
   getInvoiceProviderAdapterById,
 } from "@/lib/invoicing/provider-resolver";
+import { issueKifyInvoice } from "@/lib/invoicing/kify-invoice-workflow";
 import type {
   InvoiceProviderCreateResult,
 } from "@/lib/invoicing/provider-types";
@@ -554,6 +555,16 @@ export async function createInvoiceForFirstPayment(
         "First payment was not found or did not match a deterministic accepted onboarding consent.",
       status: "skipped",
     };
+  }
+
+  if (provider === "kify") {
+    if (!candidate.consentAcceptedAt || candidate.firstPaymentMode !== "real_installment" || !candidate.customerId) return { paymentId, reason: "This first payment is not eligible for Kify invoicing.", status: "skipped" };
+    const invoiceDate = resolveFirstPaymentInvoiceDate({ paidAt: candidate.paidAt, paymentCreatedAt: candidate.paymentCreatedAt });
+    if (!invoiceDate) return { paymentId, reason: "Could not derive the Kify invoice date.", status: "failed" };
+    const plan = subscriptionConsentPlanSnapshotSchema.safeParse(candidate.planSnapshot);
+    if (!plan.success) return { paymentId, reason: "Stored onboarding consent snapshot is invalid.", status: "failed" };
+    const result = await issueKifyInvoice({ amountValue: candidate.amountValue, customerId: candidate.customerId, description: plan.data.description, dueDate: invoiceDate, invoiceDate, mode: candidate.mode, ownerId: candidate.paymentId, ownerType: "payment", paymentContext: { kind: "paid_first_installment", molliePaymentId: candidate.molliePaymentId ?? undefined }, tenantId: candidate.tenantId });
+    return result.status === "created" ? { invoiceId: result.invoiceId, invoiceNumber: result.invoiceNumber, paymentId, status: "created" } : { paymentId, reason: result.status === "failed" ? result.reason : "Payment was already invoiced.", status: result.status };
   }
 
   const adapter = getInvoiceProviderAdapterById(provider);
