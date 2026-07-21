@@ -518,7 +518,7 @@ export function PaymentDrawer({
                 />
                 <ValueRow
                   label="Invoice Number"
-                  value={details.invoice.eboekhoudenInvoiceNumber ?? "-"}
+                  value={details.invoice.invoiceNumber ?? "-"}
                 />
                 <ValueRow
                   label="Attachment Delivery"
@@ -581,14 +581,14 @@ export function PaymentDrawer({
               <DialogHeader>
                 <DialogTitle>Invoice exists</DialogTitle>
                 <DialogDescription>
-                  This payment already has an e-Boekhouden invoice.
+                  This payment already has an invoice.
                 </DialogDescription>
               </DialogHeader>
               {details ? (
                 <div className="space-y-3">
                   <ValueRow
                     label="Invoice number"
-                    value={details.invoice.eboekhoudenInvoiceNumber ?? "-"}
+                    value={details.invoice.invoiceNumber ?? "-"}
                   />
                   <ValueRow
                     label="Stored on"

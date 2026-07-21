@@ -19,6 +19,9 @@ describe("payment drawer tenant scope", () => {
     assert.match(source, /from payments ap[\s\S]*ap\.id = al\.entity_id[\s\S]*ap\.tenant_id = \$\{tenantId\}/);
     assert.match(source, /from recurring_billing_schedules arbs[\s\S]*arbs\.id = al\.entity_id[\s\S]*arbs\.tenant_id = \$\{tenantId\}/);
     assert.match(source, /getInvoiceProviderAdapterById\(storedInvoice\.provider\)/);
+    assert.match(source, /localPayment\.invoiceProvider === "kify"/);
+    assert.match(source, /\/api\/invoices\/\$\{encodeURIComponent\(storedInvoice\.id\)\}\/document/);
+    assert.match(source, /canonical_invoice_number/);
     assert.match(source, /const mollie = await getTenantMollieClient\(tenantId, selectedMode\);/);
   });
 });

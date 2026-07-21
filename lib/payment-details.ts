@@ -31,6 +31,7 @@ export type PaymentInvoiceSummary = {
   documentAttachmentStatus: InvoicePdfAttachmentStatus | null;
   eboekhoudenInvoiceId: string | null;
   eboekhoudenInvoiceNumber: string | null;
+  invoiceNumber: string | null;
   intendedRecipient: string | null;
   invoicePdfUrl: string | null;
   ownerId: string | null;
@@ -47,6 +48,7 @@ export type PaymentDrawerData = {
   customerName: string | null;
   eboekhoudenInvoiceId: string | null;
   eboekhoudenInvoiceNumber: string | null;
+  invoiceNumber: string | null;
   invoice: PaymentInvoiceSummary;
   invoicePdfUrl: string | null;
   invoiceState: PaymentInvoiceState;

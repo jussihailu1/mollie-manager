@@ -17,12 +17,13 @@ type LocalPaymentLookup = {
   eboekhoudenInvoiceId: string | null;
   eboekhoudenInvoiceNumber: string | null;
   id: string;
+  invoiceNumber: string | null;
   invoiceDocumentUrl: string | null;
   invoiceState: PaymentDrawerData["invoiceState"];
   invoiceCreatedAt: string | null;
   invoiceDeliveryIntendedRecipient: string | null;
   invoiceDeliveryRecipient: string | null;
-  invoiceProvider: "eboekhouden" | "mollie" | null;
+  invoiceProvider: "eboekhouden" | "kify" | "mollie" | null;
   invoiceRecipientOverridden: boolean;
   invoiceSentAt: string | null;
   invoiceSource: string | null;
@@ -122,6 +123,17 @@ async function resolveInvoicePdfUrl(
   localPayment: LocalPaymentLookup,
   tenantId: string,
 ) {
+  if (localPayment.invoiceProvider === "kify" && localPayment.invoiceOwnerId) {
+    const storedInvoice = await getStoredInvoiceByOwner({
+      ownerId: localPayment.invoiceOwnerId,
+      ownerType: localPayment.invoiceOwnerType,
+      tenantId,
+    });
+    return storedInvoice?.provider === "kify"
+      ? `/api/invoices/${encodeURIComponent(storedInvoice.id)}/document`
+      : null;
+  }
+
   const metadataUrl =
     normalizeTrustedInvoicePdfUrl(localPayment.invoiceDocumentUrl) ??
     extractInvoicePdfUrl(localPayment.invoiceMetadata);
@@ -178,6 +190,7 @@ async function toPaymentDrawerData(
     customerName: localPayment.customerName,
     eboekhoudenInvoiceId: localPayment.eboekhoudenInvoiceId,
     eboekhoudenInvoiceNumber: localPayment.eboekhoudenInvoiceNumber,
+    invoiceNumber: localPayment.invoiceNumber,
     invoice: {
       createdAt: localPayment.invoiceCreatedAt,
       createdByAction: localPayment.invoiceTriggerAction,
@@ -187,6 +200,7 @@ async function toPaymentDrawerData(
       documentAttachmentStatus,
       eboekhoudenInvoiceId: localPayment.eboekhoudenInvoiceId,
       eboekhoudenInvoiceNumber: localPayment.eboekhoudenInvoiceNumber,
+      invoiceNumber: localPayment.invoiceNumber,
       intendedRecipient: localPayment.invoiceDeliveryIntendedRecipient,
       invoicePdfUrl,
       ownerId: localPayment.invoiceOwnerId,
@@ -308,6 +322,7 @@ export async function GET(request: NextRequest) {
             else 'payment'
           end as invoice_owner_type,
           i.provider as invoice_provider,
+          i.canonical_invoice_number as canonical_invoice_number,
           i.provider_invoice_id as provider_invoice_id,
           i.provider_invoice_number as provider_invoice_number,
           i.provider_document_url as provider_document_url,
@@ -362,6 +377,7 @@ export async function GET(request: NextRequest) {
         ic.invoice_sent_at as "invoiceSentAt",
         ic.provider_invoice_id as "eboekhoudenInvoiceId",
         ic.provider_invoice_number as "eboekhoudenInvoiceNumber",
+        coalesce(ic.canonical_invoice_number, ic.provider_invoice_number, ic.provider_invoice_id) as "invoiceNumber",
         ic.provider_document_url as "invoiceDocumentUrl",
         ic.invoice_metadata as "invoiceMetadata",
         ic.invoice_owner_id as "invoiceOwnerId",
