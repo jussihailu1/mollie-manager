@@ -2,7 +2,7 @@
 
 Status: active implementation contract; implementation in progress
 Created: 2026-07-21
-Active milestone: K5 automated workflow integration
+Active milestone: K6 delivery, readiness, UX, and legacy regression
 Audience: product and engineering
 Authority: [`implementation-roadmap.md`](./implementation-roadmap.md) remains the sole sequencing authority; this document defines the detailed execution contract for its active Kify-owned invoicing milestone
 
@@ -467,7 +467,7 @@ git diff --check
 
 ### K5: Automated Workflow Integration
 
-Status: active
+Status: complete
 
 Add the thin Kify issuer adapter/service and connect it to existing
 first-payment and recurring claim flows. Add readiness blockers before real
@@ -494,7 +494,7 @@ git diff --check
 
 ### K6: Delivery, Readiness, UX, And Legacy Regression
 
-Status: pending
+Status: active
 
 Move delivery, resend, customer history, payment detail, and download consumers
 to `InvoiceDocumentService`; add invoice-profile editing and platform-controlled
@@ -608,7 +608,8 @@ facts and commit IDs; link detailed live evidence from an operations document.
 | K2 Renderer/storage/document contracts | complete | 2026-07-21: replaceable renderer registry, artifact-store contract, and tenant-fenced Kify/legacy document-service routing pass focused tests; typecheck, lint, and diff check pass. | Pending K2 contract commit |
 | K3 Native PDFKit renderer | complete | 2026-07-21: native PDFKit renderer embeds bundled Noto Sans fonts; paid, automatic-collection, Unicode/long-address, and three-page fixtures render without runtime network access. Visual review confirms readable A4 output, repeated page headers, and no clipping/overlap. Focused test, fixture command, typecheck, lint, and diff check pass. | `764cbbf` + pending fixture completion commit |
 | K4 Private artifact storage and access | complete | 2026-07-21: private deterministic Vercel Blob adapter, tenant-fenced authenticated document route, focused route/store tests, full node suite, typecheck, lint, and diff check pass. Live proof confirms missing-key recovery, private write/read, exact hash/size recovery, and replacement rejection. | `4996bc6`, `1e8730d`, `75e8fa8`, `ba62e38` + pending missing-key fix |
-| K5 Automated workflow integration | active | 2026-07-21: Kify is a first-class provider value but fails closed from the legacy adapter resolver; real-installment payment-link creation checks explicit tenant/customer Kify profile readiness before any side effect. The issuer core claims a frozen snapshot before renderer/storage work, uses the deterministic private key, verifies the stored artifact, and only then completes; failure retains the frozen snapshot reference. Tenant-fenced persistence atomically claims an eligible owner, allocates the Kify number, freezes canonical data and lines, and records the render attempt; completion/failure updates the matching owner only after artifact state. Both first-payment and recurring provider dispatches invoke the Kify workflow before legacy adapter resolution; legacy branches remain unchanged. Focused workflow tests, full node suite, typecheck, lint, and diff check pass. | `57a9139`, `6684ce8`, `4d8632f` + pending dispatch commit |
+| K5 Automated workflow integration | complete | 2026-07-21: Kify is first-class and fails closed from legacy provider resolution; real-installment links require explicit tenant/customer profiles before side effects. Tenant-fenced claims freeze numbers, snapshots, lines, and attempts before render/storage; retries reuse the frozen snapshot and deterministic artifact key. First-payment and recurring dispatch before legacy adapters; Kify delivery attaches private streamed bytes server-side. Full node suite, typecheck, lint, and diff check pass. | `57a9139`, `6684ce8`, `4d8632f`, `ac6847c`, `881b24c` |
+| K6 Delivery, readiness, UX, and legacy regression | active | Started after K5 verification | - |
 | K6 Delivery, readiness, UX, and legacy regression | pending | Not started | - |
 | K7 Migration verification and controlled rollout | pending | Not started | - |
 | K8 Documentation synchronization and plan retirement | pending | Not started | - |
