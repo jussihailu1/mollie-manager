@@ -2,7 +2,7 @@
 
 Status: active implementation contract; implementation in progress
 Created: 2026-07-21
-Active milestone: K6 delivery, readiness, UX, and legacy regression
+Active milestone: K7 migration verification and controlled rollout
 Audience: product and engineering
 Authority: [`implementation-roadmap.md`](./implementation-roadmap.md) remains the sole sequencing authority; this document defines the detailed execution contract for its active Kify-owned invoicing milestone
 
@@ -494,7 +494,7 @@ git diff --check
 
 ### K6: Delivery, Readiness, UX, And Legacy Regression
 
-Status: active
+Status: complete
 
 Move delivery, resend, customer history, payment detail, and download consumers
 to `InvoiceDocumentService`; add invoice-profile editing and platform-controlled
@@ -522,7 +522,7 @@ git diff --check
 
 ### K7: Migration Verification And Controlled Rollout
 
-Status: pending
+Status: active
 
 Run full verification, render and inspect final fixtures, prove private storage,
 exercise test mode, and then complete one controlled live tenant flow without
@@ -609,8 +609,8 @@ facts and commit IDs; link detailed live evidence from an operations document.
 | K3 Native PDFKit renderer | complete | 2026-07-21: native PDFKit renderer embeds bundled Noto Sans fonts; paid, automatic-collection, Unicode/long-address, and three-page fixtures render without runtime network access. Visual review confirms readable A4 output, repeated page headers, and no clipping/overlap. Focused test, fixture command, typecheck, lint, and diff check pass. | `764cbbf` + pending fixture completion commit |
 | K4 Private artifact storage and access | complete | 2026-07-21: private deterministic Vercel Blob adapter, tenant-fenced authenticated document route, focused route/store tests, full node suite, typecheck, lint, and diff check pass. Live proof confirms missing-key recovery, private write/read, exact hash/size recovery, and replacement rejection. | `4996bc6`, `1e8730d`, `75e8fa8`, `ba62e38` + pending missing-key fix |
 | K5 Automated workflow integration | complete | 2026-07-21: Kify is first-class and fails closed from legacy provider resolution; real-installment links require explicit tenant/customer profiles before side effects. Tenant-fenced claims freeze numbers, snapshots, lines, and attempts before render/storage; retries reuse the frozen snapshot and deterministic artifact key. First-payment and recurring dispatch before legacy adapters; Kify delivery attaches private streamed bytes server-side. Full node suite, typecheck, lint, and diff check pass. | `57a9139`, `6684ce8`, `4d8632f`, `ac6847c`, `881b24c` |
-| K6 Delivery, readiness, UX, and legacy regression | active | 2026-07-21: Kify delivery bypasses legacy provider resolution and attaches only private stored artifact bytes; new first-payment claims require a paid first payment. Customer history, resend, and payment detail now carry canonical Kify IDs/numbers; the tenant-fenced document service serves private Kify streams and redirects legacy documents. Tenant readiness validates Kify issuer profiles directly, keeps Mollie payment credentials required, and does not require Mollie Invoicing or e-Boekhouden templates. Settings and customer drawers provide tenant-fenced, validated profile forms for future invoices only. Full node suite, typecheck, lint (four pre-existing warnings), build, and diff check pass. | `76f9650`, `e54bd1c`, `266c849`, `2dfc950`, `accf51e` + pending K6 customer-profile commit |
-| K7 Migration verification and controlled rollout | pending | Not started | - |
+| K6 Delivery, readiness, UX, and legacy regression | complete | 2026-07-21: Kify delivery/resend use stored private artifacts; legacy documents remain available; tenant/customer profile forms are explicit, tenant-fenced, and future-only; Kify readiness does not depend on Mollie Invoicing. Full node suite, typecheck, lint (four pre-existing warnings), build, and diff check pass. | `76f9650`, `e54bd1c`, `266c849`, `2dfc950`, `accf51e`, `9c6144b` |
+| K7 Migration verification and controlled rollout | active | Started after K6 verification | - |
 | K8 Documentation synchronization and plan retirement | pending | Not started | - |
 
 ## Execution Rules
