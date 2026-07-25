@@ -48,12 +48,12 @@ export async function queueSubscriptionActivationSuccessNotifications(input: {
   await Promise.all(recipients.rows.map((recipient) => insert("tenant_activated", recipient.email, `Subscription activated for ${row.customerName ?? "customer"}`)));
 }
 
-export async function queueSubscriptionActivationExhaustedNotifications(input: { customerId: string; jobId: string; mode: MollieMode; tenantId: string }) {
+export async function queueSubscriptionActivationExhaustedNotifications(input: { customerId: string; eventKey: string; jobId?: string; mode: MollieMode; tenantId: string }) {
   const db = getDb();
   const recipients = await db.execute<{ email: string }>(sql`select distinct operator_email as email from operator_tenant_memberships where tenant_id = ${input.tenantId}`);
   await Promise.all(recipients.rows.map((recipient) => db.execute(sql`
     insert into subscription_activation_notifications (id, tenant_id, customer_id, job_id, mode, notification_type, event_key, recipient_email, subject)
-    values (${crypto.randomUUID()}, ${input.tenantId}, ${input.customerId}, ${input.jobId}, ${input.mode}, 'tenant_activation_exhausted', ${`job:${input.jobId}`}, ${recipient.email}, 'Subscription activation requires review')
+    values (${crypto.randomUUID()}, ${input.tenantId}, ${input.customerId}, ${input.jobId ?? null}, ${input.mode}, 'tenant_activation_exhausted', ${input.eventKey}, ${recipient.email}, 'Subscription activation requires review')
     on conflict (tenant_id, mode, notification_type, event_key, recipient_email) do nothing
   `)));
 }

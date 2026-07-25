@@ -58,7 +58,7 @@ export async function processSubscriptionActivationJobsBatch(input: { limit: num
     if (Date.parse(job.expiresAt) <= Date.now()) {
       await db.execute(sql`update subscription_activation_jobs set status = 'exhausted', last_error_message = ${error.slice(0, 180)}, claim_token = null, updated_at = now() where id = ${job.id} and claim_token = ${job.claimToken}`);
       const alert = await openAlert({ customerId: job.customerId, message: "Automatic subscription activation could not be completed within 24 hours. Review the customer and Mollie connection.", payload: { consentId: job.consentId, jobId: job.id }, severity: "warning", tenantId: input.tenantId, title: "Subscription activation requires review" });
-      if (alert.isNew) await queueSubscriptionActivationExhaustedNotifications({ customerId: job.customerId, jobId: job.id, mode: input.mode, tenantId: input.tenantId });
+      if (alert.isNew) await queueSubscriptionActivationExhaustedNotifications({ customerId: job.customerId, eventKey: `job:${job.id}`, jobId: job.id, mode: input.mode, tenantId: input.tenantId });
       await writeAuditLog({ action: "subscription.activation_exhausted", details: { jobId: job.id }, entityId: job.customerId, entityType: "customer", mode: input.mode, outcome: "failure", summary: "Automatic subscription activation exhausted its recovery window." }, undefined, { kind: "system" });
       exhaustedCount += alert.isNew ? 1 : 0;
       continue;

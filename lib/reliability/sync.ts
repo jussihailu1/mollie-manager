@@ -3,7 +3,7 @@ import "server-only";
 import { transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
-import { queueSubscriptionActivationForCustomer } from "@/lib/onboarding/subscription-activation-jobs";
+import { deliverSubscriptionActivationNotificationsBatch } from "@/lib/onboarding/subscription-activation-notifications";
 import { runFailedPaymentCustomerNotificationForSyncedPayment } from "@/lib/failed-payment-customer-notifications";
 import { runFirstPaymentInvoiceSyncFollowUp } from "@/lib/reliability/first-payment-sync-followup";
 import {
@@ -167,17 +167,23 @@ export async function syncPaymentByMollieId(
     payment.status === "paid" &&
     shouldRunBillingFollowups(reconciliationMode)
   ) {
-    await queueSubscriptionActivationForCustomer({
-      customerId: resolvedCustomerId,
-      mode,
-      tenantId: resolvedTenantId,
-    });
-    await attemptSubscriptionActivation({
+    const activation = await attemptSubscriptionActivation({
       actor,
       customerId: resolvedCustomerId,
       mode,
       tenantId: resolvedTenantId,
       trigger: "auto",
+    });
+
+    if (activation.status === "failed" || activation.status === "pending_prerequisites") {
+      const reason = activation.status === "failed" ? activation.message : activation.reason;
+      throw new Error(`Subscription activation is not ready: ${reason}`);
+    }
+
+    await deliverSubscriptionActivationNotificationsBatch({
+      limit: 100,
+      mode,
+      tenantId: resolvedTenantId,
     });
   }
 

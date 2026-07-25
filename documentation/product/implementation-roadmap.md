@@ -86,8 +86,10 @@ archives the implementation plan and promotes the next roadmap milestone.
 
 A user-reported paid-first-installment activation failure is being corrected as
 a bounded money-flow reliability slice alongside K7. Paid real-installment and
-mandate-only onboarding now use server-owned activation, durable retry, and
-tenant/customer notifications; controlled test and live proof remain required.
+mandate-only onboarding use server-owned activation; Mollie's webhook retry
+window provides recovery without a higher-frequency platform scheduler, and
+tenant/customer notifications remain tenant-scoped. Controlled test and live
+proof remain required.
 
 ## Externally Blocked Milestone: Mollie Connect M6
 
