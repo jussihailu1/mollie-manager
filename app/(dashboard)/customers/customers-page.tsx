@@ -42,17 +42,13 @@ export async function CustomerPageContent({
     <CustomersWorkspace
       key={[
         customerId ?? "",
-        getSingleSearchParam(resolvedSearchParams.notice) ?? "",
-        getSingleSearchParam(resolvedSearchParams.error) ?? "",
         getSingleSearchParam(resolvedSearchParams.view) ?? "",
       ].join(":")}
       archivedCustomers={archivedCustomers}
       customers={customers}
-      error={getSingleSearchParam(resolvedSearchParams.error) ?? null}
       hasEboekhoudenConnection={hasEboekhoudenConnection}
       initialDrawerId={customerId ?? null}
       initialView={getSingleSearchParam(resolvedSearchParams.view) ?? "all"}
-      notice={getSingleSearchParam(resolvedSearchParams.notice) ?? null}
     />
   );
 }

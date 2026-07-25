@@ -1,10 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect, unstable_rethrow } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 import { writeAuditLog } from "@/lib/audit";
+import { redirectWithActionFeedback } from "@/lib/action-feedback";
 import {
   requireAdvancedOperationsSession,
   requireViewerSession,
@@ -87,26 +88,18 @@ const failedFirstPaymentRetrySchema = z.object({
   returnTo: z.string().trim().startsWith("/").default("/settings"),
 });
 
-function buildPath(pathname: string, params?: URLSearchParams) {
-  const search = params?.toString();
-  return search ? `${pathname}?${search}` : pathname;
-}
-
-function redirectWithMessage(
+async function redirectWithMessage(
   pathname: string,
   options: { error?: string; notice?: string },
-): never {
-  const params = new URLSearchParams();
-
-  if (options.notice) {
-    params.set("notice", options.notice);
-  }
-
-  if (options.error) {
-    params.set("error", options.error);
-  }
-
-  redirect(buildPath(pathname, params));
+): Promise<never> {
+  return redirectWithActionFeedback(
+    pathname,
+    options.error
+      ? { kind: "error", message: options.error }
+      : options.notice
+        ? { kind: "success", message: options.notice }
+        : undefined,
+  );
 }
 
 function serializeError(error: unknown) {
@@ -128,7 +121,7 @@ export async function updateBillingSettingsAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/settings", {
+    return await redirectWithMessage("/settings", {
       error: "Billing settings input is invalid.",
     });
   }
@@ -139,7 +132,7 @@ export async function updateBillingSettingsAction(formData: FormData) {
   if (parsed.data.activeInvoiceProvider === "eboekhouden") {
     const credentials = await getTenantEboekhoudenCredentials(tenantSelection.currentTenant.id);
     if (!credentials || !parsed.data.invoiceTemplateId || !parsed.data.revenueLedgerId) {
-      redirectWithMessage(parsed.data.returnTo, { error: "e-Boekhouden requires tenant credentials, an invoice template, and a revenue ledger." });
+      return await redirectWithMessage(parsed.data.returnTo, { error: "e-Boekhouden requires tenant credentials, an invoice template, and a revenue ledger." });
     }
   }
 
@@ -174,12 +167,12 @@ export async function updateBillingSettingsAction(formData: FormData) {
     );
 
     revalidatePath("/settings");
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       notice: "Billing settings updated.",
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       error: serializeError(error),
     });
   }
@@ -187,24 +180,24 @@ export async function updateBillingSettingsAction(formData: FormData) {
 
 export async function saveTenantInvoiceProfileAction(formData: FormData) {
   const parsed = tenantInvoiceProfileSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) redirectWithMessage("/settings", { error: "Invoice profile input is incomplete." });
+  if (!parsed.success) return await redirectWithMessage("/settings", { error: "Invoice profile input is incomplete." });
   const session = await requireViewerSession();
   const { currentTenant } = await getCurrentTenantSelectionForViewer();
   try {
     await saveTenantInvoiceProfile({ ...parsed.data, tenantId: currentTenant.id });
     await writeAuditLog({ action: "tenant_invoice_profile.update", details: { fields: ["legalName", "address", "kvkNumber", "vatId", "invoiceEmail", "paymentTermDays", "invoicePrefix"] }, entityId: currentTenant.id, entityType: "tenant_invoice_profile", outcome: "success", summary: "Updated the tenant invoice profile for future Kify invoices." }, undefined, { email: session.user.email ?? null, kind: "user" });
     revalidatePath("/settings");
-    redirectWithMessage(parsed.data.returnTo, { notice: "Invoice profile saved for future invoices." });
+    return await redirectWithMessage(parsed.data.returnTo, { notice: "Invoice profile saved for future invoices." });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(parsed.data.returnTo, { error: serializeError(error) });
+    return await redirectWithMessage(parsed.data.returnTo, { error: serializeError(error) });
   }
 }
 
 export async function saveEboekhoudenConnectionAction(formData: FormData) {
   const parsed = eboekhoudenConnectionSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirectWithMessage("/settings", {
+    return await redirectWithMessage("/settings", {
       error: "Enter a valid e-Boekhouden API source and token.",
     });
   }
@@ -228,12 +221,12 @@ export async function saveEboekhoudenConnectionAction(formData: FormData) {
     );
     revalidatePath("/customers");
     revalidatePath("/settings");
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       notice: "e-Boekhouden connection saved. You can now import customers.",
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(parsed.data.returnTo, { error: serializeError(error) });
+    return await redirectWithMessage(parsed.data.returnTo, { error: serializeError(error) });
   }
 }
 
@@ -243,7 +236,7 @@ export async function createDueRecurringInvoicesAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/settings", {
+    return await redirectWithMessage("/settings", {
       error: "Recurring invoice target is missing.",
     });
   }
@@ -306,17 +299,17 @@ export async function createDueRecurringInvoicesAction(formData: FormData) {
       .join(", ");
 
     if (result.failedCount > 0 && result.createdCount === 0) {
-      redirectWithMessage(parsed.data.returnTo, {
+      return await redirectWithMessage(parsed.data.returnTo, {
         error: `${message}. Review notifications before retrying.`,
       });
     }
 
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       notice: `${message}.`,
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       error: serializeError(error),
     });
   }
@@ -328,7 +321,7 @@ export async function createDueFirstPaymentInvoicesAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/settings", {
+    return await redirectWithMessage("/settings", {
       error: "First-payment invoice target is missing.",
     });
   }
@@ -388,17 +381,17 @@ export async function createDueFirstPaymentInvoicesAction(formData: FormData) {
       .join(", ");
 
     if (result.failedCount > 0 && result.createdCount === 0) {
-      redirectWithMessage(parsed.data.returnTo, {
+      return await redirectWithMessage(parsed.data.returnTo, {
         error: `${message}. Review notifications before retrying.`,
       });
     }
 
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       notice: `${message}.`,
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       error: serializeError(error),
     });
   }
@@ -411,7 +404,7 @@ export async function queueFailedRecurringInvoiceRetriesAction(formData: FormDat
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/settings", {
+    return await redirectWithMessage("/settings", {
       error: "Retry input is invalid. Provide one or more failed schedule IDs.",
     });
   }
@@ -464,17 +457,17 @@ export async function queueFailedRecurringInvoiceRetriesAction(formData: FormDat
       .join(", ");
 
     if (result.queuedCount === 0) {
-      redirectWithMessage(parsed.data.returnTo, {
+      return await redirectWithMessage(parsed.data.returnTo, {
         error: `${message}.`,
       });
     }
 
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       notice: `${message}.`,
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       error: serializeError(error),
     });
   }
@@ -487,7 +480,7 @@ export async function queueFailedFirstPaymentInvoiceRetriesAction(formData: Form
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/settings", {
+    return await redirectWithMessage("/settings", {
       error: "Retry input is invalid. Provide one or more failed payment IDs.",
     });
   }
@@ -541,17 +534,17 @@ export async function queueFailedFirstPaymentInvoiceRetriesAction(formData: Form
       .join(", ");
 
     if (result.queuedCount === 0) {
-      redirectWithMessage(parsed.data.returnTo, {
+      return await redirectWithMessage(parsed.data.returnTo, {
         error: `${message}.`,
       });
     }
 
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       notice: `${message}.`,
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       error: serializeError(error),
     });
   }

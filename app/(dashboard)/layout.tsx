@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 
+import { ActionFeedbackToaster } from "@/components/action-feedback-toaster";
 import { OperationsShell } from "@/components/operations-shell";
+import { hasPendingActionFeedback } from "@/lib/action-feedback";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { env } from "@/lib/env";
 import { listAlertInbox } from "@/lib/reliability/data";
@@ -17,12 +19,13 @@ export default async function DashboardLayout({
   const { currentTenant, session, accessibleTenants } =
     await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
-  const recentAlerts = (await listAlertInbox({
-    mode: selectedMode,
-    tenantId: currentTenant.id,
-  }))
-    .slice(0, 8)
-    .map(toUiNotificationRecord);
+  const [hasPendingFeedback, recentAlerts] = await Promise.all([
+    hasPendingActionFeedback(),
+    listAlertInbox({
+      mode: selectedMode,
+      tenantId: currentTenant.id,
+    }).then((alerts) => alerts.slice(0, 8).map(toUiNotificationRecord)),
+  ]);
 
   return (
     <OperationsShell
@@ -34,6 +37,7 @@ export default async function DashboardLayout({
       userEmail={session.user.email ?? ""}
       userName={session.user.name ?? null}
     >
+      <ActionFeedbackToaster hasPendingFeedback={hasPendingFeedback} />
       {children}
     </OperationsShell>
   );

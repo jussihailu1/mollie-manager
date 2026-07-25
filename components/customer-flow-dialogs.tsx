@@ -556,28 +556,6 @@ function SubscriptionSummaryRow({
   );
 }
 
-function CopyField({ value }: Readonly<{ value: string }>) {
-  const [copied, setCopied] = useState(false);
-
-  return (
-    <div className="flex items-center gap-2">
-      <Input value={value} readOnly />
-      <Button
-        type="button"
-        size="icon"
-        variant="outline"
-        onClick={async () => {
-          await navigator.clipboard.writeText(value);
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 2000);
-        }}
-      >
-        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-      </Button>
-    </div>
-  );
-}
-
 function ConsentLinkShareActions({
   customer,
   value,
@@ -801,13 +779,6 @@ export function getCustomerDisplayName(customer: CustomerFlowRecord) {
 export function getCustomerStage(customer: CustomerFlowRecord): CustomerStage {
   if (customer.latestSubscriptionStatus === "active") {
     return "subscription_active";
-  }
-
-  if (
-    customer.latestFirstPaymentStatus === "paid" &&
-    customer.latestFirstPaymentMode === "real_installment"
-  ) {
-    return "subscription_activation_pending";
   }
 
   if (customer.latestFirstPaymentStatus === "paid") {
@@ -2080,8 +2051,6 @@ export function CustomerDrawer({
   onOpenRestoreCustomer: (customer: CustomerFlowRecord) => void;
 }>) {
   const router = useRouter();
-  const [latestConsentUrl, setLatestConsentUrl] = useState<string | null>(null);
-  const [isConsentLinkLoading, setIsConsentLinkLoading] = useState(false);
   const [billingHistory, setBillingHistory] = useState<CustomerBillingHistory | null>(null);
   const [billingHistoryError, setBillingHistoryError] = useState<string | null>(null);
   const [isBillingHistoryLoading, setIsBillingHistoryLoading] = useState(false);
@@ -2107,65 +2076,6 @@ export function CustomerDrawer({
   const hasBillingHistoryToLoad = Boolean(
     customer?.latestPaymentId || customer?.latestSubscriptionId || customer?.latestFirstPaymentLinkStatus,
   );
-
-  useEffect(() => {
-    const customerId = currentCustomerId;
-
-    if (!open || !customerId) {
-      setLatestConsentUrl(null);
-      setIsConsentLinkLoading(false);
-      return;
-    }
-
-    const resolvedCustomerId = customerId;
-
-    let active = true;
-    setLatestConsentUrl(null);
-    setIsConsentLinkLoading(true);
-
-    async function loadConsentLink() {
-      try {
-        const consentLinkUrl = new URL("/api/customer-consent-link", window.location.origin);
-        consentLinkUrl.searchParams.set("customerId", resolvedCustomerId);
-        const response = await fetch(consentLinkUrl.toString(), {
-          cache: "no-store",
-        });
-        const payload = (await response.json().catch(() => null)) as
-          | { error?: string; latestConsentUrl?: string | null }
-          | null;
-
-        if (!response.ok) {
-          throw new Error(
-            payload && typeof payload.error === "string"
-              ? payload.error
-              : "Failed to load hosted consent link.",
-          );
-        }
-
-        if (active) {
-          setLatestConsentUrl(
-            payload && typeof payload.latestConsentUrl === "string"
-              ? payload.latestConsentUrl
-              : null,
-          );
-        }
-      } catch {
-        if (active) {
-          setLatestConsentUrl(null);
-        }
-      } finally {
-        if (active) {
-          setIsConsentLinkLoading(false);
-        }
-      }
-    }
-
-    loadConsentLink();
-
-    return () => {
-      active = false;
-    };
-  }, [currentCustomerId, open]);
 
   useEffect(() => {
     const customerId = currentCustomerId;
@@ -2514,15 +2424,10 @@ export function CustomerDrawer({
 
   const stage = getCustomerStage(customer);
   const isArchived = Boolean(customer.archivedAt);
-  const showOnboardingSections = stage !== "subscription_active";
   const invoiceProfileReady = Boolean(invoiceProfile) && !invoiceProfileError;
   const consentCreated = stage !== "new";
   const canEditConsentLink = consentCreated && !customer.latestConsentAcceptedAt;
-  const firstPaymentCompleted = [
-    "payment_completed",
-    "subscription_activation_pending",
-    "subscription_active",
-  ].includes(stage);
+  const firstPaymentCompleted = ["payment_completed", "subscription_active"].includes(stage);
   const subscriptionActive = stage === "subscription_active";
   const latestPaymentDateLabel =
     customer.latestPaymentStatus === "paid" && customer.latestPaymentPaidAt
@@ -2536,13 +2441,6 @@ export function CustomerDrawer({
     customer.latestSubscriptionId ||
       customer.latestFirstPaymentMode ||
       customer.latestConsentAcceptedAt,
-  );
-  const hasConsentLinkSection = Boolean(
-    latestConsentUrl ||
-      isConsentLinkLoading ||
-      customer.latestFirstPaymentMode ||
-      customer.latestConsentAcceptedAt ||
-      customer.latestFirstPaymentPaidAt,
   );
   const workflowSteps = [
     { complete: true, label: "Customer created" },
@@ -2582,11 +2480,8 @@ export function CustomerDrawer({
       locked: !consentCreated,
     },
     {
-      action:
-        !isArchived && (stage === "payment_completed" || stage === "subscription_activation_pending")
-          ? () => onOpenCreateSubscription(customer)
-          : undefined,
-      actionLabel: stage === "subscription_activation_pending" ? "Retry activation" : "Activate subscription",
+      action: undefined,
+      actionLabel: "",
       complete: subscriptionActive,
       label: "Subscription activation",
       locked: !firstPaymentCompleted,
@@ -3227,38 +3122,6 @@ export function CustomerDrawer({
               </div>
             ) : null}
           </div>
-
-          {showOnboardingSections && hasConsentLinkSection ? (
-            <>
-              <Separator />
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Payment context
-                </h3>
-                {isConsentLinkLoading ? (
-                  <p className="text-sm text-muted-foreground">
-                    Loading hosted consent link...
-                  </p>
-                ) : null}
-                {latestConsentUrl ? (
-                  <div className="space-y-2">
-                    <Label>Hosted consent link</Label>
-                    <CopyField value={latestConsentUrl} />
-                  </div>
-                ) : null}
-                {customer.latestConsentAcceptedAt ? (
-                  <p className="text-sm text-muted-foreground">
-                    Consent accepted on {formatDate(customer.latestConsentAcceptedAt)}
-                  </p>
-                ) : null}
-                {customer.latestFirstPaymentPaidAt ? (
-                  <p className="text-sm text-muted-foreground">
-                    Paid on {formatDate(customer.latestFirstPaymentPaidAt)}
-                  </p>
-                ) : null}
-              </div>
-            </>
-          ) : null}
 
           <div className="flex flex-col gap-2 pt-4">
             {isArchived ? (

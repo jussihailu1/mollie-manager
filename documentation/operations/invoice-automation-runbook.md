@@ -37,6 +37,10 @@ Existing SMTP env remains required for app delivery:
 
 ## What Cron Does
 
+The protected cron also processes due subscription-activation recovery jobs and
+their email outbox. It runs hourly: activation failures retry for up to 24
+hours, then only active tenant operators receive an action-required email.
+
 1. Auto-queues safe failed retries (`FACT_014`, `FACT_VERWERK_004`) back to pending for both recurring and first-payment invoice rows.
 2. Reconciles failed rows with existing e-Boekhouden invoices and recovers local state when upstream already has invoice.
 3. Creates due recurring invoices (`invoice_send_due_date <= current_date`) with duplicate-safe claim state.

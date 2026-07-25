@@ -30,7 +30,6 @@ import {
   archiveCustomerAction,
   restoreCustomerAction,
 } from "@/lib/onboarding/actions";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -268,19 +267,15 @@ function SortIcon({
 export function CustomersWorkspace({
   archivedCustomers,
   customers,
-  error,
   hasEboekhoudenConnection,
   initialDrawerId,
   initialView = "all",
-  notice,
 }: Readonly<{
   archivedCustomers: CustomerFlowRecord[];
   customers: CustomerFlowRecord[];
-  error?: string | null;
   hasEboekhoudenConnection: boolean;
   initialDrawerId?: string | null;
   initialView?: string | null;
-  notice?: string | null;
 }>) {
   const pathname = usePathname();
   const router = useRouter();
@@ -436,20 +431,6 @@ export function CustomersWorkspace({
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-8 p-8">
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Action failed</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {notice ? (
-        <Alert>
-          <AlertTitle>Updated</AlertTitle>
-          <AlertDescription>{notice}</AlertDescription>
-        </Alert>
-      ) : null}
-
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Customers</h2>

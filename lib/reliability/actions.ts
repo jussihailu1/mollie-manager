@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { writeAuditLog } from "@/lib/audit";
+import { redirectWithActionFeedback } from "@/lib/action-feedback";
 import {
   requireAdvancedOperationsSession,
   requireViewerSession,
@@ -58,34 +59,32 @@ type StoredWebhookEvent = {
   resourceType: string | null;
 };
 
-function buildPath(pathname: string, params?: URLSearchParams) {
-  const search = params?.toString();
-  return search ? `${pathname}?${search}` : pathname;
-}
-
-function redirectWithMessage(
+async function redirectWithMessage(
   pathname: string,
   options: {
     error?: string;
     notice?: string;
     reconciliationSummary?: string;
   },
-): never {
-  const params = new URLSearchParams();
-
-  if (options.notice) {
-    params.set("notice", options.notice);
-  }
-
-  if (options.error) {
-    params.set("error", options.error);
-  }
+): Promise<never> {
+  const [basePath, existingSearch] = pathname.split("?", 2);
+  const params = new URLSearchParams(existingSearch ?? "");
 
   if (options.reconciliationSummary) {
     params.set("reconciliationSummary", options.reconciliationSummary);
   }
 
-  redirect(buildPath(pathname, params));
+  const search = params.toString();
+  const destination = search ? `${basePath}?${search}` : basePath;
+
+  return redirectWithActionFeedback(
+    destination,
+    options.error
+      ? { kind: "error", message: options.error }
+      : options.notice
+        ? { kind: "success", message: options.notice }
+        : undefined,
+  );
 }
 
 function serializeError(error: unknown) {
@@ -199,7 +198,7 @@ export async function runReconciliationAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/notifications", {
+    return await redirectWithMessage("/notifications", {
       error: "Reconciliation target is missing.",
     });
   }
@@ -226,13 +225,13 @@ export async function runReconciliationAction(formData: FormData) {
     revalidatePath("/payments");
     revalidatePath("/customers");
     revalidatePath("/settings");
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       notice: `${reconciliationLabel} reconciliation complete. Checked ${result.subscriptionsChecked} subscriptions, ${result.paymentLinksChecked} payment links, and ${result.firstPaymentsChecked} first payments. Review the invoice delta summary below.`,
       reconciliationSummary: serializeReconciliationSummary(result),
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       error: serializeError(error),
     });
   }
@@ -249,7 +248,7 @@ export async function replayWebhookEventAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/notifications", {
+    return await redirectWithMessage("/notifications", {
       error: "Webhook event id is missing.",
     });
   }
@@ -274,7 +273,7 @@ export async function replayWebhookEventAction(formData: FormData) {
   const event = result.rows[0];
 
   if (!event?.resourceId || event.processingStatus !== "failed") {
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       error: "Only failed webhook events in the current mode can be replayed.",
     });
   }
@@ -324,7 +323,7 @@ export async function replayWebhookEventAction(formData: FormData) {
     revalidatePath("/payments");
     revalidatePath("/customers");
     revalidatePath("/settings");
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       notice: "Webhook event replayed successfully.",
     });
   } catch (error) {
@@ -363,7 +362,7 @@ export async function replayWebhookEventAction(formData: FormData) {
       },
     );
 
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       error: serializeError(error),
     });
   }
@@ -377,7 +376,7 @@ export async function repairReliabilityTargetAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/settings", {
+    return await redirectWithMessage("/settings", {
       error: "Repair target details are missing.",
     });
   }
@@ -403,7 +402,7 @@ export async function repairReliabilityTargetAction(formData: FormData) {
     revalidatePath("/payments");
     revalidatePath("/notifications");
 
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       notice:
         result.status === "repaired"
           ? `${formatRepairTargetKind(parsed.data.repairTargetKind)} repair completed.`
@@ -413,7 +412,7 @@ export async function repairReliabilityTargetAction(formData: FormData) {
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       error: serializeError(error),
     });
   }
@@ -425,7 +424,7 @@ export async function sendTestAlertAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/notifications", {
+    return await redirectWithMessage("/notifications", {
       error: "Notification target is missing.",
     });
   }
@@ -435,7 +434,7 @@ export async function sendTestAlertAction(formData: FormData) {
   const selectedMode = await getSelectedMollieMode();
 
   if (!notificationsAreConfigured()) {
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       error:
         "SMTP is not fully configured yet. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, and ALERT_EMAIL_TO first.",
     });
@@ -512,14 +511,14 @@ export async function sendTestAlertAction(formData: FormData) {
   revalidatePath("/notifications");
 
   if (!delivered) {
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       error: delivery.error
         ? `The test alert was stored locally, but SMTP delivery failed: ${delivery.error}`
         : "The test alert was stored locally, but the email could not be delivered. Review the SMTP settings and try again.",
     });
   }
 
-  redirectWithMessage(parsed.data.returnTo, {
+  return await redirectWithMessage(parsed.data.returnTo, {
     notice: "Test alert sent. Check your inbox and the notifications page.",
   });
 }
@@ -532,7 +531,7 @@ export async function setAlertStatusAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/notifications", {
+    return await redirectWithMessage("/notifications", {
       error: "Alert update details are missing.",
     });
   }
@@ -558,7 +557,7 @@ export async function markAllAlertsReadAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/notifications", {
+    return await redirectWithMessage("/notifications", {
       error: "Notification target is missing.",
     });
   }
@@ -613,7 +612,7 @@ export async function openAlertAction(formData: FormData) {
     });
 
   if (!parsed.success) {
-    redirectWithMessage("/notifications", {
+    return await redirectWithMessage("/notifications", {
       error: "Alert target is missing.",
     });
   }

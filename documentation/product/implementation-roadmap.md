@@ -82,6 +82,13 @@ verification and controlled rollout is the current implementation milestone.
 The active program is complete only after controlled live-tenant proof and K8
 archives the implementation plan and promotes the next roadmap milestone.
 
+### Active Correctness Slice: Automatic Subscription Activation
+
+A user-reported paid-first-installment activation failure is being corrected as
+a bounded money-flow reliability slice alongside K7. Paid real-installment and
+mandate-only onboarding now use server-owned activation, durable retry, and
+tenant/customer notifications; controlled test and live proof remain required.
+
 ## Externally Blocked Milestone: Mollie Connect M6
 
 Mollie Connect M1 through M5 are complete under

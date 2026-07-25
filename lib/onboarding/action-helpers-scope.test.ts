@@ -8,7 +8,8 @@ const helpersSource = readFileSync("lib/onboarding/action-helpers.ts", "utf8");
 describe("onboarding action helpers boundary", () => {
   it("keeps redirect and relation helpers out of the main actions file", () => {
     assert.match(actionsSource, /@\/lib\/onboarding\/action-helpers/);
-    assert.match(helpersSource, /export function redirectWithMessage/);
+    assert.match(helpersSource, /export async function redirectWithMessage/);
+    assert.match(helpersSource, /redirectWithActionFeedback/);
     assert.match(helpersSource, /export async function updateRelationFromLocalFields/);
     assert.match(
       helpersSource,

@@ -1,6 +1,6 @@
-import { redirect } from "next/navigation";
 import { sql } from "drizzle-orm";
 
+import { redirectWithActionFeedback } from "@/lib/action-feedback";
 import { transaction } from "@/lib/db";
 import {
   getEboekhoudenRelation,
@@ -17,15 +17,17 @@ import {
   shouldPatchEboekhoudenRelation,
 } from "@/lib/onboarding/customer-relation-fields";
 
-export function redirectWithMessage(
+export async function redirectWithMessage(
   pathname: string,
   options: { error?: string; notice?: string },
-): never {
-  redirect(
-    updateActionPath(pathname, {
-      error: options.error,
-      notice: options.notice,
-    }),
+): Promise<never> {
+  return redirectWithActionFeedback(
+    updateActionPath(pathname, { error: null, notice: null }),
+    options.error
+      ? { kind: "error", message: options.error }
+      : options.notice
+        ? { kind: "success", message: options.notice }
+        : undefined,
   );
 }
 

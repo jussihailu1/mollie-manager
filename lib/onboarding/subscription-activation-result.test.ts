@@ -35,21 +35,7 @@ describe("subscription activation result helpers", () => {
     );
   });
 
-  it("describes skipped and pending prerequisite outcomes", () => {
-    assert.deepEqual(
-      describeSubscriptionActivationResult({
-        firstPaymentMode: "mandate_only",
-        reason: "manual_only",
-        status: "skipped",
-      }),
-      {
-        error:
-          "This onboarding flow is mandate-only. Create the recurring subscription manually when you are ready.",
-        notice: null,
-        shouldRevalidate: false,
-      },
-    );
-
+  it("describes pending prerequisite outcomes", () => {
     assert.deepEqual(
       describeSubscriptionActivationResult({
         firstPaymentMode: null,

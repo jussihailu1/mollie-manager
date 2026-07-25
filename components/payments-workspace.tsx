@@ -20,7 +20,6 @@ import {
 
 import { type CustomerFlowRecord, CreatePaymentLinkDialog } from "@/components/customer-flow-dialogs";
 import { PaymentDrawer } from "@/components/payment-drawer";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -176,17 +175,13 @@ function CustomerLink({
 
 export function PaymentsWorkspace({
   customers,
-  error,
   initialCustomerId,
   initialDrawerId,
-  notice,
   payments,
 }: Readonly<{
   customers: CustomerFlowRecord[];
-  error?: string | null;
   initialCustomerId?: string | null;
   initialDrawerId?: string | null;
-  notice?: string | null;
   payments: PaymentRecord[];
 }>) {
   const pathname = usePathname();
@@ -448,20 +443,6 @@ export function PaymentsWorkspace({
 
   return (
     <div className="p-8 space-y-8 max-w-6xl mx-auto">
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Action failed</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {notice ? (
-        <Alert>
-          <AlertTitle>Updated</AlertTitle>
-          <AlertDescription>{notice}</AlertDescription>
-        </Alert>
-      ) : null}
-
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Payments</h2>

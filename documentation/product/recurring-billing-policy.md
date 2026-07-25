@@ -178,7 +178,7 @@ operator surfaces.
 - V1 should not send a normal recurring invoice for the EUR 0.01 setup payment.
 - Customer-facing copy must describe the EUR 0.01 payment as mandate setup or verification, not as the first recurring invoice.
 - Customer-facing copy must make clear that the actual recurring subscription starts later and separately.
-- V1 keeps recurring subscription activation after `mandate_only` as an explicit operator step, not an automatic post-payment action.
+- Kify automatically activates the recurring subscription after a paid `mandate_only` setup payment and a usable mandate are confirmed. Tenant intervention is only required after the bounded server recovery window is exhausted.
 - A failed or expired `mandate_only` setup payment is classified as a
   `mandate_problem`, not as an ordinary missed subscription installment.
 

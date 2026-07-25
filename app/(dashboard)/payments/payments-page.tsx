@@ -40,14 +40,10 @@ export async function PaymentPageContent({
       key={[
         paymentId ?? "",
         getSingleSearchParam(resolvedSearchParams.customerId) ?? "",
-        getSingleSearchParam(resolvedSearchParams.notice) ?? "",
-        getSingleSearchParam(resolvedSearchParams.error) ?? "",
       ].join(":")}
       customers={customersResult.map(toUiCustomerRecord)}
-      error={getSingleSearchParam(resolvedSearchParams.error) ?? null}
       initialCustomerId={getSingleSearchParam(resolvedSearchParams.customerId) ?? null}
       initialDrawerId={paymentId ?? null}
-      notice={getSingleSearchParam(resolvedSearchParams.notice) ?? null}
       payments={payments}
     />
   );

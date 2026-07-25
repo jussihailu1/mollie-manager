@@ -105,16 +105,16 @@ const customerBillingProfileSchema = z.object({
 
 export async function saveCustomerBillingProfileAction(formData: FormData) {
   const parsed = customerBillingProfileSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) redirectWithMessage("/customers", { error: "Customer invoice profile input is incomplete." });
+  if (!parsed.success) return await redirectWithMessage("/customers", { error: "Customer invoice profile input is incomplete." });
   await requireViewerSession();
   const { currentTenant } = await getCurrentTenantSelectionForViewer();
   try {
     await saveCustomerBillingProfile({ ...parsed.data, tenantId: currentTenant.id });
     revalidatePath("/customers");
-    redirectWithMessage(parsed.data.returnTo, { notice: "Customer invoice profile saved for future invoices." });
+    return await redirectWithMessage(parsed.data.returnTo, { notice: "Customer invoice profile saved for future invoices." });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(parsed.data.returnTo, { error: serializeError(error) });
+    return await redirectWithMessage(parsed.data.returnTo, { error: serializeError(error) });
   }
 }
 
@@ -125,7 +125,7 @@ export async function archiveCustomerAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/customers", {
+    return await redirectWithMessage("/customers", {
       error: "Customer id is missing.",
     });
   }
@@ -145,13 +145,13 @@ export async function archiveCustomerAction(formData: FormData) {
   });
 
   if (result.status === "not_found") {
-    redirectWithMessage(returnTo, {
+    return await redirectWithMessage(returnTo, {
       error: "Customer not found in the selected Mollie mode.",
     });
   }
 
   if (result.status === "blocked") {
-    redirectWithMessage(returnTo, {
+    return await redirectWithMessage(returnTo, {
       error: result.kind === "error" ? result.message : undefined,
       notice: result.kind === "notice" ? result.message : undefined,
     });
@@ -161,7 +161,7 @@ export async function archiveCustomerAction(formData: FormData) {
   revalidatePath("/customers");
   revalidatePath("/payments");
   revalidatePath("/notifications");
-  redirectWithMessage(returnTo, {
+  return await redirectWithMessage(returnTo, {
     notice: "Customer archived.",
   });
 }
@@ -173,7 +173,7 @@ export async function restoreCustomerAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/customers", {
+    return await redirectWithMessage("/customers", {
       error: "Customer id is missing.",
     });
   }
@@ -197,13 +197,13 @@ export async function restoreCustomerAction(formData: FormData) {
   });
 
   if (result.status === "not_found") {
-    redirectWithMessage(returnTo, {
+    return await redirectWithMessage(returnTo, {
       error: "Customer not found in the selected Mollie mode.",
     });
   }
 
   if (result.status === "blocked") {
-    redirectWithMessage(returnTo, {
+    return await redirectWithMessage(returnTo, {
       notice: result.message,
     });
   }
@@ -212,7 +212,7 @@ export async function restoreCustomerAction(formData: FormData) {
   revalidatePath("/customers");
   revalidatePath("/payments");
   revalidatePath("/notifications");
-  redirectWithMessage(returnTo, {
+  return await redirectWithMessage(returnTo, {
     notice: "Customer restored.",
   });
 }
@@ -231,7 +231,7 @@ export async function createCustomerAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/customers", {
+    return await redirectWithMessage("/customers", {
       error: parsed.error.issues[0]?.message ?? "Enter a valid customer.",
     });
   }
@@ -252,14 +252,14 @@ export async function createCustomerAction(formData: FormData) {
     revalidatePath("/");
     revalidatePath("/customers");
     revalidatePath("/payments");
-    redirectWithMessage(returnTo, {
+    return await redirectWithMessage(returnTo, {
       notice: result.linkedRelation
         ? "Customer imported from e-Boekhouden. You can now generate the first payment link."
         : "Customer created as unlinked from e-Boekhouden. You can now generate the first payment link.",
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage("/customers", {
+    return await redirectWithMessage("/customers", {
       error: serializeIntegrationError(error),
     });
   }
@@ -279,7 +279,7 @@ export async function linkEboekhoudenRelationAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/customers", {
+    return await redirectWithMessage("/customers", {
       error: parsed.error.issues[0]?.message ?? "Enter valid customer details.",
     });
   }
@@ -295,13 +295,13 @@ export async function linkEboekhoudenRelationAction(formData: FormData) {
   );
 
   if (!customer) {
-    redirectWithMessage(returnTo, {
+    return await redirectWithMessage(returnTo, {
       error: "Customer not found in the selected Mollie mode.",
     });
   }
 
   if (customer.archivedAt) {
-    redirectWithMessage(returnTo, {
+    return await redirectWithMessage(returnTo, {
       error: "Restore this customer before changing e-Boekhouden links.",
     });
   }
@@ -329,12 +329,12 @@ export async function linkEboekhoudenRelationAction(formData: FormData) {
     revalidatePath("/");
     revalidatePath("/customers");
     revalidatePath("/payments");
-    redirectWithMessage(returnTo, {
+    return await redirectWithMessage(returnTo, {
       notice: "Customer linked to e-Boekhouden.",
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(returnTo, {
+    return await redirectWithMessage(returnTo, {
       error: serializeIntegrationError(error),
     });
   }
@@ -471,7 +471,7 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/customers", {
+    return await redirectWithMessage("/customers", {
       error: "Customer id is missing.",
     });
   }
@@ -500,7 +500,7 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
             ? "Customer is not linked to Mollie."
             : "Customer not found in the selected Mollie mode.";
 
-      redirectWithMessage(returnTo, {
+      return await redirectWithMessage(returnTo, {
         error: message,
       });
     }
@@ -509,12 +509,12 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
     revalidatePath("/customers");
     revalidatePath("/payments");
     revalidatePath("/notifications");
-    redirectWithMessage(returnTo, {
+    return await redirectWithMessage(returnTo, {
       notice: "Customer state repaired from Mollie.",
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(returnTo, {
+    return await redirectWithMessage(returnTo, {
       error: serializeError(error),
     });
   }
@@ -527,7 +527,7 @@ export async function createSubscriptionAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/customers", {
+    return await redirectWithMessage("/customers", {
       error: parsed.error.issues[0]?.message ?? "Enter a valid subscription.",
     });
   }
@@ -557,13 +557,13 @@ export async function createSubscriptionAction(formData: FormData) {
       revalidatePath("/notifications");
     }
 
-    redirectWithMessage(returnTo, {
+    return await redirectWithMessage(returnTo, {
       error: feedback.error ?? undefined,
       notice: feedback.notice ?? undefined,
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(returnTo, {
+    return await redirectWithMessage(returnTo, {
       error: serializeError(error),
     });
   }

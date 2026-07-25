@@ -44,7 +44,7 @@ Statuses:
 | Hosted subscription consent | complete | Customers see app-hosted terms before Mollie checkout; consent evidence is stored. |
 | First-payment and mandate-only onboarding | complete | Payment-link onboarding supports subscription activation and EUR 0.01 mandate-only setup without normal invoice creation. |
 | Mandate synchronization | complete | Managed customer mandates are fetched and stored tenant-locally. |
-| Subscription creation and synchronization | complete | Active onboarding creates Mollie subscriptions and reconciliation refreshes provider state. |
+| Subscription creation and synchronization | complete | Paid first-payment onboarding automatically creates Mollie subscriptions for real-installment and mandate-only flows; reconciliation refreshes provider state and bounded recovery escalates only exhausted failures. |
 | Subscription operation intent | partial | Durable cancellation requests, policy, operator surfacing, and pre-execution transitions exist; provider cancellation execution does not. |
 | Pause/resume | missing | Blocked by product policy because Mollie cancellation is not reversible pause. |
 

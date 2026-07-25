@@ -31,15 +31,6 @@ export function describeSubscriptionActivationResult(
     };
   }
 
-  if (result.status === "skipped") {
-    return {
-      error:
-        "This onboarding flow is mandate-only. Create the recurring subscription manually when you are ready.",
-      notice: null,
-      shouldRevalidate: false,
-    };
-  }
-
   if (result.status === "pending_prerequisites") {
     return {
       error:

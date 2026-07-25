@@ -56,8 +56,9 @@ There is no acceptable implicit app-wide tenant for tenant business flows.
    checkout.
 5. Mollie payment and mandate state are synced back into the app inside the
    resolved tenant context.
-6. Operator creates the recurring subscription once the first payment and
-   mandate are ready.
+6. The server queues and creates the recurring subscription once the first
+   payment and mandate are ready; bounded retry and tenant notification handle
+   exceptional failures.
 
 ### Recurring operations
 

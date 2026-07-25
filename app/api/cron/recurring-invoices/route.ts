@@ -14,6 +14,12 @@ import {
 import { getAcceptedCronSecrets, isBearerAuthorized } from "@/lib/cron-auth";
 import { env, type MollieMode } from "@/lib/env";
 import {
+  processSubscriptionActivationJobsBatch,
+} from "@/lib/onboarding/subscription-activation-jobs";
+import {
+  deliverSubscriptionActivationNotificationsBatch,
+} from "@/lib/onboarding/subscription-activation-notifications";
+import {
   retryUnsentFirstPaymentInvoiceEmailsBatch,
   retryUnsentRecurringInvoiceEmailsBatch,
 } from "@/lib/invoice-delivery";
@@ -54,6 +60,8 @@ function parseLimit(request: Request) {
 }
 
 type TenantCronResult = {
+  activationJobs: Awaited<ReturnType<typeof processSubscriptionActivationJobsBatch>>;
+  activationNotifications: Awaited<ReturnType<typeof deliverSubscriptionActivationNotificationsBatch>>;
   failedFirstPaymentRecoveryResult: Awaited<
     ReturnType<typeof recoverFailedFirstPaymentInvoicesBatch>
   >;
@@ -106,6 +114,11 @@ async function runTenantCronBatch(input: {
   const staleRepairResult = await repairStaleRecordsBatch({
     actor: { kind: "system" },
     limit: staleRepairLimit,
+    mode: input.mode,
+    tenantId: input.tenantId,
+  });
+  const activationJobs = await processSubscriptionActivationJobsBatch({
+    limit: input.limit,
     mode: input.mode,
     tenantId: input.tenantId,
   });
@@ -167,8 +180,15 @@ async function runTenantCronBatch(input: {
       tenantId: input.tenantId,
     }),
   ]);
+  const activationNotifications = await deliverSubscriptionActivationNotificationsBatch({
+    limit: input.limit,
+    mode: input.mode,
+    tenantId: input.tenantId,
+  });
 
   const result = {
+    activationJobs,
+    activationNotifications,
     failedFirstPaymentRecoveryResult,
     failedRecurringRecoveryResult,
     firstPaymentCreateResult,
@@ -200,7 +220,7 @@ async function runTenantCronBatch(input: {
           ? "failure"
           : "success",
       summary:
-        "Processed recurring + first-payment invoice recovery/create/delivery automation, webhook repair, and stale repair through protected cron route.",
+        "Processed subscription activation recovery, activation notifications, invoice automation, webhook repair, and stale repair through protected cron route.",
     },
     undefined,
     { kind: "system" },
@@ -235,6 +255,8 @@ export async function POST(request: Request) {
       } catch (error) {
         const message = error instanceof Error ? error.message : "Cron failed";
         tenantResults.push({
+          activationJobs: { activatedCount: 0, attemptedCount: 0, exhaustedCount: 0, retriedCount: 0 },
+          activationNotifications: { attemptedCount: 0, failedCount: 0, sentCount: 0 },
           failedFirstPaymentRecoveryResult: {
             ambiguousCount: 0,
             recoveredCount: 0,
@@ -332,7 +354,8 @@ export async function POST(request: Request) {
     const deliveredEmails = tenantResults.some(
       (result) =>
         result.recurringDeliveryRetry.sentCount > 0 ||
-        result.firstPaymentDeliveryRetry.sentCount > 0,
+        result.firstPaymentDeliveryRetry.sentCount > 0 ||
+        result.activationNotifications.sentCount > 0,
     );
 
     if (webhookRepaired || staleRepaired || createdInvoices || deliveredEmails) {

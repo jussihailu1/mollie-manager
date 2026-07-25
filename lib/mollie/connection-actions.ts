@@ -1,7 +1,6 @@
 "use server";
 
-import { redirect } from "next/navigation";
-
+import { redirectWithActionFeedback } from "@/lib/action-feedback";
 import { disconnectTenantMollieConnection, listTenantMollieProfiles, selectTenantMollieProfile } from "@/lib/mollie/tenant-connections";
 import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
@@ -11,11 +10,17 @@ export async function selectMollieProfileAction(formData: FormData) {
   const profile = (await listTenantMollieProfiles(currentTenant.id)).find((entry) => entry.id === profileId);
   if (!profile) throw new Error("The selected Mollie profile is not available to this tenant.");
   await selectTenantMollieProfile({ tenantId: currentTenant.id, profileId, profileName: profile.name });
-  redirect("/settings?notice=Mollie%20profile%20selected.");
+  return redirectWithActionFeedback("/settings", {
+    kind: "success",
+    message: "Mollie profile selected.",
+  });
 }
 
 export async function disconnectMollieConnectionAction() {
   const { currentTenant } = await getCurrentTenantSelectionForViewer();
   await disconnectTenantMollieConnection(currentTenant.id);
-  redirect("/settings?notice=Mollie%20connection%20disconnected.");
+  return redirectWithActionFeedback("/settings", {
+    kind: "success",
+    message: "Mollie connection disconnected.",
+  });
 }

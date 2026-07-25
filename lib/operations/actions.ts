@@ -270,7 +270,7 @@ export async function recordCancellationRequestAction(formData: FormData) {
   );
 
   if (!parsed.success) {
-    redirectWithMessage("/customers", {
+    return await redirectWithMessage("/customers", {
       error: "Cancellation request details are invalid.",
     });
   }
@@ -291,29 +291,29 @@ export async function recordCancellationRequestAction(formData: FormData) {
     });
 
     if (result.status === "not_found") {
-      redirectWithMessage("/customers", {
+      return await redirectWithMessage("/customers", {
         error: "Subscription not found in the selected Mollie mode.",
       });
     }
 
     if (result.status === "denied") {
-      redirectWithMessage(buildDrawerPath("customers", result.customerId), {
+      return await redirectWithMessage(buildDrawerPath("customers", result.customerId), {
         error: "Cancellation request is not allowed for this subscription.",
       });
     }
 
     if (result.status === "duplicate") {
-      redirectWithMessage(buildDrawerPath("customers", result.customerId), {
+      return await redirectWithMessage(buildDrawerPath("customers", result.customerId), {
         notice: "Cancellation request was already recorded.",
       });
     }
 
-    redirectWithMessage(buildDrawerPath("customers", result.customerId), {
+    return await redirectWithMessage(buildDrawerPath("customers", result.customerId), {
       notice: "Cancellation request recorded for review. No provider change was made.",
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage("/customers", {
+    return await redirectWithMessage("/customers", {
       error: "Cancellation request could not be recorded.",
     });
   }
@@ -326,7 +326,7 @@ export async function withdrawOperationRequestAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/customers", {
+    return await redirectWithMessage("/customers", {
       error: "Subscription request details are missing.",
     });
   }
@@ -344,25 +344,25 @@ export async function withdrawOperationRequestAction(formData: FormData) {
     });
 
     if (result.status === "not_found") {
-      redirectWithMessage(parsed.data.returnTo, {
+      return await redirectWithMessage(parsed.data.returnTo, {
         error: "Subscription request not found in the selected Mollie mode.",
       });
     }
 
     if (result.status === "not_withdrawable") {
-      redirectWithMessage(parsed.data.returnTo, {
+      return await redirectWithMessage(parsed.data.returnTo, {
         notice: `Subscription request is already ${result.requestStatus}.`,
       });
     }
 
     revalidatePath("/customers");
     revalidatePath("/notifications");
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       notice: "Subscription request withdrawn. No provider change was made.",
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       error: "Subscription request could not be withdrawn.",
     });
   }
@@ -380,7 +380,7 @@ export async function transitionOperationRequestAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/customers", {
+    return await redirectWithMessage("/customers", {
       error: "Subscription request transition details are missing.",
     });
   }
@@ -399,31 +399,31 @@ export async function transitionOperationRequestAction(formData: FormData) {
     });
 
     if (result.status === "not_found") {
-      redirectWithMessage(parsed.data.returnTo, {
+      return await redirectWithMessage(parsed.data.returnTo, {
         error: "Subscription request not found in the selected Mollie mode.",
       });
     }
 
     if (result.status === "not_transitionable") {
-      redirectWithMessage(parsed.data.returnTo, {
+      return await redirectWithMessage(parsed.data.returnTo, {
         notice: `Subscription request is already ${result.requestStatus}.`,
       });
     }
 
     if (result.status === "transition_denied") {
-      redirectWithMessage(parsed.data.returnTo, {
+      return await redirectWithMessage(parsed.data.returnTo, {
         error: `Subscription request cannot move from ${result.requestStatus} to ${result.targetStatus}.`,
       });
     }
 
     revalidatePath("/customers");
     revalidatePath("/notifications");
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       notice: `Subscription request marked ${formatOperationRequestStatusLabel(parsed.data.targetStatus)}. No provider change was made.`,
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       error: "Subscription request status could not be updated.",
     });
   }
@@ -436,7 +436,7 @@ export async function syncSubscriptionAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/customers", {
+    return await redirectWithMessage("/customers", {
       error: "Subscription id is missing.",
     });
   }
@@ -450,7 +450,7 @@ export async function syncSubscriptionAction(formData: FormData) {
   );
 
   if (!subscription || subscription.mode !== selectedMode) {
-    redirectWithMessage("/customers", {
+    return await redirectWithMessage("/customers", {
       error: "Subscription not found in the selected Mollie mode.",
     });
   }
@@ -468,12 +468,12 @@ export async function syncSubscriptionAction(formData: FormData) {
     revalidatePath("/customers");
     revalidatePath("/payments");
     revalidatePath("/notifications");
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       notice: "Subscription and payment history refreshed from Mollie.",
     });
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(parsed.data.returnTo, {
+    return await redirectWithMessage(parsed.data.returnTo, {
       error: serializeError(error),
     });
   }

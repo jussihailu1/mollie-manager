@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import type { Session } from "next-auth";
 
 import { auth } from "@/auth";
+import { setActionFeedbackCookie } from "@/lib/action-feedback-store";
 import { env, isTestAuthBypassEnabled } from "@/lib/env";
 
 function getTestViewerSession() {
@@ -46,9 +47,20 @@ export function hasAdvancedOperationsAccess(
 
 export const requireAdvancedOperationsSession = cache(async () => {
   const session = await requireViewerSession();
+  const recipientEmail = session.user.email;
+
+  if (!recipientEmail) {
+    redirect("/login");
+  }
 
   if (!hasAdvancedOperationsAccess(session)) {
-    redirect("/settings?error=Advanced%20operations%20access%20is%20required.");
+    await setActionFeedbackCookie({
+      expiresAt: Date.now() + 5 * 60 * 1000,
+      kind: "error",
+      message: "Advanced operations access is required.",
+      recipientEmail: recipientEmail.toLowerCase(),
+    });
+    redirect("/settings");
   }
 
   return session;

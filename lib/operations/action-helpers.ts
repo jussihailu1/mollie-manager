@@ -1,25 +1,17 @@
-import { redirect } from "next/navigation";
+import { redirectWithActionFeedback } from "@/lib/action-feedback";
 
-export function buildPath(pathname: string, params?: URLSearchParams) {
-  const search = params?.toString();
-  return search ? `${pathname}?${search}` : pathname;
-}
-
-export function redirectWithMessage(
+export async function redirectWithMessage(
   pathname: string,
   options: { error?: string; notice?: string },
-): never {
-  const params = new URLSearchParams();
-
-  if (options.notice) {
-    params.set("notice", options.notice);
-  }
-
-  if (options.error) {
-    params.set("error", options.error);
-  }
-
-  redirect(buildPath(pathname, params));
+): Promise<never> {
+  return redirectWithActionFeedback(
+    pathname,
+    options.error
+      ? { kind: "error", message: options.error }
+      : options.notice
+        ? { kind: "success", message: options.notice }
+        : undefined,
+  );
 }
 
 export function serializeError(error: unknown) {

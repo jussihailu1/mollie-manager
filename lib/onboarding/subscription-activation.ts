@@ -8,7 +8,8 @@ import { getDb, transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { getMollieWebhookUrl, getTenantMollieClient, getTenantMollieRequestContext } from "@/lib/mollie/client";
 import { upsertRecurringBillingScheduleForSubscription } from "@/lib/recurring-billing-schedule";
-import { deliverAlertEmail, openAlert, resolveAlertsForEntity } from "@/lib/reliability/alerts";
+import { queueSubscriptionActivationSuccessNotifications } from "@/lib/onboarding/subscription-activation-notifications";
+import { resolveAlertsForEntity } from "@/lib/reliability/alerts";
 import { subscriptionConsentPlanSnapshotSchema } from "@/lib/subscription-consent";
 import { toMollieInterval } from "@/lib/subscription-policy";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
@@ -84,11 +85,6 @@ export type SubscriptionActivationResult =
       firstPaymentMode: "real_installment" | "mandate_only" | null;
       reason: PendingReason;
       status: "pending_prerequisites";
-    }
-  | {
-      firstPaymentMode: "mandate_only";
-      reason: "manual_only";
-      status: "skipped";
     }
   | {
       firstPaymentMode: "real_installment" | "mandate_only" | null;
@@ -241,17 +237,6 @@ export async function attemptSubscriptionActivation(input: {
     };
   }
 
-  if (
-    input.trigger === "auto" &&
-    acceptedConsent.firstPaymentMode === "mandate_only"
-  ) {
-    return {
-      firstPaymentMode: acceptedConsent.firstPaymentMode,
-      reason: "manual_only",
-      status: "skipped",
-    };
-  }
-
   const parsedPlan = subscriptionConsentPlanSnapshotSchema.safeParse(
     acceptedConsent.planSnapshot,
   );
@@ -297,6 +282,13 @@ export async function attemptSubscriptionActivation(input: {
   if (consentLinkedSubscription) {
     await resolveAlertsForEntity({
       paymentId: latestPaidFirstPayment.id,
+      tenantId,
+    });
+
+    await queueSubscriptionActivationSuccessNotifications({
+      customerId: customer.id,
+      mode: input.mode,
+      subscriptionId: consentLinkedSubscription.id,
       tenantId,
     });
 
@@ -463,6 +455,13 @@ export async function attemptSubscriptionActivation(input: {
       tenantId,
     });
 
+    await queueSubscriptionActivationSuccessNotifications({
+      customerId: customer.id,
+      mode: input.mode,
+      subscriptionId: localSubscriptionId,
+      tenantId,
+    });
+
     return {
       firstPaymentMode: acceptedConsent.firstPaymentMode,
       mollieSubscriptionId: subscription.id,
@@ -492,31 +491,6 @@ export async function attemptSubscriptionActivation(input: {
       undefined,
       input.actor,
     );
-
-    const alert = await openAlert({
-      customerId: customer.id,
-      message:
-        "A paid onboarding flow could not be promoted into a subscription. Review the customer and retry activation after checking Mollie.",
-      paymentId: latestPaidFirstPayment.id,
-      payload: {
-        consentId: acceptedConsent.consentId,
-        error: message,
-        trigger: input.trigger,
-      },
-      severity: "warning",
-      tenantId,
-      title: "Subscription activation failed",
-    });
-
-    if (alert.isNew) {
-      await deliverAlertEmail({
-        alertId: alert.id,
-        message:
-          "A paid onboarding flow could not be promoted into a subscription. Open Mollie Manager to inspect the customer and retry activation.",
-        tenantId,
-        title: "Subscription activation failed",
-      });
-    }
 
     return {
       firstPaymentMode: acceptedConsent.firstPaymentMode,

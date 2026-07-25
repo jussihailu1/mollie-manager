@@ -1697,6 +1697,67 @@ export const customerPaymentNotifications = pgTable(
   ],
 );
 
+export const subscriptionActivationJobs = pgTable(
+  "subscription_activation_jobs",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    customerId: text("customer_id").notNull(),
+    consentId: text("consent_id").notNull(),
+    mode: mollieModeEnum("mode").notNull(),
+    status: text("status").notNull().default("pending"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { mode: "string", withTimezone: true }).notNull(),
+    claimedAt: timestamp("claimed_at", { mode: "string", withTimezone: true }),
+    claimToken: text("claim_token"),
+    subscriptionId: text("subscription_id"),
+    lastErrorMessage: text("last_error_message"),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({ columns: [table.tenantId], foreignColumns: [tenants.id], name: "subscription_activation_jobs_tenant_id_fkey" }).onDelete("cascade"),
+    foreignKey({ columns: [table.customerId], foreignColumns: [customers.id], name: "subscription_activation_jobs_customer_id_fkey" }).onDelete("cascade"),
+    foreignKey({ columns: [table.subscriptionId], foreignColumns: [subscriptions.id], name: "subscription_activation_jobs_subscription_id_fkey" }).onDelete("set null"),
+    unique("subscription_activation_jobs_tenant_mode_consent_key").on(table.tenantId, table.mode, table.consentId),
+    index("subscription_activation_jobs_due_idx").on(table.tenantId, table.mode, table.status, table.nextAttemptAt),
+  ],
+);
+
+export const subscriptionActivationNotifications = pgTable(
+  "subscription_activation_notifications",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    customerId: text("customer_id").notNull(),
+    subscriptionId: text("subscription_id"),
+    jobId: text("job_id"),
+    mode: mollieModeEnum("mode").notNull(),
+    notificationType: text("notification_type").notNull(),
+    eventKey: text("event_key").notNull(),
+    recipientEmail: text("recipient_email").notNull(),
+    status: text("status").notNull().default("pending"),
+    subject: text("subject").notNull(),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+    claimedAt: timestamp("claimed_at", { mode: "string", withTimezone: true }),
+    claimToken: text("claim_token"),
+    lastErrorMessage: text("last_error_message"),
+    sentAt: timestamp("sent_at", { mode: "string", withTimezone: true }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({ columns: [table.tenantId], foreignColumns: [tenants.id], name: "subscription_activation_notifications_tenant_id_fkey" }).onDelete("cascade"),
+    foreignKey({ columns: [table.customerId], foreignColumns: [customers.id], name: "subscription_activation_notifications_customer_id_fkey" }).onDelete("cascade"),
+    foreignKey({ columns: [table.subscriptionId], foreignColumns: [subscriptions.id], name: "subscription_activation_notifications_subscription_id_fkey" }).onDelete("set null"),
+    foreignKey({ columns: [table.jobId], foreignColumns: [subscriptionActivationJobs.id], name: "subscription_activation_notifications_job_id_fkey" }).onDelete("set null"),
+    unique("subscription_activation_notifications_event_recipient_key").on(table.tenantId, table.mode, table.notificationType, table.eventKey, table.recipientEmail),
+    index("subscription_activation_notifications_due_idx").on(table.tenantId, table.mode, table.status, table.nextAttemptAt),
+  ],
+);
+
 export const auditLogs = pgTable(
   "audit_logs",
   {

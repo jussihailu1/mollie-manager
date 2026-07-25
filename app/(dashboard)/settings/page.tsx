@@ -210,8 +210,6 @@ export default async function SettingsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
   const resolvedSearchParams = await searchParams;
-  const error = getSingleSearchParam(resolvedSearchParams.error) ?? null;
-  const notice = getSingleSearchParam(resolvedSearchParams.notice) ?? null;
   const reconciliationSummary = parseReconciliationSummary(
     getSingleSearchParam(resolvedSearchParams.reconciliationSummary),
   );
@@ -284,20 +282,6 @@ export default async function SettingsPage({
   if (!canManageAdvancedOperations) {
     return (
       <div className="mx-auto max-w-6xl space-y-6 p-8">
-        {error ? (
-          <Alert variant="destructive">
-            <AlertTitle>Action failed</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : null}
-
-        {notice ? (
-          <Alert>
-            <AlertTitle>Updated</AlertTitle>
-            <AlertDescription>{notice}</AlertDescription>
-          </Alert>
-        ) : null}
-
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
           <p className="mt-2 text-muted-foreground">
@@ -475,20 +459,6 @@ export default async function SettingsPage({
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 p-8">
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Action failed</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {notice ? (
-        <Alert>
-          <AlertTitle>Updated</AlertTitle>
-          <AlertDescription>{notice}</AlertDescription>
-        </Alert>
-      ) : null}
-
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
         <p className="mt-2 text-muted-foreground">

@@ -3,6 +3,7 @@ import "server-only";
 import { transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
+import { queueSubscriptionActivationForCustomer } from "@/lib/onboarding/subscription-activation-jobs";
 import { runFailedPaymentCustomerNotificationForSyncedPayment } from "@/lib/failed-payment-customer-notifications";
 import { runFirstPaymentInvoiceSyncFollowUp } from "@/lib/reliability/first-payment-sync-followup";
 import {
@@ -166,6 +167,11 @@ export async function syncPaymentByMollieId(
     payment.status === "paid" &&
     shouldRunBillingFollowups(reconciliationMode)
   ) {
+    await queueSubscriptionActivationForCustomer({
+      customerId: resolvedCustomerId,
+      mode,
+      tenantId: resolvedTenantId,
+    });
     await attemptSubscriptionActivation({
       actor,
       customerId: resolvedCustomerId,
