@@ -60,6 +60,9 @@ export default async function SubscribeConsentPage({
   }
 
   const plan = consent.planSnapshot;
+  const usesLegacyAcknowledgments = consent.requiredCheckboxKeys.some(
+    (key) => key !== "subscription_terms_ack",
+  );
 
   return (
     <main className="min-h-screen bg-neutral-100 px-4 py-10 text-neutral-950 sm:px-6">
@@ -71,7 +74,7 @@ export default async function SubscribeConsentPage({
           {consent.businessName ?? "Subscription setup"}
         </h1>
         <p className="mt-3 text-sm leading-6 text-neutral-700">
-          Review the subscription terms below. You must confirm these terms before continuing to payment.
+          Confirm the subscription summary before continuing to payment.
         </p>
 
         {errorMessage ? (
@@ -82,52 +85,31 @@ export default async function SubscribeConsentPage({
 
         <section className="mt-8 space-y-3 rounded-2xl border border-neutral-300 bg-white p-5 text-sm">
           <div className="flex items-start justify-between gap-4">
-            <span className="text-neutral-700">Amount</span>
+            <span className="text-neutral-700">Subscription</span>
             <span className="text-right font-medium">
-              {formatCurrency(plan.subscriptionAmountValue, plan.amountCurrency)}
+              {formatCurrency(plan.subscriptionAmountValue, plan.amountCurrency)}{" "}
+              {formatInterval(plan.billingInterval).toLowerCase()}
             </span>
           </div>
           <div className="flex items-start justify-between gap-4">
-            <span className="text-neutral-700">Billing interval</span>
-            <span className="text-right font-medium">{formatInterval(plan.billingInterval)}</span>
-          </div>
-          <div className="flex items-start justify-between gap-4">
-            <span className="text-neutral-700">Subscription term</span>
+            <span className="text-neutral-700">Term</span>
             <span className="text-right font-medium">
-              {plan.subscriptionTermMode === "fixed_term" ? "Fixed term" : "Open-ended"}
-            </span>
-          </div>
-          {plan.subscriptionTermMode === "fixed_term" ? (
-            <>
-              <div className="flex items-start justify-between gap-4">
-                <span className="text-neutral-700">Total payments</span>
-                <span className="text-right font-medium">{plan.totalPayments ?? "-"}</span>
-              </div>
-              <div className="flex items-start justify-between gap-4">
-                <span className="text-neutral-700">Final charge date</span>
-                <span className="text-right font-medium">
-                  {plan.finalChargeDate ? formatDate(plan.finalChargeDate) : "Not scheduled"}
-                </span>
-              </div>
-            </>
-          ) : null}
-          <div className="flex items-start justify-between gap-4">
-            <span className="text-neutral-700">Service end behavior</span>
-            <span className="max-w-[18rem] text-right font-medium">
-              {plan.serviceEndAt
-                ? `Service remains active until ${formatDate(plan.serviceEndAt)}.`
-                : plan.cancellationEffect === "end_of_paid_period"
-                  ? "Service remains active until the end of the paid period."
-                  : "Service ends immediately when cancelled."}
+              {plan.subscriptionTermMode === "fixed_term"
+                ? `${plan.totalPayments ?? "-"} payments`
+                : "Until cancelled"}
             </span>
           </div>
           <div className="flex items-start justify-between gap-4">
-            <span className="text-neutral-700">Cancellation method</span>
-            <span className="text-right font-medium">Email</span>
+            <span className="text-neutral-700">First payment</span>
+            <span className="text-right font-medium">
+              {formatCurrency(plan.firstPaymentAmountValue, plan.amountCurrency)}
+            </span>
           </div>
           <div className="flex items-start justify-between gap-4">
-            <span className="text-neutral-700">Cancellation email</span>
-            <span className="text-right font-medium">{plan.cancellationEmail}</span>
+            <span className="text-neutral-700">Cancel by email</span>
+            <a className="text-right font-medium underline" href={`mailto:${plan.cancellationEmail}`}>
+              {plan.cancellationEmail}
+            </a>
           </div>
           <div className="flex items-start justify-between gap-4">
             <span className="text-neutral-700">Terms & privacy</span>
@@ -142,38 +124,25 @@ export default async function SubscribeConsentPage({
               {` (${plan.termsPrivacy.termsVersion})`}
             </span>
           </div>
-          <div className="flex items-start justify-between gap-4">
-            <span className="text-neutral-700">Mandate setup payment</span>
-            <span className="text-right font-medium">
-              {formatCurrency(plan.firstPaymentAmountValue, plan.amountCurrency)}
-            </span>
-          </div>
-          <div className="flex items-start justify-between gap-4">
-            <span className="text-neutral-700">Recurring invoice notice</span>
-            <span className="max-w-[18rem] text-right font-medium">
-              Invoices are sent by email {plan.recurringBilling.invoiceNoticeDaysBeforeDueDate} calendar days before the planned automatic collection date.
-            </span>
-          </div>
-          <div className="flex items-start justify-between gap-4">
-            <span className="text-neutral-700">Automatic collection</span>
-            <span className="max-w-[18rem] text-right font-medium">
-              The invoice states the planned collection date and the amount will be collected automatically on that date.
-            </span>
-          </div>
-          <div className="flex items-start justify-between gap-4">
-            <span className="text-neutral-700">SEPA direct debit note</span>
-            <span className="max-w-[18rem] text-right font-medium">
-              A direct debit can still fail or be reversed later; the underlying payment obligation may remain open.
-            </span>
-          </div>
-          {plan.firstPaymentMode === "mandate_only" ? (
-            <div className="flex items-start justify-between gap-4">
-              <span className="text-neutral-700">Mandate-only setup</span>
-              <span className="max-w-[18rem] text-right font-medium">
-                The EUR 0.01 setup payment is separate from the recurring subscription and is not counted as an installment.
-              </span>
+          <details className="border-t border-neutral-200 pt-3 text-neutral-700">
+            <summary className="cursor-pointer font-medium text-neutral-950">Payment details</summary>
+            <div className="mt-3 space-y-3 leading-6">
+              {plan.finalChargeDate ? <p>Final charge: {formatDate(plan.finalChargeDate)}.</p> : null}
+              <p>
+                {plan.serviceEndAt
+                  ? `Service remains active until ${formatDate(plan.serviceEndAt)}.`
+                  : plan.cancellationEffect === "end_of_paid_period"
+                    ? "Service remains active until the end of the paid period."
+                    : "Service ends immediately when cancelled."}
+              </p>
+              <p>
+                We email the invoice {plan.recurringBilling.invoiceNoticeDaysBeforeDueDate} calendar days before automatic collection. A direct debit can fail or be reversed; the payment obligation may remain open.
+              </p>
+              {plan.firstPaymentMode === "mandate_only" ? (
+                <p>The EUR 0.01 setup payment is separate from the subscription and is not an installment.</p>
+              ) : null}
             </div>
-          ) : null}
+          </details>
         </section>
 
         {consent.acceptedAt ? (
@@ -193,44 +162,27 @@ export default async function SubscribeConsentPage({
           <form className="mt-8 space-y-5" action={acceptSubscriptionConsentAction}>
             <input type="hidden" name="token" value={consent.consentToken} />
 
-            <label className="flex items-start gap-3 rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm leading-6">
-              <input
-                className="mt-1 h-4 w-4"
-                type="checkbox"
-                name="recurringTermsAck"
-                value="yes"
-                required
-              />
-              <span>
-                I understand that this starts a recurring subscription under the terms shown above.
-              </span>
-            </label>
-
-            <label className="flex items-start gap-3 rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm leading-6">
-              <input
-                className="mt-1 h-4 w-4"
-                type="checkbox"
-                name="recurringBillingPolicyAck"
-                value="yes"
-                required
-              />
-              <span>
-                I agree that recurring invoices are sent {plan.recurringBilling.invoiceNoticeDaysBeforeDueDate} calendar days before automatic collection and that SEPA direct debits can fail or be reversed later.
-              </span>
-            </label>
-
-            <label className="flex items-start gap-3 rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm leading-6">
-              <input
-                className="mt-1 h-4 w-4"
-                type="checkbox"
-                name="cancellationPolicyAck"
-                value="yes"
-                required
-              />
-              <span>
-                I understand cancellation is handled by email and I have reviewed the terms and privacy references.
-              </span>
-            </label>
+            {usesLegacyAcknowledgments ? (
+              <>
+                <label className="flex items-start gap-3 rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm leading-6">
+                  <input className="mt-1 h-4 w-4" type="checkbox" name="recurringTermsAck" value="yes" required />
+                  <span>I understand that this starts a recurring subscription under the terms shown above.</span>
+                </label>
+                <label className="flex items-start gap-3 rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm leading-6">
+                  <input className="mt-1 h-4 w-4" type="checkbox" name="recurringBillingPolicyAck" value="yes" required />
+                  <span>I agree to the recurring billing details shown above.</span>
+                </label>
+                <label className="flex items-start gap-3 rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm leading-6">
+                  <input className="mt-1 h-4 w-4" type="checkbox" name="cancellationPolicyAck" value="yes" required />
+                  <span>I understand cancellation is handled by email.</span>
+                </label>
+              </>
+            ) : (
+              <label className="flex items-start gap-3 rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm leading-6">
+                <input className="mt-1 h-4 w-4" type="checkbox" name="subscriptionTermsAck" value="yes" required />
+                <span>I agree to this subscription summary, the Terms, and the Privacy Policy.</span>
+              </label>
+            )}
 
             <button
               type="submit"

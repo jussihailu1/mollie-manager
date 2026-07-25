@@ -47,9 +47,7 @@ describe("first payment onboarding records", () => {
     assert.equal(records.consentRecord.consentToken, null);
     assert.equal(records.consentRecord.consentTokenHash, consentTokenStorage.consentTokenHash);
     assert.deepEqual(records.consentRecord.requiredCheckboxKeys, [
-      "recurring_terms_ack",
-      "recurring_billing_policy_ack",
-      "cancellation_policy_ack",
+      "subscription_terms_ack",
     ]);
     assert.equal(records.auditDetails.localPaymentLinkId, "plink_123");
   });

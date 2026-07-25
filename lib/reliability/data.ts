@@ -105,9 +105,9 @@ const listAlertInboxByMode = cache(async (mode: DashboardModeFilter, tenantId: s
         ${customerBusinessNameExpression} as "customerName",
         coalesce(customer.email, fallback_customer.email) as "customerEmail",
         case
-          when a.payment_id is not null then concat('/payments?focus=', a.payment_id)
+          when a.payment_id is not null then concat('/payments/', a.payment_id)
           when coalesce(customer.id, fallback_customer.id) is not null
-            then concat('/customers?focus=', coalesce(customer.id, fallback_customer.id))
+            then concat('/customers/', coalesce(customer.id, fallback_customer.id))
           else '/notifications'
         end as "href",
         ${alertModeExpression} as "mode"

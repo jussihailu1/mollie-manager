@@ -127,7 +127,7 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.id as "customerId",
         coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail",
-        concat('/payments?focus=', p.id) as "href"
+        concat('/payments/', p.id) as "href"
       from payments p
       left join customers c on c.id = p.customer_id and c.tenant_id = p.tenant_id
       where
@@ -192,7 +192,7 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.id as "customerId",
         coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail",
-        concat('/customers?focus=', c.id) as "href"
+        concat('/customers/', c.id) as "href"
       from subscriptions s
       inner join customers c on c.id = s.customer_id and c.tenant_id = s.tenant_id
       where
@@ -215,7 +215,7 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.id as "customerId",
         coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail",
-        concat('/payments?focus=', p.id) as "href"
+        concat('/payments/', p.id) as "href"
       from payments p
       left join customers c on c.id = p.customer_id and c.tenant_id = p.tenant_id
       where
@@ -239,7 +239,7 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.id as "customerId",
         coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail",
-        concat('/customers?focus=', c.id) as "href"
+        concat('/customers/', c.id) as "href"
       from recurring_billing_schedules rbs
       inner join subscriptions s on s.id = rbs.subscription_id and s.tenant_id = rbs.tenant_id
       inner join customers c on c.id = s.customer_id and c.tenant_id = rbs.tenant_id and c.mode = rbs.mode
@@ -276,7 +276,7 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.id as "customerId",
         coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail",
-        concat('/payments?focus=', p.id) as "href"
+        concat('/payments/', p.id) as "href"
       from payments p
       left join customers c on c.id = p.customer_id and c.tenant_id = p.tenant_id
       where
@@ -315,7 +315,7 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.id as "customerId",
         coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail",
-        concat('/customers?focus=', c.id) as "href"
+        concat('/customers/', c.id) as "href"
       from recurring_billing_schedules rbs
       inner join subscriptions s on s.id = rbs.subscription_id and s.tenant_id = rbs.tenant_id
       inner join customers c on c.id = s.customer_id and c.tenant_id = rbs.tenant_id and c.mode = rbs.mode
@@ -351,7 +351,7 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.id as "customerId",
         coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail",
-        concat('/customers?focus=', c.id) as "href"
+        concat('/customers/', c.id) as "href"
       from customers c
       left join customer_accounting_links cal
         on cal.customer_id = c.id
@@ -403,7 +403,7 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.id as "customerId",
         coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail",
-        concat('/customers?focus=', c.id) as "href"
+        concat('/customers/', c.id) as "href"
       from subscriptions s
       inner join customers c on c.id = s.customer_id and c.tenant_id = s.tenant_id and c.mode = s.mode
       left join mandates m
@@ -431,7 +431,7 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.id as "customerId",
         coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail",
-        concat('/customers?focus=', c.id) as "href"
+        concat('/customers/', c.id) as "href"
       from customers c
       where
         c.tenant_id = ${tenantId}
@@ -458,7 +458,7 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.id as "customerId",
         coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail",
-        concat('/payments?focus=', p.id) as "href"
+        concat('/payments/', p.id) as "href"
       from payments p
       left join customers c on c.id = p.customer_id and c.tenant_id = p.tenant_id and c.mode = p.mode
       where
@@ -485,7 +485,7 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         c.id as "customerId",
         coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
         c.email as "customerEmail",
-        concat('/customers?focus=', c.id) as "href"
+        concat('/customers/', c.id) as "href"
       from subscriptions s
       inner join customers c on c.id = s.customer_id and c.tenant_id = s.tenant_id and c.mode = s.mode
       where

@@ -26,6 +26,7 @@ import {
   serializeError,
 } from "@/lib/operations/action-helpers";
 import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
+import { buildDrawerPath } from "@/lib/dashboard-drawer-route";
 
 const manageSubscriptionSchema = z.object({
   returnTo: z.string().trim().startsWith("/").default("/customers"),
@@ -296,18 +297,18 @@ export async function recordCancellationRequestAction(formData: FormData) {
     }
 
     if (result.status === "denied") {
-      redirectWithMessage(`/customers?focus=${encodeURIComponent(result.customerId)}`, {
+      redirectWithMessage(buildDrawerPath("customers", result.customerId), {
         error: "Cancellation request is not allowed for this subscription.",
       });
     }
 
     if (result.status === "duplicate") {
-      redirectWithMessage(`/customers?focus=${encodeURIComponent(result.customerId)}`, {
+      redirectWithMessage(buildDrawerPath("customers", result.customerId), {
         notice: "Cancellation request was already recorded.",
       });
     }
 
-    redirectWithMessage(`/customers?focus=${encodeURIComponent(result.customerId)}`, {
+    redirectWithMessage(buildDrawerPath("customers", result.customerId), {
       notice: "Cancellation request recorded for review. No provider change was made.",
     });
   } catch (error) {

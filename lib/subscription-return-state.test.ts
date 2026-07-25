@@ -17,7 +17,7 @@ describe("subscription return state", () => {
     assert.equal(state.tone, "success");
   });
 
-  it("explains mandate-only completion separately from subscription activation", () => {
+  it("keeps mandate-only completion customer-facing without claiming activation", () => {
     const state = getSubscriptionReturnState({
       firstPaymentMode: "mandate_only",
       firstPaymentStatus: "paid",
@@ -26,7 +26,8 @@ describe("subscription return state", () => {
     });
 
     assert.equal(state.title, "Mandate setup completed");
-    assert.match(state.description, /mandate setup payment/i);
+    assert.match(state.description, /payment details have been confirmed/i);
+    assert.doesNotMatch(state.description, /subscription is now active/i);
   });
 
   it("keeps paid first payment pending while subscription activation catches up", () => {
@@ -39,6 +40,7 @@ describe("subscription return state", () => {
 
     assert.equal(state.title, "Payment received");
     assert.equal(state.pending, true);
+    assert.equal(state.nextStep, "You can safely close this tab.");
   });
 
   it("uses policy-safe copy for failed checkout without penalty language", () => {
@@ -56,7 +58,7 @@ describe("subscription return state", () => {
     assert.doesNotMatch(copy, /penalty|fee|cancelled|canceled|collection/);
   });
 
-  it("explains pending SEPA status as normal while final status is unknown", () => {
+  it("explains pending SEPA status without asking the customer to wait on the page", () => {
     const state = getSubscriptionReturnState({
       firstPaymentMode: "real_installment",
       firstPaymentStatus: "pending",
@@ -66,6 +68,7 @@ describe("subscription return state", () => {
 
     assert.equal(state.title, "Confirming payment");
     assert.equal(state.pending, true);
-    assert.match(state.description, /SEPA direct debit payments can stay pending/i);
+    assert.match(state.description, /SEPA Direct Debit payments/i);
+    assert.equal(state.nextStep, "You can safely close this tab.");
   });
 });

@@ -24,7 +24,7 @@ describe("alert email delivery integration", () => {
 
     const emailContent: AlertEmailContent = {
       html: "<h1>Alert</h1><p>Body</p>",
-      primaryUrl: "https://manager.example.com/payments?focus=payment_123",
+      primaryUrl: "https://manager.example.com/payments/payment_123",
       relatedLinks: [
         {
           label: "Open notifications",
@@ -32,7 +32,7 @@ describe("alert email delivery integration", () => {
           url: "https://manager.example.com/notifications",
         },
       ],
-      text: "Alert body\n\nOpen in Mollie Manager: https://manager.example.com/payments?focus=payment_123",
+      text: "Alert body\n\nOpen in Mollie Manager: https://manager.example.com/payments/payment_123",
     };
 
     const result = await deliverAlertEmailWithDependencies(

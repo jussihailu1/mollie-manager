@@ -1,38 +1,9 @@
-import { PaymentsWorkspace } from "@/components/payments-workspace";
-import { getSelectedMollieMode } from "@/lib/dashboard-mode";
-import { getSingleSearchParam } from "@/lib/format";
-import { listCustomers, listPayments } from "@/lib/onboarding/data";
-import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
-import { toUiCustomerRecord, toUiPaymentRecord } from "@/lib/ui-data";
+import { PaymentPageContent } from "./payments-page";
 
 export default async function PaymentsPage({
   searchParams,
 }: Readonly<{
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
-  const { currentTenant } = await getCurrentTenantSelectionForViewer();
-  const selectedMode = await getSelectedMollieMode();
-  const tenantId = currentTenant.id;
-  const [resolvedSearchParams, customersResult, paymentsResult] = await Promise.all([
-    searchParams,
-    listCustomers({ mode: selectedMode, tenantId }),
-    listPayments({ mode: selectedMode, tenantId }),
-  ]);
-
-  return (
-    <PaymentsWorkspace
-      key={[
-        getSingleSearchParam(resolvedSearchParams.customerId) ?? "",
-        getSingleSearchParam(resolvedSearchParams.focus) ?? "",
-        getSingleSearchParam(resolvedSearchParams.notice) ?? "",
-        getSingleSearchParam(resolvedSearchParams.error) ?? "",
-      ].join(":")}
-      customers={customersResult.map(toUiCustomerRecord)}
-      error={getSingleSearchParam(resolvedSearchParams.error) ?? null}
-      initialCustomerId={getSingleSearchParam(resolvedSearchParams.customerId) ?? null}
-      initialFocusId={getSingleSearchParam(resolvedSearchParams.focus) ?? null}
-      notice={getSingleSearchParam(resolvedSearchParams.notice) ?? null}
-      payments={paymentsResult.map(toUiPaymentRecord)}
-    />
-  );
+  return <PaymentPageContent searchParams={searchParams} />;
 }

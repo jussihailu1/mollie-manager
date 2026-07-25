@@ -337,6 +337,7 @@ export async function acceptSubscriptionConsentAction(formData: FormData) {
         cancellationPolicyAck: formData.get("cancellationPolicyAck"),
         recurringBillingPolicyAck: formData.get("recurringBillingPolicyAck"),
         recurringTermsAck: formData.get("recurringTermsAck"),
+        subscriptionTermsAck: formData.get("subscriptionTermsAck"),
         token: formData.get("token"),
       },
     },

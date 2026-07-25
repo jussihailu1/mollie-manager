@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { type FormEvent, type ReactNode, useActionState, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   Archive,
@@ -20,12 +20,17 @@ import {
   Repeat,
   RotateCcw,
   Search,
+  Share2,
   User,
+  MessageCircle,
 } from "lucide-react";
 
 import {
   createCustomerAction,
   createFirstPaymentAction,
+  type CreateFirstPaymentActionState,
+  deletePendingConsentLinkAction,
+  type DeletePendingConsentLinkActionState,
   createSubscriptionAction,
   linkEboekhoudenRelationAction,
   saveCustomerBillingProfileAction,
@@ -36,7 +41,6 @@ import {
   transitionOperationRequestAction,
   withdrawOperationRequestAction,
 } from "@/lib/operations/actions";
-import { buildConsentLinkReturnTo } from "@/lib/onboarding/consent-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -66,12 +70,24 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import {
   deriveCustomerLifecycleState,
   type CustomerLifecycleStateResult,
 } from "@/lib/customer-lifecycle-state";
 import { formatCurrency, formatDate, formatDateTime, formatLabel } from "@/lib/format";
+import { buildDrawerPath } from "@/lib/dashboard-drawer-route";
+import { deriveFinalChargeDate, deriveServiceEndAt } from "@/lib/subscription-policy";
 import {
   hasMeaningfulDifference,
   relationFieldLabels,
@@ -80,6 +96,16 @@ import {
 } from "@/lib/eboekhouden/relation-mapping";
 
 const renewableLinkStatuses = new Set(["archived", "canceled", "expired", "failed"]);
+
+type EditableConsentPlan = {
+  firstPaymentMode: "real_installment" | "mandate_only";
+  subscriptionAmount: string;
+  subscriptionDescription: string;
+  subscriptionInterval: "weekly" | "monthly" | "yearly";
+  subscriptionStartDate: string;
+  subscriptionTermMode: "open_ended" | "fixed_term";
+  totalPayments: string;
+};
 
 export type CustomerFlowRecord = {
   address: string | null;
@@ -552,6 +578,65 @@ function CopyField({ value }: Readonly<{ value: string }>) {
   );
 }
 
+function ConsentLinkShareActions({
+  customer,
+  value,
+}: Readonly<{
+  customer: CustomerFlowRecord;
+  value: string;
+}>) {
+  const [copied, setCopied] = useState(false);
+  const message = `Hi ${getCustomerDisplayName(customer)}, please complete your subscription consent and first payment here: ${value}`;
+  const emailHref = `mailto:${encodeURIComponent(customer.email)}?subject=${encodeURIComponent("Complete your subscription consent")}&body=${encodeURIComponent(message)}`;
+
+  return (
+    <>
+      <div className="flex gap-2">
+        <Input value={value} readOnly />
+        <Button
+          type="button"
+          onClick={async () => {
+            await navigator.clipboard.writeText(value);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 2000);
+          }}
+        >
+          {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+          {copied ? "Copied" : "Copy"}
+        </Button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button asChild type="button" variant="outline">
+          <a href={emailHref}>
+            <Mail className="mr-2 h-4 w-4" />
+            Email
+          </a>
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            window.open(
+              `https://wa.me/?text=${encodeURIComponent(message)}`,
+              "_blank",
+              "noopener,noreferrer",
+            );
+          }}
+        >
+          <MessageCircle className="mr-2 h-4 w-4" />
+          WhatsApp
+        </Button>
+        <Button asChild type="button" variant="ghost">
+          <a href={value} target="_blank" rel="noreferrer">
+            <ExternalLink className="mr-2 h-4 w-4" />
+            Open link
+          </a>
+        </Button>
+      </div>
+    </>
+  );
+}
+
 function CustomerForm({
   action,
   eboekhoudenRelationId,
@@ -665,7 +750,7 @@ function CustomerInvoiceProfileDialog({
           <input
             type="hidden"
             name="returnTo"
-            value={`/customers?focus=${encodeURIComponent(customer.id)}`}
+            value={buildDrawerPath("customers", customer.id)}
           />
           <div className="grid gap-4 sm:grid-cols-2">
             {([
@@ -1206,18 +1291,21 @@ export function LinkEboekhoudenRelationDialog({
 export function CreatePaymentLinkDialog({
   customer,
   customers,
+  initialView = "create",
   open,
   onOpenChange,
+  onConsentDeleted,
 }: Readonly<{
   customer: CustomerFlowRecord | null;
   customers: CustomerFlowRecord[];
+  initialView?: "create" | "edit" | "share";
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onConsentDeleted?: () => void;
 }>) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const [step, setStep] = useState<"select_customer" | "payment_details">(
-    customer ? "payment_details" : "select_customer",
+  const router = useRouter();
+  const [step, setStep] = useState<"select_customer" | "payment_details" | "share">(
+    initialView === "share" ? "share" : customer ? "payment_details" : "select_customer",
   );
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(customer?.id ?? null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -1236,18 +1324,60 @@ export function CreatePaymentLinkDialog({
     "open_ended" | "fixed_term"
   >("open_ended");
   const [totalPayments, setTotalPayments] = useState("12");
-  const [serviceEndAt, setServiceEndAt] = useState("");
+  const [consentLinkUrl, setConsentLinkUrl] = useState<string | null>(null);
+  const [consentLinkError, setConsentLinkError] = useState<string | null>(null);
+  const [isConsentLinkLoading, setIsConsentLinkLoading] = useState(initialView === "share");
+  const isEditing = initialView === "edit";
+  const [isEditPlanLoading, setIsEditPlanLoading] = useState(isEditing);
+  const [editPlanError, setEditPlanError] = useState<string | null>(null);
+  const [isReplaceConfirmationOpen, setIsReplaceConfirmationOpen] = useState(false);
+  const [isNoChangesDialogOpen, setIsNoChangesDialogOpen] = useState(false);
+  const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
+  const [originalEditPlan, setOriginalEditPlan] = useState<EditableConsentPlan | null>(null);
+  const [createPaymentState, createPaymentAction, isCreatePaymentPending] = useActionState<
+    CreateFirstPaymentActionState,
+    FormData
+  >(createFirstPaymentAction, null);
+  const [deleteConsentState, deleteConsentAction, isDeleteConsentPending] = useActionState<
+    DeletePendingConsentLinkActionState,
+    FormData
+  >(deletePendingConsentLinkAction, null);
+  const minimumFixedTermPayments = firstPaymentMode === "real_installment" ? 2 : 1;
+  const calculatedServiceEndDate = useMemo(() => {
+    const parsedTotalPayments = Number(totalPayments);
+
+    if (
+      subscriptionTermMode !== "fixed_term" ||
+      !Number.isInteger(parsedTotalPayments) ||
+      parsedTotalPayments < minimumFixedTermPayments
+    ) {
+      return null;
+    }
+
+    const finalChargeDate = deriveFinalChargeDate({
+      firstPaymentMode,
+      interval: subscriptionInterval,
+      startDate: subscriptionStartDate,
+      subscriptionTermMode,
+      totalPayments: parsedTotalPayments,
+    });
+
+    return deriveServiceEndAt({
+      finalChargeDate,
+      interval: subscriptionInterval,
+      subscriptionTermMode,
+    });
+  }, [
+    firstPaymentMode,
+    minimumFixedTermPayments,
+    subscriptionInterval,
+    subscriptionStartDate,
+    subscriptionTermMode,
+    totalPayments,
+  ]);
 
   const selectedCustomer =
     customer ?? customers.find((item) => item.id === selectedCustomerId) ?? null;
-  const returnTo = selectedCustomer
-    ? buildConsentLinkReturnTo({
-        customerId: selectedCustomer.id,
-        pathname,
-        search: searchParams.toString(),
-      })
-    : pathname;
-
   const filteredCustomers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
@@ -1264,22 +1394,179 @@ export function CreatePaymentLinkDialog({
     );
   }, [customers, searchQuery]);
 
+  useEffect(() => {
+    if (!createPaymentState?.consentLinkUrl) {
+      return;
+    }
+
+    setConsentLinkUrl(createPaymentState.consentLinkUrl);
+    setConsentLinkError(null);
+    setStep("share");
+    router.refresh();
+  }, [createPaymentState, router]);
+
+  useEffect(() => {
+    if (!open || step !== "share" || consentLinkUrl || !selectedCustomer) {
+      return;
+    }
+
+    const customerId = selectedCustomer.id;
+    let active = true;
+    setIsConsentLinkLoading(true);
+    setConsentLinkError(null);
+
+    async function loadConsentLink() {
+      try {
+        const url = new URL("/api/customer-consent-link", window.location.origin);
+        url.searchParams.set("customerId", customerId);
+        const response = await fetch(url.toString(), { cache: "no-store" });
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string; latestConsentUrl?: string | null }
+          | null;
+
+        if (!response.ok || !payload?.latestConsentUrl) {
+          throw new Error(payload?.error ?? "Could not load the consent link.");
+        }
+
+        if (active) {
+          setConsentLinkUrl(payload.latestConsentUrl);
+        }
+      } catch (error) {
+        if (active) {
+          setConsentLinkError(error instanceof Error ? error.message : "Could not load the consent link.");
+        }
+      } finally {
+        if (active) {
+          setIsConsentLinkLoading(false);
+        }
+      }
+    }
+
+    loadConsentLink();
+
+    return () => {
+      active = false;
+    };
+  }, [consentLinkUrl, open, selectedCustomer, step]);
+
+  useEffect(() => {
+    if (!open || !isEditing || !selectedCustomer) {
+      return;
+    }
+
+    const customerId = selectedCustomer.id;
+    let active = true;
+    setIsEditPlanLoading(true);
+    setEditPlanError(null);
+
+    async function loadPendingConsentPlan() {
+      try {
+        const url = new URL("/api/customer-consent-link", window.location.origin);
+        url.searchParams.set("customerId", customerId);
+        const response = await fetch(url.toString(), { cache: "no-store" });
+        const payload = (await response.json().catch(() => null)) as {
+          error?: string;
+          pendingConsentLink?: {
+            planSnapshot?: {
+              billingInterval: "weekly" | "monthly" | "yearly";
+              description: string;
+              firstPaymentMode: "real_installment" | "mandate_only";
+              startDate: string;
+              subscriptionAmountValue: string;
+              subscriptionTermMode: "open_ended" | "fixed_term";
+              totalPayments: number | null;
+            };
+          } | null;
+        } | null;
+        const plan = payload?.pendingConsentLink?.planSnapshot;
+
+        if (!response.ok || !plan) {
+          throw new Error(payload?.error ?? "This consent link can no longer be changed.");
+        }
+
+        if (active) {
+          const editablePlan = {
+            firstPaymentMode: plan.firstPaymentMode,
+            subscriptionAmount: plan.subscriptionAmountValue,
+            subscriptionDescription: plan.description,
+            subscriptionInterval: plan.billingInterval,
+            subscriptionStartDate: plan.startDate,
+            subscriptionTermMode: plan.subscriptionTermMode,
+            totalPayments: plan.totalPayments?.toString() ?? "",
+          } satisfies EditableConsentPlan;
+
+          setOriginalEditPlan(editablePlan);
+          setFirstPaymentMode(editablePlan.firstPaymentMode);
+          setSubscriptionAmount(editablePlan.subscriptionAmount);
+          setSubscriptionDescription(editablePlan.subscriptionDescription);
+          setSubscriptionInterval(editablePlan.subscriptionInterval);
+          setSubscriptionStartDate(editablePlan.subscriptionStartDate);
+          setSubscriptionTermMode(editablePlan.subscriptionTermMode);
+          setTotalPayments(editablePlan.totalPayments);
+        }
+      } catch (error) {
+        if (active) {
+          setEditPlanError(error instanceof Error ? error.message : "Could not load the pending consent link.");
+        }
+      } finally {
+        if (active) {
+          setIsEditPlanLoading(false);
+        }
+      }
+    }
+
+    loadPendingConsentPlan();
+
+    return () => {
+      active = false;
+    };
+  }, [isEditing, open, selectedCustomer]);
+
+  useEffect(() => {
+    if (!deleteConsentState?.deleted) {
+      return;
+    }
+
+    onConsentDeleted?.();
+    router.refresh();
+  }, [deleteConsentState, onConsentDeleted, router]);
+
+  const hasEditedConsentPlan =
+    originalEditPlan !== null &&
+    (firstPaymentMode !== originalEditPlan.firstPaymentMode ||
+      subscriptionAmount.trim() !== originalEditPlan.subscriptionAmount ||
+      subscriptionDescription.trim() !== originalEditPlan.subscriptionDescription ||
+      subscriptionInterval !== originalEditPlan.subscriptionInterval ||
+      subscriptionStartDate !== originalEditPlan.subscriptionStartDate ||
+      subscriptionTermMode !== originalEditPlan.subscriptionTermMode ||
+      totalPayments.trim() !== originalEditPlan.totalPayments);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogHeader className="shrink-0 px-6 pb-4 pt-6">
           <DialogTitle>
-            {step === "select_customer" ? "Select Customer" : "Create First Payment Consent Link"}
+            {step === "select_customer"
+              ? "Select Customer"
+              : step === "share"
+                ? "Consent Link Ready"
+                : isEditing
+                  ? "Edit Consent Link"
+                  : "Create First Payment Consent Link"}
           </DialogTitle>
           <DialogDescription>
             {step === "select_customer"
               ? "Choose a customer to generate a consent link for."
-              : `Generate a hosted consent link for ${selectedCustomer?.businessName ?? "this customer"}. The customer must accept terms in-app before entering Mollie checkout.`}
+              : step === "share"
+                ? `Share this link with ${selectedCustomer?.businessName ?? "the customer"} to collect consent and the first payment.`
+                : isEditing
+                  ? "Changing this contract permanently invalidates the current consent link."
+                  : `Generate a hosted consent link for ${selectedCustomer?.businessName ?? "this customer"}. The customer must accept terms in-app before entering Mollie checkout.`}
           </DialogDescription>
         </DialogHeader>
 
         {step === "select_customer" ? (
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 px-6 py-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -1325,29 +1612,30 @@ export function CreatePaymentLinkDialog({
         ) : null}
 
         {step === "payment_details" && selectedCustomer ? (
-          <form className="space-y-4 py-4" action={createFirstPaymentAction}>
+          <form id="consent-link-form" className="flex min-h-0 flex-1 flex-col" action={createPaymentAction}>
             <input type="hidden" name="customerId" value={selectedCustomer.id} />
-            <input type="hidden" name="returnTo" value={returnTo} />
+            {isEditing ? <input type="hidden" name="replacePendingConsent" value="yes" /> : null}
 
-            {!customer ? (
-              <div className="mb-4 flex items-center justify-between rounded-md bg-muted p-3">
-                <div className="flex flex-col">
-                  <span className="text-xs text-muted-foreground">Selected Customer</span>
-                  <span className="text-sm font-medium">{selectedCustomer.businessName}</span>
+            <div className="grid min-h-0 grid-cols-1 gap-4 overflow-y-auto px-6 py-2 sm:grid-cols-2">
+              {!customer ? (
+                <div className="flex items-center justify-between rounded-md bg-muted p-3 sm:col-span-2">
+                  <div className="flex flex-col">
+                    <span className="text-xs text-muted-foreground">Selected Customer</span>
+                    <span className="text-sm font-medium">{selectedCustomer.businessName}</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setStep("select_customer")}
+                    className="h-8 px-2"
+                  >
+                    Change
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setStep("select_customer")}
-                  className="h-8 px-2"
-                >
-                  Change
-                </Button>
-              </div>
-            ) : null}
+              ) : null}
 
-            <div className="space-y-2">
+              <div className="space-y-2">
               <Label>First payment mode</Label>
               <Select
                 name="firstPaymentMode"
@@ -1364,9 +1652,9 @@ export function CreatePaymentLinkDialog({
                   <SelectItem value="mandate_only">Mandate-only (€0.01)</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+              </div>
 
-            <div className="space-y-2">
+              <div className="space-y-2">
               <Label htmlFor="subscriptionAmountValue">Subscription amount (EUR)</Label>
               <Input
                 id="subscriptionAmountValue"
@@ -1380,9 +1668,9 @@ export function CreatePaymentLinkDialog({
                   The first mandate-establishing payment will be fixed to €0.01.
                 </p>
               ) : null}
-            </div>
+              </div>
 
-            <div className="space-y-2">
+              <div className="space-y-2">
               <Label htmlFor="subscriptionDescription">Subscription description</Label>
               <Input
                 id="subscriptionDescription"
@@ -1391,9 +1679,9 @@ export function CreatePaymentLinkDialog({
                 onChange={(event) => setSubscriptionDescription(event.target.value)}
                 required
               />
-            </div>
+              </div>
 
-            <div className="space-y-2">
+              <div className="space-y-2">
               <Label>Billing interval</Label>
               <Select
                 name="subscriptionInterval"
@@ -1411,9 +1699,9 @@ export function CreatePaymentLinkDialog({
                   <SelectItem value="yearly">Yearly</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+              </div>
 
-            <div className="space-y-2">
+              <div className="space-y-2">
               <Label htmlFor="subscriptionStartDate">Subscription start date</Label>
               <Input
                 id="subscriptionStartDate"
@@ -1423,9 +1711,9 @@ export function CreatePaymentLinkDialog({
                 onChange={(event) => setSubscriptionStartDate(event.target.value)}
                 required
               />
-            </div>
+              </div>
 
-            <div className="space-y-2">
+              <div className="space-y-2">
               <Label>Subscription term</Label>
               <Select
                 name="subscriptionTermMode"
@@ -1442,38 +1730,135 @@ export function CreatePaymentLinkDialog({
                   <SelectItem value="fixed_term">Fixed-term</SelectItem>
                 </SelectContent>
               </Select>
+              </div>
+
+              {subscriptionTermMode === "fixed_term" ? (
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="totalPayments">Number of payments</Label>
+                  <Input
+                    id="totalPayments"
+                    name="totalPayments"
+                    value={totalPayments}
+                    onChange={(event) => setTotalPayments(event.target.value)}
+                    inputMode="numeric"
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {calculatedServiceEndDate
+                      ? `Service ends on ${formatDate(calculatedServiceEndDate)}.`
+                      : `Enter at least ${minimumFixedTermPayments} payment${minimumFixedTermPayments === 1 ? "" : "s"} to calculate the service end date.`}
+                  </p>
+                </div>
+              ) : null}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="totalPayments">Total payments (fixed-term only)</Label>
-              <Input
-                id="totalPayments"
-                name="totalPayments"
-                value={totalPayments}
-                onChange={(event) => setTotalPayments(event.target.value)}
-                disabled={subscriptionTermMode !== "fixed_term"}
-                required={subscriptionTermMode === "fixed_term"}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="serviceEndAt">Service end date (optional override)</Label>
-              <Input
-                id="serviceEndAt"
-                name="serviceEndAt"
-                type="date"
-                value={serviceEndAt}
-                onChange={(event) => setServiceEndAt(event.target.value)}
-              />
-            </div>
-
-            <DialogFooter>
+            {createPaymentState?.error || editPlanError || deleteConsentState?.error ? (
+              <p className="px-6 pb-2 text-sm text-destructive">
+                {createPaymentState?.error ?? editPlanError ?? deleteConsentState?.error}
+              </p>
+            ) : null}
+            <DialogFooter className="shrink-0 border-t px-6 py-4">
+              {isEditing ? (
+                <Button type="button" variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive" disabled={isEditPlanLoading || isDeleteConsentPending} onClick={() => setIsDeleteConfirmationOpen(true)}>
+                  Delete consent link
+                </Button>
+              ) : null}
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button type="submit">Generate Consent Link</Button>
+              {isEditing ? (
+                <Button
+                  type="button"
+                  disabled={isEditPlanLoading || isCreatePaymentPending}
+                  onClick={() =>
+                    hasEditedConsentPlan
+                      ? setIsReplaceConfirmationOpen(true)
+                      : setIsNoChangesDialogOpen(true)
+                  }
+                >
+                  {isCreatePaymentPending ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Replace Consent Link
+                </Button>
+              ) : (
+              <Button type="submit" disabled={isCreatePaymentPending}>
+                {isCreatePaymentPending ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Generate Consent Link
+              </Button>
+              )}
             </DialogFooter>
           </form>
+        ) : null}
+
+        {isEditing && selectedCustomer ? (
+          <form id="delete-consent-link-form" action={deleteConsentAction}>
+            <input type="hidden" name="customerId" value={selectedCustomer.id} />
+          </form>
+        ) : null}
+
+        <AlertDialog open={isReplaceConfirmationOpen} onOpenChange={setIsReplaceConfirmationOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Replace this consent link?</AlertDialogTitle>
+              <AlertDialogDescription>
+                The current consent link will be permanently invalidated and cannot be recovered. A new link will be created with these changes.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction form="consent-link-form" type="submit">Replace link</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={isNoChangesDialogOpen} onOpenChange={setIsNoChangesDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>No changes made</AlertDialogTitle>
+              <AlertDialogDescription>
+                Change at least one contract detail before replacing this consent link.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={() => setIsNoChangesDialogOpen(false)}>
+                Continue editing
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={isDeleteConfirmationOpen} onOpenChange={setIsDeleteConfirmationOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this consent link?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This permanently invalidates the consent link and removes the pending contract. It cannot be recovered.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction form="delete-consent-link-form" type="submit" variant="destructive">Delete link</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {step === "share" ? (
+          <div className="space-y-4 px-6 py-4">
+            {isConsentLinkLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+                Loading consent link...
+              </div>
+            ) : null}
+            {consentLinkError ? <p className="text-sm text-destructive">{consentLinkError}</p> : null}
+            {consentLinkUrl && selectedCustomer ? (
+              <ConsentLinkShareActions customer={selectedCustomer} value={consentLinkUrl} />
+            ) : null}
+            <DialogFooter className="pt-2">
+              <Button type="button" onClick={() => onOpenChange(false)}>
+                Done
+              </Button>
+            </DialogFooter>
+          </div>
         ) : null}
       </DialogContent>
     </Dialog>
@@ -1674,6 +2059,8 @@ export function CustomerDrawer({
   open,
   onOpenChange,
   onOpenCreatePayment,
+  onOpenEditConsentLink,
+  onOpenShareConsentLink,
   onOpenConfirmPayment,
   onOpenCreateSubscription,
   onOpenRecordCancellationRequest,
@@ -1684,6 +2071,8 @@ export function CustomerDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onOpenCreatePayment: (customer: CustomerFlowRecord) => void;
+  onOpenEditConsentLink: (customer: CustomerFlowRecord) => void;
+  onOpenShareConsentLink: (customer: CustomerFlowRecord) => void;
   onOpenConfirmPayment: (customer: CustomerFlowRecord) => void;
   onOpenCreateSubscription: (customer: CustomerFlowRecord) => void;
   onOpenRecordCancellationRequest: (customer: CustomerFlowRecord) => void;
@@ -2128,6 +2517,7 @@ export function CustomerDrawer({
   const showOnboardingSections = stage !== "subscription_active";
   const invoiceProfileReady = Boolean(invoiceProfile) && !invoiceProfileError;
   const consentCreated = stage !== "new";
+  const canEditConsentLink = consentCreated && !customer.latestConsentAcceptedAt;
   const firstPaymentCompleted = [
     "payment_completed",
     "subscription_activation_pending",
@@ -2162,18 +2552,24 @@ export function CustomerDrawer({
           ? () => setIsInvoiceProfileOpen(true)
           : undefined,
       actionLabel: invoiceProfileReady ? "View / edit" : "Complete profile",
+      actionIconOnly: invoiceProfileReady,
       complete: invoiceProfileReady,
       label: "Invoice profile",
     },
     {
       action:
-        !isArchived && invoiceProfileReady && stage === "new"
-          ? () => onOpenCreatePayment(customer)
+        !isArchived && consentCreated
+          ? () => onOpenShareConsentLink(customer)
+          : !isArchived && invoiceProfileReady && stage === "new"
+            ? () => onOpenCreatePayment(customer)
           : undefined,
-      actionLabel: "Create consent link",
+      actionIcon: consentCreated ? "share" : undefined,
+      actionLabel: consentCreated ? "Share consent link" : "Create consent link",
       complete: consentCreated,
       label: "Consent link",
       locked: !invoiceProfileReady,
+      secondaryAction: !isArchived && canEditConsentLink ? () => onOpenEditConsentLink(customer) : undefined,
+      secondaryActionLabel: "Edit consent link",
     },
     {
       action:
@@ -2224,16 +2620,50 @@ export function CustomerDrawer({
                 {!isLast ? <div className={`min-h-8 w-0.5 flex-1 ${step.complete ? "bg-primary" : "bg-muted"}`} /> : null}
               </div>
               <div className="min-w-0 flex-1 pb-6 pt-0.5">
-                <p className={step.complete ? "text-sm font-medium" : step.locked ? "text-sm text-muted-foreground" : "text-sm font-semibold"}>
-                  {step.label}
-                </p>
+                <div className="flex items-center gap-1">
+                  <p className={step.complete ? "text-sm font-medium" : step.locked ? "text-sm text-muted-foreground" : "text-sm font-semibold"}>
+                    {step.label}
+                  </p>
+                  {step.action && (step.actionIconOnly || step.actionIcon) ? (
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={step.action}
+                      aria-label={step.actionLabel}
+                      title={step.actionLabel}
+                    >
+                      {step.actionIcon === "share" ? <Share2 /> : <PenLine />}
+                    </Button>
+                  ) : null}
+                  {step.secondaryAction ? (
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={step.secondaryAction}
+                      aria-label={step.secondaryActionLabel}
+                      title={step.secondaryActionLabel}
+                    >
+                      <PenLine />
+                    </Button>
+                  ) : null}
+                </div>
                 {step.locked && !step.complete ? (
                   <p className="mt-1 text-xs text-muted-foreground">
                     {step.label === "Consent link" ? "Complete the invoice profile first." : "Complete the previous step first."}
                   </p>
                 ) : null}
-                {step.action ? (
-                  <Button type="button" size="sm" variant="outline" className="mt-2" onClick={step.action}>
+                {step.action && !step.actionIconOnly && !step.actionIcon ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="default"
+                    className="mt-2"
+                    onClick={step.action}
+                  >
                     {step.actionLabel}
                   </Button>
                 ) : null}
@@ -2264,9 +2694,22 @@ export function CustomerDrawer({
           <div className="space-y-3">
             <div className="space-y-3">
               <div className="space-y-1">
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Invoice profile
-                </h3>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                    Invoice profile
+                  </h3>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    disabled={isInvoiceProfileLoading}
+                    onClick={() => setIsInvoiceProfileOpen(true)}
+                    aria-label={invoiceProfile ? "Edit invoice profile" : "Complete invoice profile"}
+                    title={invoiceProfile ? "Edit invoice profile" : "Complete invoice profile"}
+                  >
+                    <PenLine />
+                  </Button>
+                </div>
                 {isInvoiceProfileLoading ? (
                   <p className="text-sm text-muted-foreground">Loading invoice profile...</p>
                 ) : invoiceProfileError ? (
@@ -2285,17 +2728,6 @@ export function CustomerDrawer({
                   </p>
                 )}
               </div>
-              <Button
-                type="button"
-                size="sm"
-                variant={invoiceProfile ? "outline" : "default"}
-                className="w-full"
-                disabled={isInvoiceProfileLoading}
-                onClick={() => setIsInvoiceProfileOpen(true)}
-              >
-                <PenLine className="mr-2 h-4 w-4" />
-                {invoiceProfile ? "View / edit" : "Complete profile"}
-              </Button>
               {invoiceProfileError ? (
                 <Button type="button" size="sm" variant="ghost" onClick={() => setInvoiceProfileRefreshKey((value) => value + 1)}>
                   Retry
@@ -2577,7 +3009,7 @@ export function CustomerDrawer({
                       Updated {formatDateTime(notification.occurredAt)} / {notification.attemptCount} attempt{notification.attemptCount === 1 ? "" : "s"} / template v{notification.templateVersion}
                     </p>
                     <Button asChild className="mt-2" size="sm" variant="ghost">
-                      <Link href={`/payments?focus=${notification.paymentId}`}>
+                      <Link href={buildDrawerPath("payments", notification.paymentId)}>
                         Review payment
                       </Link>
                     </Button>
@@ -2615,7 +3047,7 @@ export function CustomerDrawer({
                           <input
                             type="hidden"
                             name="returnTo"
-                            value={`/customers?focus=${encodeURIComponent(customer.id)}`}
+                            value={buildDrawerPath("customers", customer.id)}
                           />
                           <input
                             type="hidden"
@@ -2632,7 +3064,7 @@ export function CustomerDrawer({
                         <input
                           type="hidden"
                           name="returnTo"
-                          value={`/customers?focus=${encodeURIComponent(customer.id)}`}
+                          value={buildDrawerPath("customers", customer.id)}
                         />
                         <Button size="sm" type="submit" variant="outline">
                           Withdraw request

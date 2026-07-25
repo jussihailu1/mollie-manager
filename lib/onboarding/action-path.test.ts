@@ -10,19 +10,19 @@ describe("onboarding action path helpers", () => {
   it("builds a path from params only when params are present", () => {
     assert.equal(buildActionPath("/customers"), "/customers");
     assert.equal(
-      buildActionPath("/customers", new URLSearchParams({ focus: "cus_1" })),
-      "/customers?focus=cus_1",
+      buildActionPath("/customers", new URLSearchParams({ view: "setup" })),
+      "/customers?view=setup",
     );
   });
 
   it("updates, preserves, and removes query params", () => {
     assert.equal(
-      updateActionPath("/customers?page=2&focus=old", {
+      updateActionPath("/customers?page=2&view=all", {
         error: "Needs sync",
-        focus: "new",
+        view: "setup",
         notice: null,
       }),
-      "/customers?page=2&focus=new&error=Needs+sync",
+      "/customers?page=2&view=setup&error=Needs+sync",
     );
 
     assert.equal(

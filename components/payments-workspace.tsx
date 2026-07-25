@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -41,6 +41,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/format";
+import {
+  buildDrawerCollectionPath,
+  buildDrawerPath,
+  getDrawerIdFromPath,
+} from "@/lib/dashboard-drawer-route";
 import { cn } from "@/lib/utils";
 
 type PaymentRecord = {
@@ -130,15 +135,15 @@ function SortIcon({
   );
 }
 
-function getInitialPage(payments: PaymentRecord[], initialFocusId?: string | null) {
-  if (!initialFocusId) {
+function getInitialPage(payments: PaymentRecord[], initialDrawerId?: string | null) {
+  if (!initialDrawerId) {
     return 1;
   }
 
   const sortedPayments = [...payments].sort(
     (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
   );
-  const focusedIndex = sortedPayments.findIndex((payment) => payment.id === initialFocusId);
+  const focusedIndex = sortedPayments.findIndex((payment) => payment.id === initialDrawerId);
 
   if (focusedIndex === -1) {
     return 1;
@@ -160,7 +165,7 @@ function CustomerLink({
 
   return (
     <Link
-      href={`/customers?focus=${encodeURIComponent(customerId)}`}
+      href={buildDrawerPath("customers", customerId)}
       className="group inline-flex items-center gap-1 hover:underline"
     >
       <span>{customerName}</span>
@@ -173,19 +178,20 @@ export function PaymentsWorkspace({
   customers,
   error,
   initialCustomerId,
-  initialFocusId,
+  initialDrawerId,
   notice,
   payments,
 }: Readonly<{
   customers: CustomerFlowRecord[];
   error?: string | null;
   initialCustomerId?: string | null;
-  initialFocusId?: string | null;
+  initialDrawerId?: string | null;
   notice?: string | null;
   payments: PaymentRecord[];
 }>) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [customerIdFilter, setCustomerIdFilter] = useState(initialCustomerId ?? null);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -194,15 +200,31 @@ export function PaymentsWorkspace({
   const [dateTo, setDateTo] = useState("");
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [currentPage, setCurrentPage] = useState(() => getInitialPage(payments, initialFocusId));
+  const [currentPage, setCurrentPage] = useState(() => getInitialPage(payments, initialDrawerId));
   const [isCreatePaymentOpen, setIsCreatePaymentOpen] = useState(false);
-  const focusedPayment = initialFocusId
-    ? payments.find((payment) => payment.id === initialFocusId) ?? null
+  const focusedPayment = initialDrawerId
+    ? payments.find((payment) => payment.id === initialDrawerId) ?? null
     : null;
   const [isPaymentDrawerOpen, setIsPaymentDrawerOpen] = useState(Boolean(focusedPayment));
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(
     focusedPayment?.id ?? null,
   );
+
+  useEffect(() => {
+    function syncDrawerFromHistory() {
+      const paymentId = getDrawerIdFromPath("payments", window.location.pathname);
+      const payment = paymentId
+        ? payments.find((candidate) => candidate.id === paymentId) ?? null
+        : null;
+
+      setSelectedPaymentId(payment?.id ?? null);
+      setIsPaymentDrawerOpen(Boolean(payment));
+    }
+
+    window.addEventListener("popstate", syncDrawerFromHistory);
+    return () => window.removeEventListener("popstate", syncDrawerFromHistory);
+  }, [payments]);
+
   const selectedPayment = useMemo(() => {
     if (!selectedPaymentId) {
       return null;
@@ -692,7 +714,7 @@ export function PaymentsWorkspace({
               paginatedPayments.map((payment) => (
                 <TableRow
                   key={payment.id}
-                  className={cn(initialFocusId === payment.id && "bg-accent/40")}
+                  className={cn(initialDrawerId === payment.id && "bg-accent/40")}
                 >
                   <TableCell
                     className="max-w-[9rem] truncate font-mono text-xs text-muted-foreground"
@@ -726,6 +748,11 @@ export function PaymentsWorkspace({
                         onClick={() => {
                         setSelectedPaymentId(payment.id);
                         setIsPaymentDrawerOpen(true);
+                        window.history.pushState(
+                          null,
+                          "",
+                          buildDrawerPath("payments", payment.id, searchParams),
+                        );
                         }}
                       >
                       <ChevronRight />
@@ -773,7 +800,17 @@ export function PaymentsWorkspace({
       <PaymentDrawer
         payment={selectedPayment}
         open={isPaymentDrawerOpen && selectedPayment !== null}
-        onOpenChange={setIsPaymentDrawerOpen}
+        onOpenChange={(open) => {
+          setIsPaymentDrawerOpen(open);
+
+          if (!open) {
+            window.history.replaceState(
+              null,
+              "",
+              buildDrawerCollectionPath("payments", searchParams),
+            );
+          }
+        }}
       />
 
       <CreatePaymentLinkDialog

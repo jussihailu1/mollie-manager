@@ -36,6 +36,7 @@ import {
   isOlderThan,
 } from "@/lib/freshness";
 import { formatCurrency, formatDateTime, formatLabel } from "@/lib/format";
+import { buildDrawerPath } from "@/lib/dashboard-drawer-route";
 import type { PaymentDrawerData } from "@/lib/payment-details";
 import { cn } from "@/lib/utils";
 
@@ -66,7 +67,7 @@ function CustomerLink({
 
   return (
     <Link
-      href={`/customers?focus=${encodeURIComponent(customerId)}`}
+      href={buildDrawerPath("customers", customerId)}
       className={cn(
         "group inline-flex items-center gap-1 hover:underline",
         className,

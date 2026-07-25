@@ -45,7 +45,7 @@ describe("cancellation request source boundaries", () => {
     assert.match(actionSource, /await getSelectedMollieMode\(\)/);
     assert.match(
       actionSource,
-      /redirectWithMessage\(`\/customers\?focus=\$\{encodeURIComponent\(result\.customerId\)\}`/,
+      /redirectWithMessage\(buildDrawerPath\("customers", result\.customerId\)/,
     );
   });
 

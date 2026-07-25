@@ -1,3 +1,5 @@
+import { buildDrawerPath } from "@/lib/dashboard-drawer-route";
+
 type AlertEmailLink = {
   label: string;
   path: string;
@@ -85,12 +87,8 @@ function toAbsoluteUrl(path: string, appUrl: string) {
 }
 
 function buildLinks(context: AlertEmailContext, appUrl: string) {
-  const paymentPath = context.paymentId
-    ? `/payments?focus=${encodeURIComponent(context.paymentId)}`
-    : null;
-  const customerPath = context.customerId
-    ? `/customers?focus=${encodeURIComponent(context.customerId)}`
-    : null;
+  const paymentPath = context.paymentId ? buildDrawerPath("payments", context.paymentId) : null;
+  const customerPath = context.customerId ? buildDrawerPath("customers", context.customerId) : null;
   const notificationsPath = "/notifications";
 
   const orderedLinks = [

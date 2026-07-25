@@ -39,12 +39,12 @@ describe("alert email composer", () => {
 
     assert.equal(
       email.primaryUrl,
-      "https://manager.example.com/payments?focus=payment_123",
+      "https://manager.example.com/payments/payment_123",
     );
     assert.deepEqual(
       email.relatedLinks.map((link) => link.url),
       [
-        "https://manager.example.com/customers?focus=customer_123",
+        "https://manager.example.com/customers/customer_123",
         "https://manager.example.com/notifications",
       ],
     );
@@ -60,7 +60,7 @@ describe("alert email composer", () => {
 
     assert.equal(
       email.primaryUrl,
-      "https://manager.example.com/customers?focus=customer_123",
+      "https://manager.example.com/customers/customer_123",
     );
     assert.equal(email.relatedLinks[0]?.url, "https://manager.example.com/notifications");
   });
@@ -74,7 +74,7 @@ describe("alert email composer", () => {
     assert.match(email.html, /Safe details/i);
     assert.match(email.html, /Mollie payment ID/i);
     assert.match(email.html, /tr_abc123/);
-    assert.match(email.text, /Open in Mollie Manager: https:\/\/manager\.example\.com\/payments\?focus=payment_123/);
+    assert.match(email.text, /Open in Mollie Manager: https:\/\/manager\.example\.com\/payments\/payment_123/);
     assert.match(email.text, /Safe details:/);
   });
 

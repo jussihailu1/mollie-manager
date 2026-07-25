@@ -67,7 +67,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         'customer' as "entityType",
         c.id as "entityId",
         c.id as "customerId",
-        concat('/customers?focus=', c.id) as href
+        concat('/customers/', c.id) as href
       from customers c
       where c.id = ${customerId}
         and c.tenant_id = ${tenantId}
@@ -91,7 +91,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         'subscription_onboarding_consent' as "entityType",
         soc.id as "entityId",
         soc.customer_id as "customerId",
-        concat('/customers?focus=', soc.customer_id) as href
+        concat('/customers/', soc.customer_id) as href
       from subscription_onboarding_consents soc
       where soc.customer_id = ${customerId}
         and soc.tenant_id = ${tenantId}
@@ -129,7 +129,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         'payment' as "entityType",
         p.id as "entityId",
         p.customer_id as "customerId",
-        concat('/payments?focus=', p.id) as href
+        concat('/payments/', p.id) as href
       from payments p
       where p.customer_id = ${customerId}
         and p.tenant_id = ${tenantId}
@@ -155,7 +155,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         'payment' as "entityType",
         p.id as "entityId",
         p.customer_id as "customerId",
-        concat('/payments?focus=', p.id) as href
+        concat('/payments/', p.id) as href
       from payments p
       where p.customer_id = ${customerId}
         and p.tenant_id = ${tenantId}
@@ -183,7 +183,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         'recurring_billing_schedule' as "entityType",
         rbs.id as "entityId",
         s.customer_id as "customerId",
-        concat('/customers?focus=', s.customer_id) as href
+        concat('/customers/', s.customer_id) as href
       from recurring_billing_schedules rbs
       inner join subscriptions s
         on s.id = rbs.subscription_id
@@ -243,7 +243,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         'subscription_operation_request' as "entityType",
         sor.id as "entityId",
         s.customer_id as "customerId",
-        concat('/customers?focus=', s.customer_id) as href
+        concat('/customers/', s.customer_id) as href
       from subscription_operation_requests sor
       inner join subscriptions s
         on s.id = sor.subscription_id
@@ -269,7 +269,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         'subscription' as "entityType",
         s.id as "entityId",
         s.customer_id as "customerId",
-        concat('/customers?focus=', s.customer_id) as href
+        concat('/customers/', s.customer_id) as href
       from subscriptions s
       where s.customer_id = ${customerId}
         and s.tenant_id = ${tenantId}
@@ -288,8 +288,8 @@ const listCustomerActivityTimelineByMode = cache(async (
         a.id as "entityId",
         coalesce(a.customer_id, p.customer_id, s.customer_id) as "customerId",
         case
-          when a.payment_id is not null then concat('/payments?focus=', a.payment_id)
-          else concat('/customers?focus=', coalesce(a.customer_id, p.customer_id, s.customer_id))
+          when a.payment_id is not null then concat('/payments/', a.payment_id)
+          else concat('/customers/', coalesce(a.customer_id, p.customer_id, s.customer_id))
         end as href
       from alerts a
       left join payments p on p.id = a.payment_id and p.tenant_id = ${tenantId}
@@ -321,7 +321,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         'customer_payment_notification' as "entityType",
         cpn.id as "entityId",
         coalesce(cpn.customer_id, p.customer_id) as "customerId",
-        concat('/payments?focus=', cpn.payment_id) as href
+        concat('/payments/', cpn.payment_id) as href
       from customer_payment_notifications cpn
       inner join payments p on p.id = cpn.payment_id and p.tenant_id = ${tenantId}
       where coalesce(cpn.customer_id, p.customer_id) = ${customerId}
@@ -345,7 +345,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         'customer_note' as "entityType",
         cn.id as "entityId",
         cn.customer_id as "customerId",
-        concat('/customers?focus=', cn.customer_id) as href
+        concat('/customers/', cn.customer_id) as href
       from customer_notes cn
       where cn.customer_id = ${customerId}
         and cn.tenant_id = ${tenantId}
@@ -364,7 +364,7 @@ const listCustomerActivityTimelineByMode = cache(async (
         'audit_log' as "entityType",
         al.id as "entityId",
         ${customerId}::text as "customerId",
-        concat('/customers?focus=', ${customerId}::text) as href
+        concat('/customers/', ${customerId}::text) as href
       from audit_logs al
       left join payments p
         on al.entity_type = 'payment'

@@ -8,19 +8,15 @@ import {
 } from "@/lib/subscription-consent-acceptance";
 
 describe("subscription consent acceptance helpers", () => {
-  it("parses accepted checkbox keys from consent form input", () => {
+  it("parses the single accepted subscription acknowledgment", () => {
     const parsed = parseConsentAcceptanceInput({
-      cancellationPolicyAck: "on",
-      recurringBillingPolicyAck: "on",
-      recurringTermsAck: "on",
+      subscriptionTermsAck: "on",
       token: "consent-token-123",
     });
 
     assert.deepEqual(parsed, {
       acknowledgedKeys: [
-        "recurring_terms_ack",
-        "recurring_billing_policy_ack",
-        "cancellation_policy_ack",
+        "subscription_terms_ack",
       ],
       success: true,
       token: "consent-token-123",
@@ -42,14 +38,12 @@ describe("subscription consent acceptance helpers", () => {
   it("finds the first required checkbox not acknowledged", () => {
     assert.equal(
       findMissingRequiredConsentKey(
-        [
-          "recurring_terms_ack",
-          "recurring_billing_policy_ack",
-          "cancellation_policy_ack",
+      [
+          "subscription_terms_ack",
         ],
-        ["recurring_terms_ack"],
+        [],
       ),
-      "recurring_billing_policy_ack",
+      "subscription_terms_ack",
     );
     assert.equal(
       findMissingRequiredConsentKey(

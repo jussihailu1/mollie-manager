@@ -12,8 +12,8 @@ describe("multi-tenant pilot release gates", () => {
     const loginPageSource = readRepoFile("app/login/page.tsx");
     const tenantAccessSource = readRepoFile("lib/tenant-context.ts");
     const overviewSource = readRepoFile("app/(dashboard)/page.tsx");
-    const customersSource = readRepoFile("app/(dashboard)/customers/page.tsx");
-    const paymentsSource = readRepoFile("app/(dashboard)/payments/page.tsx");
+    const customersSource = readRepoFile("app/(dashboard)/customers/customers-page.tsx");
+    const paymentsSource = readRepoFile("app/(dashboard)/payments/payments-page.tsx");
     const notificationsSource = readRepoFile(
       "app/(dashboard)/notifications/page.tsx",
     );

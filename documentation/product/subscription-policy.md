@@ -81,9 +81,16 @@ For shared-app tenant scope and release boundaries, also use
   - cancellation email address
   - links or references to terms and privacy content
 - If the recurring billing notice timing is part of the customer promise, the terms shown must also include the recurring invoice timing and automatic collection framing defined in `recurring-billing-policy.md`.
-- The customer must actively accept the required consent checkboxes.
+- The customer must actively accept the subscription summary, terms, and privacy
+  references with one unchecked acknowledgment. Legacy consent records retain
+  their original required acknowledgments.
 - Consent evidence must be stored with a snapshot of the shown terms.
 - The mandate-establishing first payment remains part of the flow, but the customer-facing entrypoint should become the app-hosted consent screen rather than a raw Mollie checkout URL.
+- A pending (unaccepted) consent link may be replaced or deleted by the tenant.
+  Both actions must revoke the linked Mollie payment link, remove the pending
+  local consent/link records, write an audit event, and require explicit
+  irreversible-action confirmation. Accepted consent records cannot be changed
+  or deleted through this flow.
 
 ## V1 Data Model Expectations
 

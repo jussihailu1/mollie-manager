@@ -45,7 +45,7 @@ const listPendingSubscriptionOperationRequestsCached = cache(async (
       c.id as "customerId",
       coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
       c.email as "customerEmail",
-      concat('/customers?focus=', c.id) as "href",
+      concat('/customers/', c.id) as "href",
       case
         when sor.operation = 'cancel' then 'Pending cancellation request'
         when sor.operation = 'pause' then 'Pending pause request'

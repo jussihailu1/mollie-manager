@@ -32,10 +32,8 @@ export function getSubscriptionReturnState(
 ): SubscriptionReturnState {
   if (input.subscriptionStatus && issueSubscriptionStatuses.has(input.subscriptionStatus)) {
     return {
-      description:
-        "Your setup needs manual review before the business can confirm the subscription.",
-      nextStep:
-        "Please contact the business if you need access urgently. No automatic penalty or cancellation is applied from this page.",
+      description: "There is a problem confirming your subscription.",
+      nextStep: "Please contact the business for help.",
       pending: false,
       title: "Setup needs review",
       tone: "issue",
@@ -44,8 +42,8 @@ export function getSubscriptionReturnState(
 
   if (input.subscriptionStatus) {
     return {
-      description: "Your payment was received and the subscription setup is complete.",
-      nextStep: "You can close this page.",
+      description: "Thank you. Your subscription is now active.",
+      nextStep: "You can safely close this tab.",
       pending: false,
       title: "Subscription confirmed",
       tone: "success",
@@ -54,9 +52,8 @@ export function getSubscriptionReturnState(
 
   if (input.firstPaymentMode === "mandate_only" && input.firstPaymentStatus === "paid") {
     return {
-      description:
-        "The mandate setup payment completed successfully. The business can now continue subscription setup separately.",
-      nextStep: "You can close this page.",
+      description: "Thank you. Your payment details have been confirmed.",
+      nextStep: "You can safely close this tab.",
       pending: false,
       title: "Mandate setup completed",
       tone: "success",
@@ -65,9 +62,8 @@ export function getSubscriptionReturnState(
 
   if (input.firstPaymentStatus === "paid") {
     return {
-      description: "Payment received. We are confirming your subscription now.",
-      nextStep:
-        "This page refreshes automatically while setup finishes. You can contact the business if this message stays here.",
+      description: "Thank you. We have received your payment.",
+      nextStep: "You can safely close this tab.",
       pending: true,
       title: "Payment received",
       tone: "pending",
@@ -76,10 +72,8 @@ export function getSubscriptionReturnState(
 
   if (hasUnsuccessfulCheckoutStatus(input)) {
     return {
-      description:
-        "The checkout did not complete successfully, so the subscription setup is not confirmed yet.",
-      nextStep:
-        "Please contact the business for help or a new payment link. Any invoice or payment obligation will be handled separately by the business.",
+      description: "Your payment was not completed.",
+      nextStep: "Please contact the business for help or a new payment link.",
       pending: false,
       title: "Payment not completed",
       tone: "issue",
@@ -87,10 +81,8 @@ export function getSubscriptionReturnState(
   }
 
   return {
-    description:
-      "We are confirming your payment status. SEPA direct debit payments can stay pending for several days before the final status is known.",
-    nextStep:
-      "Keep this page open for a moment. If it does not change, the business can still verify the payment manually.",
+    description: "We are confirming your payment. This can take a little longer for SEPA Direct Debit payments.",
+    nextStep: "You can safely close this tab.",
     pending: true,
     title: "Confirming payment",
     tone: "pending",

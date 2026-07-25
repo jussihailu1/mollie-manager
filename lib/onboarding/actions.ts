@@ -7,7 +7,6 @@ import { z } from "zod";
 import { requireViewerSession } from "@/lib/auth/session";
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
-import { buildConsentLinkCreatedNotice } from "@/lib/onboarding/consent-link";
 import { repairCustomerBillingState as repairCustomerBillingStateImpl } from "@/lib/onboarding/customer-billing-repair";
 import {
   archiveCustomerRecord,
@@ -16,7 +15,10 @@ import {
 import { createCustomerFlow } from "@/lib/onboarding/customer-creation-flow";
 import { linkCustomerToEboekhoudenRelation } from "@/lib/onboarding/customer-relation-link-flow";
 import { createFirstPaymentActionFlow } from "@/lib/onboarding/first-payment-action-flow";
+import { getLatestConsentLinkUrl } from "@/lib/onboarding/data";
+import { removePendingConsentLink } from "@/lib/onboarding/pending-consent-link";
 import { updateActionPath } from "@/lib/onboarding/action-path";
+import { buildDrawerPath } from "@/lib/dashboard-drawer-route";
 import { describeSubscriptionActivationResult } from "@/lib/onboarding/subscription-activation-result";
 import {
   redirectWithMessage,
@@ -57,8 +59,8 @@ const createFirstPaymentSchema = z.object({
   firstPaymentMode: z
     .enum(["real_installment", "mandate_only"])
     .default("real_installment"),
+  replacePendingConsent: z.enum(["yes"]).optional(),
   returnTo: z.string().trim().startsWith("/").default("/customers"),
-  serviceEndAt: z.string().trim().optional(),
   subscriptionAmountValue: z.string().trim().min(1),
   subscriptionDescription: z.string().trim().min(2).max(140),
   subscriptionInterval: z.enum(["weekly", "monthly", "yearly"]).default("monthly"),
@@ -79,6 +81,10 @@ const createFirstPaymentSchema = z.object({
 const syncCustomerSchema = z.object({
   customerId: z.string().uuid(),
   returnTo: z.string().trim().startsWith("/").default("/customers"),
+});
+
+const deletePendingConsentLinkSchema = z.object({
+  customerId: z.string().uuid(),
 });
 
 const customerArchiveSchema = z.object({
@@ -127,9 +133,7 @@ export async function archiveCustomerAction(formData: FormData) {
   const session = await requireViewerSession();
   const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
-  const returnTo = updateActionPath(parsed.data.returnTo, {
-    focus: null,
-  });
+  const returnTo = buildDrawerPath("customers", parsed.data.customerId, parsed.data.returnTo);
   const result = await archiveCustomerRecord({
     actor: {
       email: session.user.email ?? null,
@@ -177,10 +181,11 @@ export async function restoreCustomerAction(formData: FormData) {
   const session = await requireViewerSession();
   const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
-  const returnTo = updateActionPath(parsed.data.returnTo, {
-    focus: parsed.data.customerId,
-    view: null,
-  });
+  const returnTo = buildDrawerPath(
+    "customers",
+    parsed.data.customerId,
+    updateActionPath(parsed.data.returnTo, { view: null }),
+  );
   const result = await restoreCustomerRecord({
     actor: {
       email: session.user.email ?? null,
@@ -242,9 +247,7 @@ export async function createCustomerAction(formData: FormData) {
       tenantId: tenantSelection.currentTenant.id,
     });
 
-    const returnTo = updateActionPath(parsed.data.returnTo, {
-      focus: result.localCustomerId,
-    });
+    const returnTo = buildDrawerPath("customers", result.localCustomerId, parsed.data.returnTo);
 
     revalidatePath("/");
     revalidatePath("/customers");
@@ -284,9 +287,7 @@ export async function linkEboekhoudenRelationAction(formData: FormData) {
   const session = await requireViewerSession();
   const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
-  const returnTo = updateActionPath(parsed.data.returnTo, {
-    focus: parsed.data.customerId,
-  });
+  const returnTo = buildDrawerPath("customers", parsed.data.customerId, parsed.data.returnTo);
   const customer = await getLocalCustomer(
     parsed.data.customerId,
     selectedMode,
@@ -339,12 +340,25 @@ export async function linkEboekhoudenRelationAction(formData: FormData) {
   }
 }
 
-export async function createFirstPaymentAction(formData: FormData) {
+export type CreateFirstPaymentActionState =
+  | { consentLinkUrl: string; error?: never }
+  | { consentLinkUrl?: never; error: string }
+  | null;
+
+export type DeletePendingConsentLinkActionState =
+  | { deleted: true; error?: never }
+  | { deleted?: never; error: string }
+  | null;
+
+export async function createFirstPaymentAction(
+  _previousState: CreateFirstPaymentActionState,
+  formData: FormData,
+): Promise<CreateFirstPaymentActionState> {
   const parsed = createFirstPaymentSchema.safeParse({
     customerId: formData.get("customerId"),
-    firstPaymentMode: formData.get("firstPaymentMode") || undefined,
+      firstPaymentMode: formData.get("firstPaymentMode") || undefined,
+      replacePendingConsent: formData.get("replacePendingConsent") || undefined,
     returnTo: formData.get("returnTo") || undefined,
-    serviceEndAt: formData.get("serviceEndAt") || undefined,
     subscriptionAmountValue: formData.get("subscriptionAmountValue"),
     subscriptionDescription: formData.get("subscriptionDescription"),
     subscriptionInterval: formData.get("subscriptionInterval") || undefined,
@@ -354,19 +368,13 @@ export async function createFirstPaymentAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirectWithMessage("/customers", {
-      error: parsed.error.issues[0]?.message ?? "Enter a valid first payment.",
-    });
+    return { error: parsed.error.issues[0]?.message ?? "Enter a valid first payment." };
   }
 
   const session = await requireViewerSession();
   const tenantSelection = await getCurrentTenantSelectionForViewer();
 
   const selectedMode = await getSelectedMollieMode();
-  const returnTo = updateActionPath(parsed.data.returnTo, {
-    focus: parsed.data.customerId,
-  });
-
   try {
     const result = await createFirstPaymentActionFlow({
       actor: {
@@ -378,7 +386,6 @@ export async function createFirstPaymentAction(formData: FormData) {
       mode: selectedMode,
       planInput: {
         firstPaymentMode: parsed.data.firstPaymentMode,
-        serviceEndAt: parsed.data.serviceEndAt,
         subscriptionAmountValue: parsed.data.subscriptionAmountValue,
         subscriptionDescription: parsed.data.subscriptionDescription,
         subscriptionInterval: parsed.data.subscriptionInterval,
@@ -386,37 +393,74 @@ export async function createFirstPaymentAction(formData: FormData) {
         subscriptionTermMode: parsed.data.subscriptionTermMode,
         totalPayments: parsed.data.totalPayments,
       },
+      replacePendingConsent: parsed.data.replacePendingConsent === "yes",
     });
 
     if (result.status === "not_found_or_unlinked") {
-      redirectWithMessage("/customers", {
-        error: "Customer not found in the selected Mollie mode or not linked to Mollie.",
-      });
+      return { error: "Customer not found in the selected Mollie mode or not linked to Mollie." };
     }
 
     if (result.status === "archived") {
-      redirectWithMessage(returnTo, {
-        error: "Restore this customer before creating a payment link.",
-      });
+      return { error: "Restore this customer before creating a payment link." };
     }
 
     if (result.status === "blocked") {
-      redirectWithMessage(returnTo, {
-        error: result.reason,
-      });
+      return { error: result.reason };
     }
 
     revalidatePath("/");
     revalidatePath("/customers");
     revalidatePath("/payments");
-    redirectWithMessage(returnTo, {
-      notice: buildConsentLinkCreatedNotice(),
-    });
+    const consentLinkUrl = await getLatestConsentLinkUrl(
+      parsed.data.customerId,
+      selectedMode,
+      tenantSelection.currentTenant.id,
+    );
+
+    if (!consentLinkUrl) {
+      return {
+        error: "Consent link was created, but could not be loaded. Reopen the customer to retrieve it.",
+      };
+    }
+
+    return { consentLinkUrl };
   } catch (error) {
     unstable_rethrow(error);
-    redirectWithMessage(returnTo, {
-      error: serializeError(error),
+    return { error: serializeError(error) };
+  }
+}
+
+export async function deletePendingConsentLinkAction(
+  _previousState: DeletePendingConsentLinkActionState,
+  formData: FormData,
+): Promise<DeletePendingConsentLinkActionState> {
+  const parsed = deletePendingConsentLinkSchema.safeParse({
+    customerId: formData.get("customerId"),
+  });
+
+  if (!parsed.success) {
+    return { error: "Customer id is missing." };
+  }
+
+  const session = await requireViewerSession();
+  const tenantSelection = await getCurrentTenantSelectionForViewer();
+  const selectedMode = await getSelectedMollieMode();
+
+  try {
+    await removePendingConsentLink({
+      actor: { email: session.user.email ?? null, kind: "user" },
+      customerId: parsed.data.customerId,
+      mode: selectedMode,
+      reason: "deleted",
+      tenantId: tenantSelection.currentTenant.id,
     });
+    revalidatePath("/");
+    revalidatePath("/customers");
+    revalidatePath("/payments");
+    return { deleted: true };
+  } catch (error) {
+    unstable_rethrow(error);
+    return { error: serializeError(error) };
   }
 }
 
@@ -435,9 +479,7 @@ export async function syncCustomerBillingStateAction(formData: FormData) {
   const session = await requireViewerSession();
   const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
-  const returnTo = updateActionPath(parsed.data.returnTo, {
-    focus: parsed.data.customerId,
-  });
+  const returnTo = buildDrawerPath("customers", parsed.data.customerId, parsed.data.returnTo);
 
   try {
     const result = await repairCustomerBillingState({
@@ -493,9 +535,7 @@ export async function createSubscriptionAction(formData: FormData) {
   const session = await requireViewerSession();
   const tenantSelection = await getCurrentTenantSelectionForViewer();
   const selectedMode = await getSelectedMollieMode();
-  const returnTo = updateActionPath(parsed.data.returnTo, {
-    focus: parsed.data.customerId,
-  });
+  const returnTo = buildDrawerPath("customers", parsed.data.customerId, parsed.data.returnTo);
 
   try {
     const result = await attemptSubscriptionActivation({

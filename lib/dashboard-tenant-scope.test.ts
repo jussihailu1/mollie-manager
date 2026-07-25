@@ -10,8 +10,8 @@ function readRepoFile(filePath: string) {
 describe("dashboard tenant wiring", () => {
   it("threads current tenant id through the normal dashboard pages and customer activity route", () => {
     const overview = readRepoFile("app/(dashboard)/page.tsx");
-    const customers = readRepoFile("app/(dashboard)/customers/page.tsx");
-    const payments = readRepoFile("app/(dashboard)/payments/page.tsx");
+    const customers = readRepoFile("app/(dashboard)/customers/customers-page.tsx");
+    const payments = readRepoFile("app/(dashboard)/payments/payments-page.tsx");
     const notifications = readRepoFile("app/(dashboard)/notifications/page.tsx");
     const settings = readRepoFile("app/(dashboard)/settings/page.tsx");
     const route = readRepoFile("app/api/customers/[customerId]/activity/route.ts");

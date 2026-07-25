@@ -9,9 +9,7 @@ export type CancellationEffect = "immediate" | "end_of_paid_period";
 export type FirstPaymentMode = "real_installment" | "mandate_only";
 
 export const REQUIRED_CONSENT_CHECKBOX_KEYS = [
-  "recurring_terms_ack",
-  "recurring_billing_policy_ack",
-  "cancellation_policy_ack",
+  "subscription_terms_ack",
 ] as const;
 
 export type RequiredConsentCheckboxKey =

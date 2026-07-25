@@ -170,7 +170,7 @@ export async function listPaymentFollowUpQueue(options: {
       createdAt: row.createdAt,
       customerId: row.customerId,
       customerName: row.customerName,
-      href: `/payments?focus=${row.paymentId}`,
+      href: `/payments/${encodeURIComponent(row.paymentId)}`,
       id: row.paymentId,
       notificationLabel: presentation.notificationLabel,
       notificationOccurredAt: row.sentAt ?? row.failedAt ?? row.claimedAt,

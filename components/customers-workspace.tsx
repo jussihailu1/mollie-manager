@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -53,6 +53,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCurrency, formatDate, formatLabel } from "@/lib/format";
+import {
+  buildDrawerCollectionPath,
+  buildDrawerPath,
+  getDrawerIdFromPath,
+} from "@/lib/dashboard-drawer-route";
 import { cn } from "@/lib/utils";
 
 type CustomerView = "all" | "setup" | "active" | "archived";
@@ -265,7 +270,7 @@ export function CustomersWorkspace({
   customers,
   error,
   hasEboekhoudenConnection,
-  initialFocusId,
+  initialDrawerId,
   initialView = "all",
   notice,
 }: Readonly<{
@@ -273,7 +278,7 @@ export function CustomersWorkspace({
   customers: CustomerFlowRecord[];
   error?: string | null;
   hasEboekhoudenConnection: boolean;
-  initialFocusId?: string | null;
+  initialDrawerId?: string | null;
   initialView?: string | null;
   notice?: string | null;
 }>) {
@@ -285,14 +290,15 @@ export function CustomersWorkspace({
     : pathname;
   const activeView = parseCustomerView(searchParams.get("view") ?? initialView);
   const visibleCustomers = activeView === "archived" ? archivedCustomers : customers;
-  const focusedCustomer = initialFocusId
-    ? [...customers, ...archivedCustomers].find((customer) => customer.id === initialFocusId) ?? null
+  const focusedCustomer = initialDrawerId
+    ? [...customers, ...archivedCustomers].find((customer) => customer.id === initialDrawerId) ?? null
     : null;
   const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [isCreateCustomerOpen, setIsCreateCustomerOpen] = useState(false);
   const [isCreatePaymentOpen, setIsCreatePaymentOpen] = useState(false);
+  const [paymentLinkDialogView, setPaymentLinkDialogView] = useState<"create" | "edit" | "share">("create");
   const [isConfirmPaymentOpen, setIsConfirmPaymentOpen] = useState(false);
   const [isCreateSubscriptionOpen, setIsCreateSubscriptionOpen] = useState(false);
   const [isRecordCancellationRequestOpen, setIsRecordCancellationRequestOpen] = useState(false);
@@ -302,6 +308,22 @@ export function CustomersWorkspace({
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
     focusedCustomer?.id ?? null,
   );
+
+  useEffect(() => {
+    function syncDrawerFromHistory() {
+      const customerId = getDrawerIdFromPath("customers", window.location.pathname);
+      const customer = customerId
+        ? [...customers, ...archivedCustomers].find((candidate) => candidate.id === customerId) ?? null
+        : null;
+
+      setSelectedCustomerId(customer?.id ?? null);
+      setIsCustomerDrawerOpen(Boolean(customer));
+    }
+
+    window.addEventListener("popstate", syncDrawerFromHistory);
+    return () => window.removeEventListener("popstate", syncDrawerFromHistory);
+  }, [archivedCustomers, customers]);
+
   const selectedCustomer = useMemo(() => {
     if (!selectedCustomerId) {
       return null;
@@ -647,7 +669,7 @@ export function CustomersWorkspace({
                       !isArchived &&
                         actionKind === "create_subscription" &&
                         "bg-primary/[0.03] hover:bg-primary/[0.06]",
-                      initialFocusId === customer.id && "bg-accent/40",
+                      initialDrawerId === customer.id && "bg-accent/40",
                     )}
                   >
                     <TableCell
@@ -733,6 +755,11 @@ export function CustomersWorkspace({
                         onClick={() => {
                           setSelectedCustomerId(customer.id);
                           setIsCustomerDrawerOpen(true);
+                          window.history.pushState(
+                            null,
+                            "",
+                            buildDrawerPath("customers", customer.id, searchParams),
+                          );
                         }}
                       >
                         <ChevronRight />
@@ -756,33 +783,50 @@ export function CustomersWorkspace({
       <CustomerDrawer
         customer={selectedCustomer}
         open={isCustomerDrawerOpen && selectedCustomer !== null}
-        onOpenChange={setIsCustomerDrawerOpen}
+        onOpenChange={(open) => {
+          setIsCustomerDrawerOpen(open);
+
+          if (!open) {
+            window.history.replaceState(
+              null,
+              "",
+              buildDrawerCollectionPath("customers", searchParams),
+            );
+          }
+        }}
         onOpenCreatePayment={(customer) => {
-          setIsCustomerDrawerOpen(false);
           setSelectedCustomerId(customer.id);
+          setPaymentLinkDialogView("create");
+          setTimeout(() => setIsCreatePaymentOpen(true), 150);
+        }}
+        onOpenEditConsentLink={(customer) => {
+          setSelectedCustomerId(customer.id);
+          setPaymentLinkDialogView("edit");
+          setTimeout(() => setIsCreatePaymentOpen(true), 150);
+        }}
+        onOpenShareConsentLink={(customer) => {
+          setSelectedCustomerId(customer.id);
+          setPaymentLinkDialogView("share");
           setTimeout(() => setIsCreatePaymentOpen(true), 150);
         }}
         onOpenConfirmPayment={(customer) => {
-          setIsCustomerDrawerOpen(false);
           setSelectedCustomerId(customer.id);
           setTimeout(() => setIsConfirmPaymentOpen(true), 150);
         }}
         onOpenCreateSubscription={(customer) => {
-          setIsCustomerDrawerOpen(false);
           setSelectedCustomerId(customer.id);
           setTimeout(() => setIsCreateSubscriptionOpen(true), 150);
         }}
         onOpenRecordCancellationRequest={(customer) => {
-          setIsCustomerDrawerOpen(false);
           setSelectedCustomerId(customer.id);
           setTimeout(() => setIsRecordCancellationRequestOpen(true), 150);
         }}
         onOpenArchiveCustomer={(customer) => {
-          setIsCustomerDrawerOpen(false);
+          setSelectedCustomerId(customer.id);
           setTimeout(() => openArchiveDialog(customer, "archive"), 150);
         }}
         onOpenRestoreCustomer={(customer) => {
-          setIsCustomerDrawerOpen(false);
+          setSelectedCustomerId(customer.id);
           setTimeout(() => openArchiveDialog(customer, "restore"), 150);
         }}
       />
@@ -802,11 +846,16 @@ export function CustomersWorkspace({
       />
 
       <CreatePaymentLinkDialog
-        key={`customers-payment-${selectedCustomer?.id ?? "none"}-${Number(isCreatePaymentOpen)}`}
+        key={`customers-payment-${selectedCustomer?.id ?? "none"}-${paymentLinkDialogView}-${Number(isCreatePaymentOpen)}`}
         customer={selectedCustomer}
         customers={customers}
+        initialView={paymentLinkDialogView}
         open={isCreatePaymentOpen}
         onOpenChange={setIsCreatePaymentOpen}
+        onConsentDeleted={() => {
+          setIsCreatePaymentOpen(false);
+          setIsCustomerDrawerOpen(true);
+        }}
       />
 
       <ConfirmPaymentDialog

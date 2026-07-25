@@ -194,4 +194,33 @@ describe("subscription consent acceptance flow", () => {
       },
     ]);
   });
+
+  it("accepts the single acknowledgment required by new consent links", async () => {
+    const { accepted, dependencies } = createDependencies({
+      getConsentByToken: async () => ({
+        acceptedAt: null,
+        checkoutUrl: "https://checkout.test/pay",
+        consentId: "consent_1",
+        requiredCheckboxKeys: ["subscription_terms_ack"],
+      }),
+    });
+
+    const result = await runAcceptSubscriptionConsentFlow(
+      {
+        acceptedIp: null,
+        acceptedUserAgent: null,
+        formInput: {
+          subscriptionTermsAck: "on",
+          token: "consent-token-123",
+        },
+      },
+      dependencies,
+    );
+
+    assert.deepEqual(result, {
+      redirectTo: "https://checkout.test/pay",
+      status: "accepted",
+    });
+    assert.deepEqual(accepted[0]?.acceptedCheckboxKeys, ["subscription_terms_ack"]);
+  });
 });

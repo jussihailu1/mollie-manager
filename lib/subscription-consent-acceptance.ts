@@ -6,6 +6,7 @@ const acceptConsentSchema = z.object({
   cancellationPolicyAck: z.string().optional(),
   recurringBillingPolicyAck: z.string().optional(),
   recurringTermsAck: z.string().optional(),
+  subscriptionTermsAck: z.string().optional(),
   token: consentTokenSchema,
 });
 
@@ -22,12 +23,17 @@ const consentCheckboxInputs = [
     field: "cancellationPolicyAck",
     key: "cancellation_policy_ack",
   },
+  {
+    field: "subscriptionTermsAck",
+    key: "subscription_terms_ack",
+  },
 ] as const;
 
 export type ConsentAcceptanceInput = {
   cancellationPolicyAck?: FormDataEntryValue | null;
   recurringBillingPolicyAck?: FormDataEntryValue | null;
   recurringTermsAck?: FormDataEntryValue | null;
+  subscriptionTermsAck?: FormDataEntryValue | null;
   token?: FormDataEntryValue | null;
 };
 
@@ -71,6 +77,7 @@ export function parseConsentAcceptanceInput(
     cancellationPolicyAck: normalizeFormValue(input.cancellationPolicyAck),
     recurringBillingPolicyAck: normalizeFormValue(input.recurringBillingPolicyAck),
     recurringTermsAck: normalizeFormValue(input.recurringTermsAck),
+    subscriptionTermsAck: normalizeFormValue(input.subscriptionTermsAck),
     token: input.token,
   });
 

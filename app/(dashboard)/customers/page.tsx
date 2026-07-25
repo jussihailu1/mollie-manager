@@ -1,40 +1,9 @@
-import { CustomersWorkspace } from "@/components/customers-workspace";
-import { getSelectedMollieMode } from "@/lib/dashboard-mode";
-import { getSingleSearchParam } from "@/lib/format";
-import { listCustomers } from "@/lib/onboarding/data";
-import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
-import { toUiCustomerRecord } from "@/lib/ui-data";
-import { hasTenantEboekhoudenCredentials } from "@/lib/eboekhouden/tenant-credentials";
+import { CustomerPageContent } from "./customers-page";
 
 export default async function CustomersPage({
   searchParams,
 }: Readonly<{
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
-  const { currentTenant } = await getCurrentTenantSelectionForViewer();
-  const selectedMode = await getSelectedMollieMode();
-  const tenantId = currentTenant.id;
-  const [resolvedSearchParams, customersResult, archivedCustomersResult, hasEboekhoudenConnection] = await Promise.all([
-    searchParams,
-    listCustomers({ mode: selectedMode, tenantId }),
-    listCustomers({ archived: true, mode: selectedMode, tenantId }),
-    hasTenantEboekhoudenCredentials(tenantId),
-  ]);
-
-  return (
-    <CustomersWorkspace
-      key={[
-        getSingleSearchParam(resolvedSearchParams.focus) ?? "",
-        getSingleSearchParam(resolvedSearchParams.notice) ?? "",
-        getSingleSearchParam(resolvedSearchParams.error) ?? "",
-      ].join(":")}
-      archivedCustomers={archivedCustomersResult.map(toUiCustomerRecord)}
-      customers={customersResult.map(toUiCustomerRecord)}
-      error={getSingleSearchParam(resolvedSearchParams.error) ?? null}
-      hasEboekhoudenConnection={hasEboekhoudenConnection}
-      initialFocusId={getSingleSearchParam(resolvedSearchParams.focus) ?? null}
-      initialView={getSingleSearchParam(resolvedSearchParams.view) ?? "all"}
-      notice={getSingleSearchParam(resolvedSearchParams.notice) ?? null}
-    />
-  );
+  return <CustomerPageContent searchParams={searchParams} />;
 }
