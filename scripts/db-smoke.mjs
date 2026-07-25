@@ -35,13 +35,13 @@ const requiredTables = [
 ];
 
 const requiredIndexes = [
-  "customers_mode_email_idx",
-  "subscriptions_customer_idx",
-  "payments_subscription_idx",
-  "payment_links_customer_idx",
+  "customers_tenant_mode_email_idx",
+  "subscriptions_tenant_customer_idx",
+  "payments_tenant_subscription_idx",
+  "payment_links_tenant_customer_idx",
   "alerts_status_idx",
   "audit_logs_entity_idx",
-  "webhook_events_status_idx",
+  "webhook_events_tenant_status_idx",
 ];
 
 function assertPresent(label, required, actual) {
