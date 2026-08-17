@@ -187,7 +187,7 @@ export async function syncMatchingPaymentLinkForPayment(
       from payment_links
       where
         tenant_id = ${tenantId}
-        mode = ${mode}
+        and mode = ${mode}
         and mollie_payment_link_id is not null
         and metadata ->> 'source' = 'subscription_onboarding'
         and metadata ->> 'paymentType' = 'first'
