@@ -314,7 +314,7 @@ export default async function SettingsPage({
             {!mollieConnection || mollieConnection.status === "disconnected" ? (
               <div className="flex items-center justify-between gap-4">
                 <p className="text-sm text-muted-foreground">Connect this tenant&apos;s Mollie organization. Existing API-key setup remains temporary compatibility.</p>
-                <Button asChild><Link href="/api/mollie/connect">Connect Mollie</Link></Button>
+                <Button asChild><a href="/api/mollie/connect">Connect Mollie</a></Button>
               </div>
             ) : (
               <>
@@ -333,10 +333,10 @@ export default async function SettingsPage({
                       </select>
                     </label>
                     <Button type="submit" disabled={mollieProfiles.length === 0}>Save profile</Button>
-                    <Button asChild variant="outline"><Link href="/api/mollie/connect">Reconnect Mollie</Link></Button>
+                    <Button asChild variant="outline"><a href="/api/mollie/connect">Reconnect Mollie</a></Button>
                   </form>
                 ) : (
-                  <div className="flex gap-3"><Button asChild variant="outline"><Link href="/api/mollie/connect">Reconnect Mollie</Link></Button><form action={disconnectMollieConnectionAction}><Button type="submit" variant="destructive">Disconnect</Button></form></div>
+                  <div className="flex gap-3"><Button asChild variant="outline"><a href="/api/mollie/connect">Reconnect Mollie</a></Button><form action={disconnectMollieConnectionAction}><Button type="submit" variant="destructive">Disconnect</Button></form></div>
                 )}
               </>
             )}
@@ -491,7 +491,7 @@ export default async function SettingsPage({
           {!mollieConnection || mollieConnection.status === "disconnected" ? (
             <div className="flex items-center justify-between gap-4">
               <p className="text-sm text-muted-foreground">Connect this tenant&apos;s Mollie organization. Existing API-key setup remains temporary compatibility.</p>
-              <Button asChild><Link href="/api/mollie/connect">Connect Mollie</Link></Button>
+              <Button asChild><a href="/api/mollie/connect">Connect Mollie</a></Button>
             </div>
           ) : (
             <>
@@ -510,10 +510,10 @@ export default async function SettingsPage({
                     </select>
                   </label>
                   <Button type="submit" disabled={mollieProfiles.length === 0}>Save profile</Button>
-                  <Button asChild variant="outline"><Link href="/api/mollie/connect">Reconnect Mollie</Link></Button>
+                  <Button asChild variant="outline"><a href="/api/mollie/connect">Reconnect Mollie</a></Button>
                 </form>
               ) : (
-                <div className="flex gap-3"><Button asChild variant="outline"><Link href="/api/mollie/connect">Reconnect Mollie</Link></Button><form action={disconnectMollieConnectionAction}><Button type="submit" variant="destructive">Disconnect</Button></form></div>
+                <div className="flex gap-3"><Button asChild variant="outline"><a href="/api/mollie/connect">Reconnect Mollie</a></Button><form action={disconnectMollieConnectionAction}><Button type="submit" variant="destructive">Disconnect</Button></form></div>
               )}
             </>
           )}
