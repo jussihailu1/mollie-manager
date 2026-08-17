@@ -37,6 +37,12 @@ describe("Mollie Connect operator UX scope", () => {
     assert.doesNotMatch(settingsSource, /refreshToken|accessToken|_embedded|requirements/);
   });
 
+  it("uses document navigation for the OAuth redirect route", () => {
+    assert.match(settingsSource, /<a href="\/api\/mollie\/connect">Connect Mollie<\/a>/);
+    assert.match(settingsSource, /<a href="\/api\/mollie\/connect">Reconnect Mollie<\/a>/);
+    assert.doesNotMatch(settingsSource, /<Link href="\/api\/mollie\/connect">/);
+  });
+
   it("keeps Mollie Connect available before advanced operations are gated", () => {
     const advancedOperationsGate = settingsSource.indexOf("if (!canManageAdvancedOperations)");
     const advancedOperationsLoading = settingsSource.indexOf("const [reliabilityOpsSnapshot", advancedOperationsGate);

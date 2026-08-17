@@ -21,6 +21,7 @@ export async function runFirstPaymentInvoiceSyncFollowUp(input: {
   await normalizeFirstPaymentInvoiceStates({
     mode: input.mode,
     paymentId: input.paymentId,
+    tenantId: input.tenantId,
   });
 
   if (!input.isPaid || !shouldRunBillingFollowups(input.reconciliationMode)) {
