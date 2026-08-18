@@ -13,7 +13,6 @@ test("needs attention query exposes stable typed sources without raw webhook pay
   const source = await readRepoFile("lib/reliability/needs-attention.ts");
 
   for (const itemType of [
-    "customer_sync_stale",
     "eboekhouden_relation_problem",
     "expired_payment",
     "failed_payment",
@@ -27,10 +26,8 @@ test("needs attention query exposes stable typed sources without raw webhook pay
     "mollie_payment_methods_required",
     "payment_action_required_subscription",
     "pending_subscription_cancellation",
-    "payment_sync_stale",
     "reversed_payment",
     "subscription_out_of_sync",
-    "subscription_sync_stale",
   ]) {
     assert.match(source, new RegExp(`['"]${itemType}['"]`));
   }
@@ -52,12 +49,20 @@ test("needs attention query exposes stable typed sources without raw webhook pay
   assert.match(source, /from webhook_events w/);
   assert.match(source, /invoice_state = 'invoice_failed'/);
   assert.match(source, /invoiceDeliveryStatus/);
-  assert.match(source, /last_synced_at/);
   assert.match(source, /cal\.link_status/);
   assert.match(source, /w\.tenant_id = \$\{tenantId\}/);
   assert.doesNotMatch(source, /\bw\.payload\b/);
   assert.doesNotMatch(source, /secret|token|authorization/i);
   assert.doesNotMatch(source, /getSingleTenantIdOrThrow/);
+});
+
+test("needs attention does not warn merely because a record was not recently refreshed", async () => {
+  const source = await readRepoFile("lib/reliability/needs-attention.ts");
+
+  assert.doesNotMatch(source, /customer_sync_stale/);
+  assert.doesNotMatch(source, /payment_sync_stale/);
+  assert.doesNotMatch(source, /subscription_sync_stale/);
+  assert.doesNotMatch(source, /REPAIR_STALE_AFTER_MS/);
 });
 
 test("normal dashboard and notifications use the shared needs attention query", async () => {

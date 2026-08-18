@@ -5,7 +5,6 @@ import { cache } from "react";
 
 import type { DashboardModeFilter } from "@/lib/dashboard-mode";
 import { getDb } from "@/lib/db";
-import { REPAIR_STALE_AFTER_MS } from "@/lib/freshness";
 import {
   getTenantMollieConnection,
   getTenantMolliePaymentMethodReadiness,
@@ -15,7 +14,6 @@ import { getTenantMollieInvoicingReadiness } from "@/lib/invoicing/mollie-readin
 import { listPendingSubscriptionOperationRequests } from "@/lib/pending-subscription-operation-requests";
 
 export type NeedsAttentionItemType =
-  | "customer_sync_stale"
   | "eboekhouden_relation_problem"
   | "expired_payment"
   | "failed_payment"
@@ -29,10 +27,8 @@ export type NeedsAttentionItemType =
   | "mollie_payment_methods_required"
   | "payment_action_required_subscription"
   | "pending_subscription_cancellation"
-  | "payment_sync_stale"
   | "reversed_payment"
-  | "subscription_out_of_sync"
-  | "subscription_sync_stale";
+  | "subscription_out_of_sync";
 
 export type NeedsAttentionItem = {
   createdAt: string;
@@ -61,7 +57,6 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
 ) => {
   const modeParam = toModeParam(mode);
   const normalizedLimit = Math.max(1, Math.min(limit, 50));
-  const staleAfterMs = REPAIR_STALE_AFTER_MS;
   const result = await getDb().execute<NeedsAttentionItem>(sql`
     select *
     from (
@@ -415,88 +410,6 @@ const listBaseNeedsAttentionItemsByMode = cache(async (
         and (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
         and s.local_status in ('awaiting_first_payment', 'mandate_pending', 'active', 'payment_action_required')
         and (s.mandate_id is null or coalesce(m.is_valid, false) = false)
-
-      union all
-
-      select
-        concat('stale-customer:', c.id) as id,
-        c.id as "entityId",
-        'customer' as "type",
-        'warning' as "severity",
-        'customer_sync_stale' as "itemType",
-        'Customer sync is stale' as "title",
-        'The customer has not been refreshed from Mollie recently.' as "summary",
-        'Run sync-only repair before making billing or lifecycle decisions for this customer.',
-        coalesce(c.last_synced_at, c.created_at) as "createdAt",
-        c.id as "customerId",
-        coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
-        c.email as "customerEmail",
-        concat('/customers/', c.id) as "href"
-      from customers c
-      where
-        c.tenant_id = ${tenantId}
-        and (${modeParam}::mollie_mode is null or c.mode = ${modeParam})
-        and c.archived_at is null
-        and c.mollie_customer_id is not null
-        and (
-          c.last_synced_at is null
-          or c.last_synced_at < now() - ${staleAfterMs} * interval '1 millisecond'
-        )
-
-      union all
-
-      select
-        concat('stale-payment:', p.id) as id,
-        p.id as "entityId",
-        'payment' as "type",
-        'warning' as "severity",
-        'payment_sync_stale' as "itemType",
-        'Payment sync is stale' as "title",
-        'The payment has not been refreshed from Mollie recently.' as "summary",
-        'Run sync-only repair before deciding whether the payment succeeded, failed, or needs follow-up.',
-        coalesce(p.last_synced_at, p.created_at) as "createdAt",
-        c.id as "customerId",
-        coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
-        c.email as "customerEmail",
-        concat('/payments/', p.id) as "href"
-      from payments p
-      left join customers c on c.id = p.customer_id and c.tenant_id = p.tenant_id and c.mode = p.mode
-      where
-        p.tenant_id = ${tenantId}
-        and (${modeParam}::mollie_mode is null or p.mode = ${modeParam})
-        and p.mollie_payment_id is not null
-        and (
-          p.last_synced_at is null
-          or p.last_synced_at < now() - ${staleAfterMs} * interval '1 millisecond'
-        )
-
-      union all
-
-      select
-        concat('stale-subscription:', s.id) as id,
-        s.id as "entityId",
-        'subscription' as "type",
-        'warning' as "severity",
-        'subscription_sync_stale' as "itemType",
-        'Subscription sync is stale' as "title",
-        'The subscription has not been refreshed from Mollie recently.' as "summary",
-        'Run sync-only repair before changing subscription or billing state.',
-        coalesce(s.last_synced_at, s.created_at) as "createdAt",
-        c.id as "customerId",
-        coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "customerName",
-        c.email as "customerEmail",
-        concat('/customers/', c.id) as "href"
-      from subscriptions s
-      inner join customers c on c.id = s.customer_id and c.tenant_id = s.tenant_id and c.mode = s.mode
-      where
-        s.tenant_id = ${tenantId}
-        and (${modeParam}::mollie_mode is null or s.mode = ${modeParam})
-        and s.mollie_subscription_id is not null
-        and s.local_status not in ('cancelled')
-        and (
-          s.last_synced_at is null
-          or s.last_synced_at < now() - ${staleAfterMs} * interval '1 millisecond'
-        )
 
       union all
 
