@@ -14,7 +14,7 @@ describe("Kify invoice workflow guard", () => {
     const sideEffectIndex = workflow.indexOf("createFirstPaymentOnboardingFlow");
     assert.ok(readinessIndex >= 0 && readinessIndex < sideEffectIndex);
     assert.match(workflow, /firstPaymentMode === "real_installment"/);
-    assert.match(workflow, /getTenantActiveInvoiceProvider\(input\.tenantId\) === "kify"/);
+    assert.match(workflow, /getTenantActiveInvoiceProvider\(input\.tenantId\)\) === "kify"/);
   });
 
   it("routes first payments and due schedules to Kify before legacy adapter resolution", () => {
@@ -24,5 +24,12 @@ describe("Kify invoice workflow guard", () => {
     assert.ok(recurring.indexOf('provider === "kify"') < recurring.lastIndexOf("getInvoiceProviderAdapterById(provider)"));
     assert.match(firstPayment, /issueKifyInvoice/);
     assert.match(recurring, /issueKifyInvoice/);
+  });
+
+  it("does not resolve a legacy adapter for a Kify recurring-invoice batch", () => {
+    const recurring = readFileSync("lib/eboekhouden/recurring-invoices.ts", "utf8");
+    const batchStart = recurring.indexOf("export async function createDueRecurringInvoicesBatch");
+    const batch = recurring.slice(batchStart);
+    assert.ok(batch.indexOf('provider !== "kify"') < batch.indexOf("getInvoiceProviderAdapterById(provider)"));
   });
 });

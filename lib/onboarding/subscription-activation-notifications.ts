@@ -78,11 +78,13 @@ export async function deliverSubscriptionActivationNotificationsBatch(input: { l
   const db = getDb();
   const claimed = await db.execute<(ActivationEmailContext & { claimToken: string; id: string; notificationType: string; recipientEmail: string; subject: string })>(sql`
     with candidates as (
-      select id from subscription_activation_notifications
+      select id, subscription_id, customer_id from subscription_activation_notifications
       where tenant_id = ${input.tenantId} and mode = ${input.mode} and status in ('pending', 'failed') and next_attempt_at <= now()
       order by created_at asc limit ${input.limit} for update skip locked
     ) update subscription_activation_notifications n set status = 'claimed', claim_token = ${crypto.randomUUID()}, claimed_at = now(), attempt_count = n.attempt_count + 1, updated_at = now()
-    from candidates c left join subscriptions s on s.id = n.subscription_id left join customers customer on customer.id = n.customer_id
+    from candidates c
+      left join subscriptions s on s.id = c.subscription_id and s.tenant_id = ${input.tenantId}
+      left join customers customer on customer.id = c.customer_id and customer.tenant_id = ${input.tenantId}
     where n.id = c.id
     returning n.id, n.claim_token as "claimToken", n.notification_type as "notificationType", n.recipient_email as "recipientEmail", n.subject,
       s.id as "subscriptionId", s.amount_value::text as "amountValue", s.interval, s.metadata ->> 'nextPaymentDate' as "nextPaymentDate",

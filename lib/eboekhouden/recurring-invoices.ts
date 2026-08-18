@@ -840,18 +840,20 @@ export async function createDueRecurringInvoicesBatch(input: {
 }): Promise<RecurringInvoiceBatchResult> {
   const settings = await getTenantBillingSettings(input.tenantId);
   const provider = settings?.activeInvoiceProvider ?? "mollie";
-  const adapter = getInvoiceProviderAdapterById(provider);
-  const validation = await adapter.validateTenantSetup({
-    mode: input.mode,
-    settings,
-    tenantId: input.tenantId,
-  });
+  if (provider !== "kify") {
+    const adapter = getInvoiceProviderAdapterById(provider);
+    const validation = await adapter.validateTenantSetup({
+      mode: input.mode,
+      settings,
+      tenantId: input.tenantId,
+    });
 
-  if (!validation.ok || !billingSettingsAreComplete(settings)) {
-    throw new Error(
-      validation.reason ??
-        "Tenant billing settings are incomplete. Select invoice settings first.",
-    );
+    if (!validation.ok || !billingSettingsAreComplete(settings)) {
+      throw new Error(
+        validation.reason ??
+          "Tenant billing settings are incomplete. Select invoice settings first.",
+      );
+    }
   }
 
   return createInvoiceBatchWithDependencies(input, {
