@@ -205,6 +205,13 @@ After Kify-owned invoicing is complete and its plan is retired, reassess this
 queue in order of customer and money-flow value while keeping the blocked M6
 live proof visible:
 
+- **By 17 November 2026:** verify the installed Mollie Node dependency
+  (`@mollie/api-client`, currently 4.5.0) against Mollie's generated
+  TypeScript SDK migration guide. If it is still the legacy client, plan and
+  execute a tenant-safe migration before the legacy SDK enters maintenance
+  mode; do not let this incidental maintenance work interrupt the active Kify
+  milestone.
+
 1. provider-side subscription cancellation execution under `subscription-policy.md`
 2. controlled refund read/create lifecycle with audit and uncertain-outcome reconciliation
 3. chargeback detail and operator follow-up
