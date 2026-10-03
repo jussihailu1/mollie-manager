@@ -264,7 +264,7 @@ export async function POST(request: Request) {
       } catch (error) {
         const message = error instanceof Error ? error.message : "Cron failed";
         tenantResults.push({
-          paymentDiscovery: { repairedCount: 0, failedCount: 0, totalChecked: 0, assignedWebhookCount: 0 },
+          paymentDiscovery: { repairedCount: 0, failedCount: 0, totalChecked: 0, assignedWebhookCount: 0, resolvedWebhookCount: 0 },
           activationJobs: { activatedCount: 0, attemptedCount: 0, exhaustedCount: 0, retriedCount: 0 },
           activationNotifications: { attemptedCount: 0, failedCount: 0, sentCount: 0 },
           failedFirstPaymentRecoveryResult: {

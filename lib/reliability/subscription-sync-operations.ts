@@ -140,6 +140,7 @@ export async function syncSubscriptionByMollieId(
   options?: {
     actor?: SyncActor;
     preferredMode?: MollieMode;
+    reconciliationMode?: ReconciliationMode;
     strictMode?: boolean;
     tenantId?: string;
   },
@@ -171,6 +172,7 @@ export async function syncSubscriptionByMollieId(
 
   return syncSubscriptionByLocalId(localSubscription.id, {
     actor: options?.actor,
+    reconciliationMode: options?.reconciliationMode,
     strictMode: options?.strictMode,
     tenantId: localSubscription.tenantId,
   });

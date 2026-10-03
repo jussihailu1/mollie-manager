@@ -52,7 +52,12 @@ one subscription do not prevent discovery for others; counts are recorded in
 subscription installments instead of only refreshing known payment IDs.
 
 Unassigned historic webhook events are attached only after a uniquely owned
-local resource is recovered. Intake derives ownership for new payment IDs from
+local resource is recovered. Failed recurring-payment notifications are marked
+processed after their installment has been fully synchronized in the same
+discovery run. Each stale target is isolated, so an archived customer or provider
+failure cannot abort other recovery or invoice work. Historical repair runs in
+`sync_only` mode and does not attempt subscription activation for old payments.
+Intake derives ownership for new payment IDs from
 tenant-authenticated Mollie state and managed customer/subscription IDs, never
 from posted metadata. Unresolved events have `mode = NULL`; they are not test
 payments. Apply migration `0028_unresolved_webhook_mode` before releasing the

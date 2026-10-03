@@ -25,7 +25,7 @@ describe("subscription sync operations module boundary", () => {
     );
     assert.match(
       subscriptionSyncSource,
-      /syncSubscriptionByLocalId\(localSubscription\.id, \{\s*actor: options\?\.actor,\s*strictMode: options\?\.strictMode,\s*tenantId: localSubscription\.tenantId,/,
+      /syncSubscriptionByLocalId\(localSubscription\.id, \{\s*actor: options\?\.actor,\s*reconciliationMode: options\?\.reconciliationMode,\s*strictMode: options\?\.strictMode,\s*tenantId: localSubscription\.tenantId,/,
     );
     assert.doesNotMatch(syncSource, /export async function syncSubscriptionByLocalId/);
     assert.doesNotMatch(

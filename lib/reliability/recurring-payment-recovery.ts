@@ -25,6 +25,7 @@ export async function discoverRecurringPaymentsBatch(input: {
   `);
   let repairedCount = 0;
   let failedCount = 0;
+  const recoveredSubscriptionIds: string[] = [];
   for (const subscription of subscriptions.rows) {
     await getDb().execute(sql`
       update subscriptions set metadata = coalesce(metadata, '{}'::jsonb)
@@ -39,6 +40,7 @@ export async function discoverRecurringPaymentsBatch(input: {
         actor: { kind: "system" },
       });
       repairedCount++;
+      recoveredSubscriptionIds.push(subscription.id);
     } catch {
       // Keep last_synced_at unchanged on provider failure, so the next run
       // retries it. Other subscriptions and invoice work may still progress.
@@ -46,7 +48,34 @@ export async function discoverRecurringPaymentsBatch(input: {
     }
   }
   const assigned = await bindRecoveredWebhookEvents(input);
-  return { repairedCount, failedCount, totalChecked: subscriptions.rows.length, assignedWebhookCount: assigned };
+  const resolved = await markRecoveredPaymentWebhooksProcessed({ ...input, subscriptionIds: recoveredSubscriptionIds });
+  return { repairedCount, failedCount, totalChecked: subscriptions.rows.length, assignedWebhookCount: assigned, resolvedWebhookCount: resolved };
+}
+
+export async function markRecoveredPaymentWebhooksProcessed(
+  input: { tenantId: string; mode: MollieMode; subscriptionIds: string[] },
+  client?: DbClient,
+) {
+  if (input.subscriptionIds.length === 0) return 0;
+  // Subscription discovery already read and persisted authoritative state for
+  // these installments. Replaying every old notification adds no new truth.
+  const result = await (client ?? getDb()).execute(sql`
+    update webhook_events w set processing_status = 'processed', error_message = null,
+      processed_at = now(), last_attempt_at = now()
+    from payments p
+    where w.resource_id = p.mollie_payment_id
+      and w.tenant_id = ${input.tenantId} and w.mode = ${input.mode}
+      and p.tenant_id = w.tenant_id and p.mode = w.mode
+      and p.payment_type = 'recurring'
+      and p.subscription_id in (${sql.join(input.subscriptionIds.map((id) => sql`${id}`), sql`, `)})
+      and w.processing_status in ('pending', 'failed')
+      and not exists (
+        select 1 from payments other where other.mollie_payment_id = p.mollie_payment_id
+          and (other.tenant_id, other.mode) <> (p.tenant_id, p.mode)
+      )
+    returning w.id
+  `);
+  return result.rows.length;
 }
 
 export async function bindRecoveredWebhookEvents(input: { tenantId: string; mode: MollieMode }, client?: DbClient) {

@@ -16,7 +16,7 @@ requireForTest.cache[requireForTest.resolve("server-only")] = { exports: {} } as
 
 async function main() {
   const { persistSyncedPayment } = await import("../lib/reliability/sync-persistence");
-  const { bindRecoveredWebhookEvents } = await import("../lib/reliability/recurring-payment-recovery");
+  const { bindRecoveredWebhookEvents, markRecoveredPaymentWebhooksProcessed } = await import("../lib/reliability/recurring-payment-recovery");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL,
     ssl: process.env.DATABASE_SSL === "true" ? true : undefined });
   const client = await pool.connect();
@@ -63,10 +63,14 @@ async function main() {
     assert.equal(await bindRecoveredWebhookEvents({ tenantId: "owner", mode: "live" }, db), 2);
     const events = await client.query("SELECT mode,tenant_id FROM webhook_events WHERE resource_id='tr_recovered'");
     assert.ok(events.rows.every((event) => event.mode === "live" && event.tenant_id === "owner"));
+    assert.equal(await markRecoveredPaymentWebhooksProcessed({ tenantId: "owner", mode: "live", subscriptionIds: [] }, db), 0);
+    assert.equal(await markRecoveredPaymentWebhooksProcessed({ tenantId: "owner", mode: "live", subscriptionIds: ["sub_local"] }, db), 2);
+    const processed = await client.query("SELECT processing_status FROM webhook_events WHERE resource_id='tr_recovered'");
+    assert.ok(processed.rows.every((event) => event.processing_status === "processed"));
     // A duplicate provider ID belonging to another tenant must never be claimed.
     await client.query(`INSERT INTO payments (id,tenant_id,mode,payment_type,mollie_payment_id,amount_value,amount_currency)
       VALUES ('collision','other','live','recurring','tr_recovered',19.99,'EUR')`);
-    await client.query("UPDATE webhook_events SET tenant_id=NULL,mode=NULL WHERE resource_id='tr_recovered'");
+    await client.query("UPDATE webhook_events SET tenant_id=NULL,mode=NULL,processing_status='failed' WHERE resource_id='tr_recovered'");
     assert.equal(await bindRecoveredWebhookEvents({ tenantId: "owner", mode: "live" }, db), 0);
     console.log("PASS: duplicate-safe payment recovery preserves F00051 and binds only uniquely owned live webhooks. All writes isolated in temporary tables.");
   } finally {

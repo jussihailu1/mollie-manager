@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { writeAuditLog } from "@/lib/audit";
 import { getDb } from "@/lib/db";
 import { REPAIR_STALE_AFTER_MS } from "@/lib/freshness";
+import { recoverTargetsIndependently } from "./isolated-recovery";
 import { repairCustomerBillingState } from "@/lib/onboarding/actions";
 import {
   syncPaymentByMollieId,
@@ -105,6 +106,7 @@ async function processWebhookResource(
       actor,
       preferredMode: mode,
       strictMode: true,
+      reconciliationMode: "sync_only",
       tenantId,
     });
   }
@@ -114,6 +116,7 @@ async function processWebhookResource(
       actor,
       preferredMode: mode,
       strictMode: true,
+      reconciliationMode: "sync_only",
       tenantId,
     });
   }
@@ -151,7 +154,7 @@ async function updateWebhookEventStatus(
             then now()
           else processed_at
         end
-      where (id = ${input.id} or (${input.processed} and resource_id = ${input.resourceId ?? null}
+      where (id = ${input.id} or (resource_id = ${input.resourceId ?? null}
         and processing_status = 'failed'))
         and tenant_id = ${input.tenantId}
     `);
@@ -476,6 +479,7 @@ export async function repairPaymentTarget(input: {
     actor: input.actor,
     preferredMode: row.mode,
     strictMode: true,
+    reconciliationMode: "sync_only",
     tenantId: input.tenantId,
   });
 
@@ -527,6 +531,7 @@ export async function repairSubscriptionTarget(input: {
     actor: input.actor,
     preferredMode: row.mode,
     strictMode: true,
+    reconciliationMode: "sync_only",
     tenantId: input.tenantId,
   });
 
@@ -581,6 +586,7 @@ export async function repairWebhookEventsBatch(input: {
       await updateWebhookEventStatus({
         errorMessage: message,
         id: candidate.id,
+        resourceId: candidate.resourceId,
         processed: false,
         tenantId: input.tenantId,
       });
@@ -656,11 +662,9 @@ export async function repairStaleRecordsBatch(input: {
     return toMillis(left.lastSyncedAt) - toMillis(right.lastSyncedAt);
   });
 
-  let repairedCount = 0;
-  let skippedCount = 0;
   const repairedCustomerIds = new Set<string>();
 
-  for (const candidate of candidates.slice(0, limit)) {
+  const { repairedCount, skippedCount } = await recoverTargetsIndependently(candidates.slice(0, limit), async (candidate) => {
     if (candidate.kind === "customer") {
       const result = await repairCustomerTarget({
         actor,
@@ -670,19 +674,14 @@ export async function repairStaleRecordsBatch(input: {
       });
 
       if (result.status === "repaired") {
-        repairedCount += 1;
         repairedCustomerIds.add(result.id);
-      } else {
-        skippedCount += 1;
       }
-
-      continue;
+      return result.status;
     }
 
     if (candidate.kind === "payment") {
       if (candidate.customerId && repairedCustomerIds.has(candidate.customerId)) {
-        skippedCount += 1;
-        continue;
+        return "skipped";
       }
 
       const result = await repairPaymentTarget({
@@ -692,18 +691,11 @@ export async function repairStaleRecordsBatch(input: {
         tenantId: input.tenantId,
       });
 
-      if (result.status === "repaired") {
-        repairedCount += 1;
-      } else {
-        skippedCount += 1;
-      }
-
-      continue;
+      return result.status;
     }
 
     if (repairedCustomerIds.has(candidate.customerId)) {
-      skippedCount += 1;
-      continue;
+      return "skipped";
     }
 
     const result = await repairSubscriptionTarget({
@@ -713,12 +705,18 @@ export async function repairStaleRecordsBatch(input: {
       tenantId: input.tenantId,
     });
 
-    if (result.status === "repaired") {
-      repairedCount += 1;
-    } else {
-      skippedCount += 1;
-    }
-  }
+    return result.status;
+  }, async (candidate) => {
+    await writeAuditLog({
+      action: "repair.stale_target_failed",
+      entityId: candidate.id,
+      entityType: candidate.kind,
+      mode: input.mode,
+      outcome: "failure",
+      summary: "Target repair failed; remaining recovery work continues.",
+      details: { tenantId: input.tenantId },
+    }, undefined, actor);
+  });
 
   const batchResult: RepairBatchResult = {
     customersChecked: customerRows.length,
