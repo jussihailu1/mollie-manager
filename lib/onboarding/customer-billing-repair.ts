@@ -9,6 +9,7 @@ import type { MollieMode } from "@/lib/env";
 import { getCustomerDetail } from "@/lib/onboarding/data";
 import { getTenantMollieClient, getTenantMollieRequestContext } from "@/lib/mollie/client";
 import { syncPaymentLinkByMollieId } from "@/lib/reliability/sync";
+import { syncSubscriptionByLocalId } from "@/lib/reliability/subscription-sync-operations";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 
 type LocalPaymentRecord = {
@@ -207,6 +208,7 @@ export async function repairCustomerBillingState(input: {
     customerId: mollieCustomerId,
     ...(testmode ? { testmode } : {}),
   });
+  let subscriptionIds: string[] = [];
 
   await transaction(async (client) => {
     const mandateIdMap = new Map<string, string>();
@@ -261,6 +263,7 @@ export async function repairCustomerBillingState(input: {
       tenantId,
       client,
     );
+    subscriptionIds = localSubscriptions.map((subscription) => subscription.id);
 
     for (const localSubscription of localSubscriptions) {
       const subscription = (await mollie.customerSubscriptions.get(
@@ -310,6 +313,17 @@ export async function repairCustomerBillingState(input: {
       actor,
     );
   });
+
+  // Repair must discover Mollie-created installments, not merely refresh the
+  // payments already known locally. This does not create or send invoices.
+  for (const subscriptionId of subscriptionIds) {
+    await syncSubscriptionByLocalId(subscriptionId, {
+      actor,
+      reconciliationMode: "sync_only",
+      strictMode: true,
+      tenantId,
+    });
+  }
 
   for (const paymentLink of customerDetail.paymentLinks) {
     if (!paymentLink.molliePaymentLinkId) {

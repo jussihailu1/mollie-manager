@@ -161,6 +161,15 @@ export async function syncPaymentByMollieId(
     });
   }
 
+  if (paymentType === "recurring" && localSubscription) {
+    await syncSubscriptionByLocalId(localSubscription.id, {
+      actor,
+      tenantId: resolvedTenantId,
+      strictMode: true,
+      reconciliationMode: "sync_only",
+    });
+  }
+
   if (
     resolvedCustomerId &&
     paymentType === "first" &&

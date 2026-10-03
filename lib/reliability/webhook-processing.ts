@@ -19,7 +19,7 @@ export type WebhookResourceContext = {
 
 export type WebhookEventInsertInput = {
   id: string;
-  mode: MollieMode;
+  mode: MollieMode | null;
   payload: Record<string, unknown>;
   requestId: string | null;
   resourceId: string;
@@ -130,11 +130,17 @@ export async function handleMollieWebhookRequest(
   }
 
   const webhookEventId = dependencies.createWebhookEventId?.() ?? crypto.randomUUID();
-  const existingResourceContext = await dependencies.findExistingResourceContext(parsed.resourceId);
+  let existingResourceContext: WebhookResourceContext | null = null;
+  let contextError: string | null = null;
+  try {
+    existingResourceContext = await dependencies.findExistingResourceContext(parsed.resourceId);
+  } catch (error) {
+    contextError = serializeWebhookError(error);
+  }
 
   await dependencies.insertWebhookEvent({
     id: webhookEventId,
-    mode: existingResourceContext?.mode ?? "test",
+    mode: existingResourceContext?.mode ?? null,
     payload: parsed.payload,
     requestId: request.headers.get("x-request-id") ?? null,
     resourceId: parsed.resourceId,
@@ -144,7 +150,7 @@ export async function handleMollieWebhookRequest(
   });
 
   if (!existingResourceContext?.tenantId) {
-    const errorMessage = "Webhook is not linked to a managed local resource.";
+    const errorMessage = contextError ?? "Webhook is not linked to a managed local resource.";
 
     await dependencies.markWebhookEventFailed({
       errorMessage,

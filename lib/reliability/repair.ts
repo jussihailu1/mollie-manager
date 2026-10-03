@@ -135,6 +135,7 @@ async function updateWebhookEventStatus(
     errorMessage?: string | null;
     id: string;
     processed: boolean;
+    resourceId?: string;
     tenantId: string;
   },
 ) {
@@ -150,7 +151,8 @@ async function updateWebhookEventStatus(
             then now()
           else processed_at
         end
-      where id = ${input.id}
+      where (id = ${input.id} or (${input.processed} and resource_id = ${input.resourceId ?? null}
+        and processing_status = 'failed'))
         and tenant_id = ${input.tenantId}
     `);
 }
@@ -161,21 +163,25 @@ async function listFailedWebhookCandidatesForTenant(
   tenantId: string,
 ) {
   const result = await getDb().execute<FailedWebhookCandidate>(sql`
-      select
+      select * from (select distinct on (resource_id)
         id,
         mode,
         resource_id as "resourceId",
         resource_type as "resourceType",
         error_message as "errorMessage",
-        retry_count as "retryCount"
+        retry_count as "retryCount",
+        coalesce(last_attempt_at, received_at) as attempted_at
       from webhook_events
       where mode = ${mode}
         and tenant_id = ${tenantId}
         and processing_status = 'failed'
         and resource_id is not null
       order by
+        resource_id,
         coalesce(last_attempt_at, received_at) asc,
         received_at desc
+      ) candidates
+      order by attempted_at asc, "resourceId"
       limit ${limit}
     `);
 
@@ -566,6 +572,7 @@ export async function repairWebhookEventsBatch(input: {
       await updateWebhookEventStatus({
         id: candidate.id,
         processed: true,
+        resourceId: candidate.resourceId,
         tenantId: input.tenantId,
       });
       repairedCount += 1;

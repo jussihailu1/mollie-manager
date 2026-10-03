@@ -29,7 +29,11 @@ describe("mollie webhook scope", () => {
     assert.match(routeSource, /handleMollieWebhookRequest/);
     assert.match(processingSource, /supportedWebhookResourceIdPattern/);
     assert.match(routeSource, /findExistingResourceContext/);
-    assert.match(routeSource, /tenant_id as "tenantId"/);
+    const contextSource = readFileSync(resolve("lib/reliability/webhook-context.ts"), "utf8");
+    assert.match(contextSource, /tenant_id as "tenantId"/);
+    assert.match(contextSource, /getTenantMollieClient\(tenantId, mode\)/);
+    assert.match(contextSource, /s\.customer_id = c\.id/);
+    assert.doesNotMatch(contextSource, /payment\.metadata/);
     assert.match(routeSource, /insert into webhook_events \([\s\S]*tenant_id/);
     assert.match(processingSource, /tenantId: existingResourceContext\?\.tenantId \?\? null/);
     assert.match(processingSource, /if \(!existingResourceContext\?\.tenantId\)/);

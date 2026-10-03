@@ -43,6 +43,22 @@ the webhook for up to roughly 26 hours. The daily protected cron remains a
 fallback for existing repair and email-outbox work; only active tenant
 operators receive an action-required email after Mollie exhausts retries.
 
+Before invoice work, cron discovers installments from managed Mollie subscriptions
+in a bounded, rotating tenant/mode batch. It reads every payment page, updates
+collection links and the next scheduled period, and preserves existing invoices.
+This runs independently of webhook delivery and customer freshness. Failures in
+one subscription do not prevent discovery for others; counts are recorded in
+`paymentDiscovery` in the tenant cron result. Customer repair also discovers
+subscription installments instead of only refreshing known payment IDs.
+
+Unassigned historic webhook events are attached only after a uniquely owned
+local resource is recovered. Intake derives ownership for new payment IDs from
+tenant-authenticated Mollie state and managed customer/subscription IDs, never
+from posted metadata. Unresolved events have `mode = NULL`; they are not test
+payments. Apply migration `0028_unresolved_webhook_mode` before releasing the
+new intake. Production must explicitly configure `MOLLIE_DEFAULT_MODE=live`;
+development/test defaults remain test to prevent accidental live billing.
+
 1. Auto-queues safe failed retries (`FACT_014`, `FACT_VERWERK_004`) back to pending for both recurring and first-payment invoice rows.
 2. Reconciles failed rows with existing e-Boekhouden invoices and recovers local state when upstream already has invoice.
 3. Creates due recurring invoices (`invoice_send_due_date <= current_date`) with duplicate-safe claim state.

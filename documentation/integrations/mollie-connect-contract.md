@@ -158,7 +158,12 @@ cancelled, state expired/invalid, scope missing, profile selection required,
 capability action required, connection revoked, reconnect required, or temporary
 provider failure. Webhooks remain signals: a webhook or replay resolves its
 tenant-owned local resource first and re-fetches authoritative Mollie state
-through that same tenant's credential resolver.
+through that same tenant's credential resolver. For newly created recurring
+payment IDs, intake discovers the owner by reading Mollie with configured
+tenant/mode credentials and verifying managed provider customer/subscription
+IDs and the selected OAuth profile. Posted metadata never establishes ownership.
+Ambiguous or unavailable ownership remains unresolved, with no guessed mode.
+Daily subscription discovery is the independent fallback for missed webhooks.
 
 ## M2 acceptance criteria
 

@@ -192,7 +192,7 @@ describe("mollie webhook processing", () => {
 
     assert.equal(result.status, 500);
     assert.equal(result.body, "Webhook processing failed");
-    assert.equal(inserted[0]?.mode, "test");
+    assert.equal(inserted[0]?.mode, null);
     assert.equal(inserted[0]?.tenantId, null);
     assert.equal(synced.length, 0);
     assert.deepEqual(failed, [

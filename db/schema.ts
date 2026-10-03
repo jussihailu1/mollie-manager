@@ -1794,7 +1794,7 @@ export const webhookEvents = pgTable(
   "webhook_events",
   {
     id: text("id").primaryKey(),
-    mode: mollieModeEnum("mode").notNull(),
+    mode: mollieModeEnum("mode"),
     webhookSource: text("webhook_source").notNull().default("mollie"),
     resourceType: text("resource_type"),
     resourceId: text("resource_id"),

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 
 import type { MollieMode } from "@/lib/env";
 import { getDb } from "@/lib/db";
+import { findExistingResourceContext } from "@/lib/reliability/webhook-context";
 import {
   deliverSubscriptionActivationNotificationsBatch,
   queueSubscriptionActivationExhaustedNotifications,
@@ -16,48 +17,6 @@ import {
   handleMollieWebhookRequest,
   type WebhookResourceSyncResult,
 } from "@/lib/reliability/webhook-processing";
-
-type ExistingResourceContext = {
-  mode: "live" | "test";
-  tenantId: string;
-};
-
-async function findExistingResourceContext(resourceId: string) {
-  if (resourceId.startsWith("tr_")) {
-    return (
-      await getDb().execute<ExistingResourceContext>(sql`
-        select mode, tenant_id as "tenantId"
-        from payments
-        where mollie_payment_id = ${resourceId}
-        limit 1
-      `)
-    ).rows[0] ?? null;
-  }
-
-  if (resourceId.startsWith("sub_")) {
-    return (
-      await getDb().execute<ExistingResourceContext>(sql`
-        select mode, tenant_id as "tenantId"
-        from subscriptions
-        where mollie_subscription_id = ${resourceId}
-        limit 1
-      `)
-    ).rows[0] ?? null;
-  }
-
-  if (resourceId.startsWith("pl_")) {
-    return (
-      await getDb().execute<ExistingResourceContext>(sql`
-        select mode, tenant_id as "tenantId"
-        from payment_links
-        where mollie_payment_link_id = ${resourceId}
-        limit 1
-      `)
-    ).rows[0] ?? null;
-  }
-
-  return null;
-}
 
 async function processWebhookResource(
   resourceId: string,

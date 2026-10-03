@@ -36,8 +36,8 @@ describe("repair surface scope", () => {
     assert.match(helperSource, /alert_subscription\.tenant_id = \$\{tenantId\}/);
     assert.match(helperSource, /from webhook_events[\s\S]*and tenant_id = \$\{tenantId\}[\s\S]*and processing_status = 'failed'[\s\S]*and resource_id is not null/);
     assert.match(helperSource, /update webhook_events/);
-    assert.match(helperSource, /processed: boolean;\s*tenantId: string;/);
-    assert.match(helperSource, /where id = \$\{input\.id\}[\s\S]*and tenant_id = \$\{input\.tenantId\}/);
+    assert.match(helperSource, /processed: boolean;\s*resourceId\?: string;\s*tenantId: string;/);
+    assert.match(helperSource, /where \(id = \$\{input\.id\}[\s\S]*and tenant_id = \$\{input\.tenantId\}/);
     assert.match(helperSource, /action: "repair\.webhook_batch"[\s\S]*entityId: input\.tenantId[\s\S]*entityType: "tenant_recurring_billing_cron"/);
     assert.match(helperSource, /action: "repair\.stale_batch"[\s\S]*entityId: input\.tenantId[\s\S]*entityType: "tenant_recurring_billing_cron"/);
     assert.doesNotMatch(helperSource, /entityType: "webhook_repair_batch"/);

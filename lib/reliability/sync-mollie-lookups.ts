@@ -6,6 +6,7 @@ import type { MollieMode } from "@/lib/env";
 import { getTenantMollieClient, getTenantMollieRequestAuthentication, getTenantMollieRequestContext, isMollieConfigured } from "@/lib/mollie/client";
 import { buildConfiguredMollieModeOrder } from "@/lib/reliability/mollie-mode-selection";
 import { findMollieResourceAcrossModes } from "@/lib/reliability/mollie-resource-lookup";
+import { collectSubscriptionPayments } from "./subscription-payment-discovery";
 import type { PaymentLinkSyncSource } from "@/lib/reliability/payment-link-sync-record";
 
 export type SyncMolliePaymentLink = {
@@ -148,11 +149,12 @@ export async function findSubscriptionAcrossModes(
           ...(testmode ? { testmode } : {}),
         },
       );
-      const payments = await client.subscriptionPayments.page({
+      const payments = await collectSubscriptionPayments(client.subscriptionPayments.iterate({
         customerId: customerMollieId,
         subscriptionId: mollieSubscriptionId,
         ...(testmode ? { testmode } : {}),
-      });
+      }), (payment) => payment.mode === mode && payment.customerId === customerMollieId
+        && payment.subscriptionId === mollieSubscriptionId);
 
       return {
         payments,

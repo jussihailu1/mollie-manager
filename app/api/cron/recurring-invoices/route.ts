@@ -28,6 +28,7 @@ import {
   repairWebhookEventsBatch,
 } from "@/lib/reliability/repair";
 import { listTenants } from "@/lib/tenants";
+import { discoverRecurringPaymentsBatch } from "@/lib/reliability/recurring-payment-recovery";
 
 function isAuthorized(request: Request) {
   const secrets = getAcceptedCronSecrets({
@@ -60,6 +61,7 @@ function parseLimit(request: Request) {
 }
 
 type TenantCronResult = {
+  paymentDiscovery: Awaited<ReturnType<typeof discoverRecurringPaymentsBatch>>;
   activationJobs: Awaited<ReturnType<typeof processSubscriptionActivationJobsBatch>>;
   activationNotifications: Awaited<ReturnType<typeof deliverSubscriptionActivationNotificationsBatch>>;
   failedFirstPaymentRecoveryResult: Awaited<
@@ -104,6 +106,12 @@ async function runTenantCronBatch(input: {
   const repairLimit = Math.min(input.limit, 5);
   const webhookRepairLimit = Math.min(repairLimit, 2);
   const staleRepairLimit = Math.max(1, repairLimit - webhookRepairLimit);
+
+  const paymentDiscovery = await discoverRecurringPaymentsBatch({
+    limit: input.limit,
+    mode: input.mode,
+    tenantId: input.tenantId,
+  });
 
   const webhookRepairResult = await repairWebhookEventsBatch({
     actor: { kind: "system" },
@@ -187,6 +195,7 @@ async function runTenantCronBatch(input: {
   });
 
   const result = {
+    paymentDiscovery,
     activationJobs,
     activationNotifications,
     failedFirstPaymentRecoveryResult,
@@ -213,10 +222,10 @@ async function runTenantCronBatch(input: {
       entityType: "tenant_recurring_billing_cron",
       mode: input.mode,
       outcome:
-        recurringCreateResult.failedCount > 0 &&
+        paymentDiscovery.failedCount > 0 || (recurringCreateResult.failedCount > 0 &&
         recurringCreateResult.createdCount === 0 &&
         firstPaymentCreateResult.failedCount > 0 &&
-        firstPaymentCreateResult.createdCount === 0
+        firstPaymentCreateResult.createdCount === 0)
           ? "failure"
           : "success",
       summary:
@@ -255,6 +264,7 @@ export async function POST(request: Request) {
       } catch (error) {
         const message = error instanceof Error ? error.message : "Cron failed";
         tenantResults.push({
+          paymentDiscovery: { repairedCount: 0, failedCount: 0, totalChecked: 0, assignedWebhookCount: 0 },
           activationJobs: { activatedCount: 0, attemptedCount: 0, exhaustedCount: 0, retriedCount: 0 },
           activationNotifications: { attemptedCount: 0, failedCount: 0, sentCount: 0 },
           failedFirstPaymentRecoveryResult: {
@@ -358,7 +368,7 @@ export async function POST(request: Request) {
         result.activationNotifications.sentCount > 0,
     );
 
-    if (webhookRepaired || staleRepaired || createdInvoices || deliveredEmails) {
+    if (tenantResults.some((result) => result.paymentDiscovery.repairedCount > 0) || webhookRepaired || staleRepaired || createdInvoices || deliveredEmails) {
       revalidatePath("/");
       revalidatePath("/customers");
       revalidatePath("/notifications");
