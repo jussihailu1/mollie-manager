@@ -7,7 +7,9 @@ This release changes cron provider routing, failure accounting and operator
 summary delivery. No schema migration, tax/account changes, scheduler frequency
 change or historical invoice repair is included.
 
-Remote master was rechecked read-only during this slice and remains the parent SHA.
+Before the approved push, remote master was rechecked read-only and matched the
+parent SHA. A read-only Git check during documentation cleanup on 8 October
+confirmed it points to `1179c824859fe2068c3d78791a12e3e47f2b638e`.
 
 Clean parent validation: 470/471 Node tests pass. The single existing failure is
 `customer lifecycle UI surface` / `derives lifecycle state in the customer UI without manual override fields`. Final isolated candidate checks are recorded below.
@@ -114,7 +116,7 @@ schema, tax settings, invoices or payments. Never replay full billing as rollbac
 - Isolated candidate: 508/509 Node tests pass; the only failure is the same parent customer lifecycle UI assertion. All 41 focused cron/routing/notification checks pass. Typecheck passes; scoped ESLint has zero errors and the two unchanged first-payment unused-import warnings.
 - Default `npm run build` passes with dependencies physically inside the isolated checkout and a dummy build-only AUTH_SECRET; no production environment file was copied. The initial dependency-junction attempt was rejected by Turbopack before compilation; correcting that validation layout resolved it.
 - Scoped local commit: this document is included in `Fix cron reliability and isolate operator notifications`; use Git history for the exact SHA. Its tree is checked independently of the mixed checkout.
-- Push/deployment: not authorized or performed in this slice.
+- Push/deployment: explicitly approved by the user and completed on 8 October 2026. Exact commit `1179c824859fe2068c3d78791a12e3e47f2b638e` pushed to master; READY production Git deployment `dpl_k3MdFPW76Uq2Xp14Jo2eqedr78AS` serves `kify.app` and `www.kify.app`.
 - Scheduled execution of this version: not yet observed.
 - Synthetic operator email: not authorized or sent.
 - Actual inbox receipt: unverified.
@@ -122,3 +124,17 @@ schema, tax settings, invoices or payments. Never replay full billing as rollbac
   Additional bounded Cloudflare sync-only recovery is optional; if needed, start
   every two hours as recorded in temporary-roadmap step 5. Independent monitoring
   and Connect ownership remain separate items.
+
+## Post-deployment verification — 14:54 Europe/Amsterdam
+
+- Vercel resolved `kify.app` to READY `dpl_k3MdFPW76Uq2Xp14Jo2eqedr78AS`, exact approved SHA, with no alias error.
+- Authenticated, unscoped `GET /api/health` returned HTTP 200, `status: ok`, `currentMode: live`, `databaseOk: true`, and platform readiness passed. Request ID: `fra1::iad1::kb6j7-1791464084566-41256f3e2353`. No tenant/OAuth refresh path was invoked.
+- Production environment reads confirmed both recipients remain `info@ayalweb.com`, `MOLLIE_DEFAULT_MODE=live`, and SMTP/cron-secret settings are present. No configuration was changed.
+- Vercel's active cron configuration references this deployment, is enabled, and retains `/api/cron/recurring-invoices` at `0 3 * * *` UTC. Configuration proves scheduling is installed, not that a scheduled execution has occurred.
+- Before/after snapshots against the verified Neon endpoint/database used repeatable-read, read-only transactions. Migration 0029 matches its source hash; Ayal Web remains `eboekhouden / kor / GEEN / 0.00 / app_smtp`. Backlog is unchanged: three pending test first payments, one live EUR 24.90 recurring invoice due 27 October (collection 1 November), no live failed/creating rows, and no created-unsent invoice owners.
+- No error/fatal logs were returned for this deployment in the inspected 12:39:53–12:54:53 UTC window; the deployment only existed for the final portion of that window.
+- No full cron invocation, invoice creation, payment collection, operator test email, or customer email was performed by this release verification. The next scheduled run is 9 October at 05:00 Europe/Amsterdam; actual execution and inbox receipt remain open evidence gates. No follow-up automation was created.
+
+These evidence updates are local documentation changes after the released commit;
+they were not pushed as another deployment. Detailed read-only snapshots are in
+ignored `tmp/cron-release-before.json` and `tmp/cron-release-after.json`.

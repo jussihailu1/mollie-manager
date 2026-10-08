@@ -99,13 +99,49 @@ It corrects Kify first-payment routing and empty/partial failure reporting, and
 adds consolidated operator notifications without replaying billing on alert
 failure. Local validation and release evidence are recorded in the
 [cron release procedure](../operations/cron-reliability-release-2026-10-08.md).
-Deployment, scheduled execution and inbox receipt are separate open gates.
+Commit `1179c82` is deployed and release health/configuration checks passed on
+8 October 2026. Scheduled execution and inbox receipt remain separate open gates.
 Additional Cloudflare sync-only recovery is optional: first verify the webhook
 flow and scheduled daily cron. If daily fallback latency is unacceptable, start
 a separate bounded job every two hours and measure usage before increasing its
 frequency. See step 5 of the temporary roadmap for the decision and estimate.
 The full billing cron stays daily. Independent monitoring and Mollie Connect
 ownership remain separate backlog items.
+
+### Immediate Maintenance And Operational Follow-Up — 8 October 2026
+
+These are correctness and readiness follow-ups, not additional product milestones.
+
+- **Security maintenance is the immediate engineering priority.** A fresh
+  `npm audit --omit=dev` against the current lockfile reports 10 affected package
+  entries: 1 critical, 8 high and 1 moderate. The lockfile pins Next.js 16.2.2
+  and Nodemailer 7.0.13. Next.js advisories include conditional critical issues
+  and a [Server Actions denial of service](https://github.com/vercel/next.js/security/advisories/GHSA-m99w-x7hq-7vfj);
+  this app uses Server Actions. These counts include transitive/inherited
+  findings and are not evidence of exploitation or ten independently exploitable
+  application bugs. Prepare a compatible dependency update, verify auth,
+  billing/email flows and build, then separately release it. Do not use
+  `npm audit fix --force`: its suggested next-auth downgrade is incompatible
+  with the current v5 integration. No dependency changes were made in this
+  documentation cleanup.
+- **Observe the next scheduled cron execution**, 9 October at 05:00
+  Europe/Amsterdam, and verify operator inbox receipt. The release ledger proves
+  deployment and schedule configuration; it does not yet prove a scheduled run.
+  Do not invoke full production billing for a smoke test.
+- **Resolve customer email routing before ordinary delivery is expected.** The
+  last recorded production verification at 14:54 on 8 October still has
+  `INVOICE_EMAIL_OVERRIDE_TO=info@ayalweb.com`. Code sends to that override and
+  records successful delivery even though the intended customer did not receive
+  the email. Keep operator review deliberate; enabling direct customer delivery
+  requires a reviewed configuration change and review of already overridden
+  deliveries. The last checked next recurring invoice is due 27 October; this
+  does not rule out newly arising first payments. Configuration/backlog were
+  not refreshed during Git cleanup.
+
+Independent missed-run monitoring remains an important reliability follow-up.
+K7 controlled Kify-native invoice proof remains a gate before broader rollout;
+it is separate from the waived e-Boekhouden KOR test. Faster Cloudflare recovery
+and Connect ownership design remain later work.
 
 ## Externally Blocked Milestone: Mollie Connect M6
 
@@ -220,6 +256,33 @@ POS, Marketplace flows, broad role systems, or unrelated operator polish.
 After Kify-owned invoicing is complete and its plan is retired, reassess this
 queue in order of customer and money-flow value while keeping the blocked M6
 live proof visible:
+
+- **TODO: clarify Kify platform ownership and AYAL's own tenant in Mollie Connect.**
+  Requested on 8 October 2026 as a later design task, after current billing and
+  recovery flows work correctly. Document the distinction between the Mollie
+  organization that owns Kify's OAuth application, AYAL as a merchant tenant
+  collecting payments from its own customers, other merchants connecting their
+  own organizations, and any future fees/subscriptions charged for using Kify.
+  Confirm with Mollie's supported configuration whether the app-owning
+  organization can also connect as AYAL's tenant, and whether separate profiles
+  or organizations are appropriate; do not assume a second account is required
+  or that self-connection is already proven. AYAL's ordinary customers are not
+  automatically Kify tenants. Preserve tenant-owned credentials, payment
+  ownership and settlement; AYAL must not become a global payment-account
+  fallback for other tenants. Record the final organization/profile mapping,
+  onboarding and M6 proof requirements before changing the working setup.
+  No Connect/account reconfiguration is authorized by this backlog item.
+
+- **TODO: independent operational monitoring.** Add an external cron heartbeat
+  monitor for missing/late runs and hard timeouts, plus actionable runtime-error,
+  unresolved billing/recovery, and alert-delivery failure monitoring. Detection
+  and notification must still work when Kify or its SMTP service is unavailable;
+  the in-app cron summary email alone is not sufficient. Define schedule-aware
+  thresholds, tenant/mode context, deduplication, recovery notices, and a short
+  response runbook. Route notifications to `info@ayalweb.com` initially; switch
+  to `info+kify@ayalweb.com` only after receipt is verified. Acceptance requires
+  controlled missed-heartbeat, runtime-failure, and SMTP-outage tests without
+  replaying live billing. This is planned work, not implemented monitoring.
 
 - **By 17 November 2026:** verify the installed Mollie Node dependency
   (`@mollie/api-client`, currently 4.5.0) against Mollie's generated
