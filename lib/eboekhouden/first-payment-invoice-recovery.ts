@@ -1,13 +1,15 @@
 import { sql } from "drizzle-orm";
 
 import { writeAuditLog } from "@/lib/audit";
-import { getDb } from "@/lib/db";
+import { getDb, transaction } from "@/lib/db";
 import type { EboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import { buildDeterministicMatchCte } from "@/lib/eboekhouden/first-payment-invoice-match-query";
 import type { FirstPaymentInvoiceActor } from "@/lib/eboekhouden/first-payment-invoice-persistence";
 import { saveStoredInvoice } from "@/lib/invoices";
+import type { TaxTreatment } from "@/lib/invoicing/tax-treatment";
 
 export type FirstPaymentInvoiceRecoveryCandidate = {
+  amountValue: string;
   customerEmail: string | null;
   customerId: string | null;
   eboekhoudenRelationId: number;
@@ -17,12 +19,14 @@ export type FirstPaymentInvoiceRecoveryCandidate = {
   paymentId: string;
   subscriptionId: string | null;
   tenantId: string;
+  taxTreatment: TaxTreatment | null;
 };
 
 export async function listFailedFirstPaymentRecoveryCandidates(
   mode: "live" | "test",
   limit: number,
   tenantId?: string,
+  paymentId?: string,
 ) {
   if (!tenantId) {
     throw new Error("First-payment invoice recovery tenant context is missing.");
@@ -38,6 +42,8 @@ export async function listFailedFirstPaymentRecoveryCandidates(
       p.subscription_id as "subscriptionId",
       p.paid_at as "paidAt",
       p.created_at as "paymentCreatedAt",
+      p.amount_value::text as "amountValue",
+      p.metadata ->> 'invoiceTaxTreatment' as "taxTreatment",
       c.email as "customerEmail",
       case
         when cal.provider_customer_id ~ '^[0-9]+$'
@@ -57,6 +63,7 @@ export async function listFailedFirstPaymentRecoveryCandidates(
       and cal.provider = 'eboekhouden'
     where p.mode = ${mode}
       and p.tenant_id = ${tenantId}
+      and ${paymentId ? sql`p.id = ${paymentId}` : sql`true`}
       and p.payment_type = 'first'
       and p.invoice_state = 'invoice_failed'
       and not exists (
@@ -78,10 +85,12 @@ export async function storeRecoveredFailedFirstPaymentSuccess(input: {
   actor: FirstPaymentInvoiceActor;
   candidate: FirstPaymentInvoiceRecoveryCandidate;
   invoice: EboekhoudenInvoice;
+  originalCreditNumber?: string;
 }) {
   const invoiceId = input.invoice.id ? String(input.invoice.id) : null;
   const invoiceNumber = input.invoice.invoiceNumber ?? input.invoice.number ?? null;
-  const result = await getDb().execute<{ id: string }>(sql`
+  const recovered = await transaction(async (tx) => {
+    const result = await tx.execute<{ id: string }>(sql`
     update payments
     set
       invoice_state = 'invoice_created',
@@ -89,11 +98,16 @@ export async function storeRecoveredFailedFirstPaymentSuccess(input: {
       invoice_failed_at = null,
       metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
         eboekhoudenInvoice: input.invoice,
+        eboekhoudenUnverifiedInvoice: null,
+        invoiceCreationManualReview: false,
         invoiceRecoveredAt: new Date().toISOString(),
-        invoiceRecoverySource: "reconciled_existing",
+        invoiceRecoverySource: input.originalCreditNumber ? "manual_replacement" : "reconciled_existing",
+        invoiceOriginalCreditNumber: input.originalCreditNumber ?? null,
       })}::jsonb,
       updated_at = now()
     where id = ${input.candidate.paymentId}
+      and tenant_id = ${input.candidate.tenantId}
+      and mode = ${input.candidate.mode}
       and invoice_state = 'invoice_failed'
       and not exists (
         select 1
@@ -103,25 +117,33 @@ export async function storeRecoveredFailedFirstPaymentSuccess(input: {
           and i.owner_id = payments.id
       )
     returning id
-  `);
-
-  if (!result.rows[0]?.id) {
-    return null;
-  }
-
-  await saveStoredInvoice({
-    mode: input.candidate.mode,
-    ownerId: input.candidate.paymentId,
-    ownerType: "payment",
-    provider: "eboekhouden",
-    providerCustomerId: String(input.candidate.eboekhoudenRelationId),
-    providerDocumentUrl: input.invoice.urlPdfFile ?? null,
-    providerInvoiceId: invoiceId,
-    providerInvoiceNumber: invoiceNumber,
-    providerSnapshot: input.invoice as Record<string, unknown>,
-    syncedAt: new Date().toISOString(),
-    tenantId: input.candidate.tenantId,
+    `);
+    if (!result.rows[0]?.id) return false;
+    await saveStoredInvoice({
+      mode: input.candidate.mode,
+      ownerId: input.candidate.paymentId,
+      ownerType: "payment",
+      provider: "eboekhouden",
+      providerCustomerId: String(input.candidate.eboekhoudenRelationId),
+      providerDocumentUrl: input.invoice.urlPdfFile ?? null,
+      providerInvoiceId: invoiceId,
+      providerInvoiceNumber: invoiceNumber,
+      providerSnapshot: input.invoice as Record<string, unknown>,
+      syncedAt: new Date().toISOString(),
+      tenantId: input.candidate.tenantId,
+    }, tx);
+    await tx.execute(sql`
+      update alerts set status = 'resolved', resolved_at = now(), updated_at = now()
+      where tenant_id = ${input.candidate.tenantId} and status = 'open'
+        and (
+          (payload ->> 'kind' = 'first_payment_invoice_creation_failed' and payload ->> 'paymentId' = ${input.candidate.paymentId})
+          or (payload ->> 'kind' = 'eboekhouden_invoice_verification_failed' and payload ->> 'ownerId' = ${input.candidate.paymentId})
+        )
+    `);
+    return true;
   });
+
+  if (!recovered) return null;
 
   await writeAuditLog(
     {
@@ -130,7 +152,8 @@ export async function storeRecoveredFailedFirstPaymentSuccess(input: {
         eboekhoudenInvoiceId: invoiceId,
         eboekhoudenInvoiceNumber: invoiceNumber,
         paymentId: input.candidate.paymentId,
-        source: "reconciled_existing",
+        source: input.originalCreditNumber ? "manual_replacement" : "reconciled_existing",
+        originalCreditNumber: input.originalCreditNumber ?? null,
       },
       entityId: input.candidate.paymentId,
       entityType: "payment",

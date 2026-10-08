@@ -12,4 +12,23 @@ describe("native PDFKit invoice renderer", () => {
     assert.ok(result.bytes.subarray(0, 5).equals(Buffer.from("%PDF-")));
     assert.ok(result.bytes.byteLength > 1000 && result.bytes.byteLength < 5 * 1024 * 1024);
   });
+  it("renders a KOR invoice and rejects any KOR VAT", async () => {
+    const kor = {
+      ...snapshot,
+      taxTreatment: "kor" as const,
+      subtotalCents: 1999,
+      totalCents: 1999,
+      amountPaidCents: 1999,
+      vatCents: 0,
+      lines: [{ description: "Hosting", grossCents: 1999, netCents: 1999, quantity: 1, vatCents: 0, vatRateBasisPoints: 0 as const }],
+    };
+    const result = await nativePdfKitInvoiceRenderer.renderPdf(kor);
+    assert.ok(result.bytes.subarray(0, 5).equals(Buffer.from("%PDF-")));
+    assert.throws(() => nativePdfKitInvoiceRenderer.validate({
+      ...kor,
+      subtotalCents: 1998,
+      vatCents: 1,
+      lines: [{ ...kor.lines[0], netCents: 1998, vatCents: 1 }],
+    }), /cannot contain VAT/);
+  });
 });

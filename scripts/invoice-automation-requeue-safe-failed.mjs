@@ -31,8 +31,8 @@ try {
       from recurring_billing_schedules rbs
       where rbs.mode = $1
         and rbs.invoice_state = 'invoice_failed'
-        and rbs.eboekhouden_invoice_id is null
-        and rbs.eboekhouden_invoice_number is null
+        and coalesce(rbs.metadata ->> 'invoiceCreationManualReview', 'false') = 'false'
+        and not exists (select 1 from invoices i where i.tenant_id = rbs.tenant_id and i.owner_type = 'recurring_schedule' and i.owner_id = rbs.id)
         and (
           coalesce(rbs.metadata ->> 'invoiceCreationError', '') like '%FACT_014%'
           or coalesce(rbs.metadata ->> 'invoiceCreationError', '') like '%FACT_VERWERK_004%'
@@ -50,8 +50,8 @@ try {
       where p.mode = $1
         and p.payment_type = 'first'
         and p.invoice_state = 'invoice_failed'
-        and p.eboekhouden_invoice_id is null
-        and p.eboekhouden_invoice_number is null
+        and coalesce(p.metadata ->> 'invoiceCreationManualReview', 'false') = 'false'
+        and not exists (select 1 from invoices i where i.tenant_id = p.tenant_id and i.owner_type = 'payment' and i.owner_id = p.id)
         and (
           coalesce(p.metadata ->> 'invoiceCreationError', '') like '%FACT_014%'
           or coalesce(p.metadata ->> 'invoiceCreationError', '') like '%FACT_VERWERK_004%'
@@ -105,8 +105,8 @@ try {
           where id = any($1::text[])
             and mode = $2
             and invoice_state = 'invoice_failed'
-            and eboekhouden_invoice_id is null
-            and eboekhouden_invoice_number is null
+            and coalesce(metadata ->> 'invoiceCreationManualReview', 'false') = 'false'
+            and not exists (select 1 from invoices i where i.tenant_id = recurring_billing_schedules.tenant_id and i.owner_type = 'recurring_schedule' and i.owner_id = recurring_billing_schedules.id)
           returning id
         `,
         [
@@ -136,8 +136,8 @@ try {
             and mode = $2
             and payment_type = 'first'
             and invoice_state = 'invoice_failed'
-            and eboekhouden_invoice_id is null
-            and eboekhouden_invoice_number is null
+            and coalesce(metadata ->> 'invoiceCreationManualReview', 'false') = 'false'
+            and not exists (select 1 from invoices i where i.tenant_id = payments.tenant_id and i.owner_type = 'payment' and i.owner_id = payments.id)
           returning id
         `,
         [

@@ -23,6 +23,17 @@ describe("canonical Kify invoice money", () => {
     assert.equal(invoice.subtotalCents + invoice.vatCents, invoice.totalCents);
   });
 
+  it("keeps a KOR invoice equal to the paid amount without allocating VAT", () => {
+    const invoice = buildCanonicalKifyInvoice({
+      lines: [{ currency: "EUR", description: "Hosting", grossCents: 1999, quantity: 1, vatRateBasisPoints: 0 }],
+      sourceAmountCents: 1999,
+    });
+    assert.equal(invoice.subtotalCents, 1999);
+    assert.equal(invoice.totalCents, 1999);
+    assert.equal(invoice.vatCents, 0);
+    assert.equal(invoice.lines[0]?.vatRateBasisPoints, 0);
+  });
+
   it("rejects unsupported or inconsistent amounts before any number allocation", () => {
     assert.throws(() => buildCanonicalKifyInvoice({
       lines: [{ currency: "USD", description: "Abonnement", grossCents: 100, quantity: 1, vatRateBasisPoints: 2100 }],
@@ -31,7 +42,7 @@ describe("canonical Kify invoice money", () => {
     assert.throws(() => buildCanonicalKifyInvoice({
       lines: [{ currency: "EUR", description: "Abonnement", grossCents: 100, quantity: 1, vatRateBasisPoints: 900 }],
       sourceAmountCents: 100,
-    }), /21% VAT/);
+    }), /KOR or 21% VAT/);
     assert.throws(() => buildCanonicalKifyInvoice({
       lines: [{ currency: "EUR", description: "Abonnement", grossCents: 100, quantity: 1, vatRateBasisPoints: 2100 }],
       sourceAmountCents: 101,

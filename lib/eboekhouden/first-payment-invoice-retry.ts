@@ -32,12 +32,13 @@ async function resolveTenantId(tenantId?: string) {
   return tenantId;
 }
 
-function buildFailedFirstPaymentRetryFilter(mode: MollieMode, tenantId?: string) {
+function buildFailedFirstPaymentRetryFilter(mode: MollieMode, tenantId?: string, includeManualReview = false) {
   return sql`
     p.mode = ${mode}
     and p.tenant_id = ${tenantId}
     and p.payment_type = 'first'
     and p.invoice_state = 'invoice_failed'
+    and ${includeManualReview ? sql`true` : sql`coalesce((p.metadata ->> 'invoiceCreationManualReview')::boolean, false) = false`}
     and not exists (
       select 1
       from invoices i
@@ -131,14 +132,16 @@ export async function getFailedFirstPaymentInvoiceRetrySummary(
   const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await getDb().execute<{
     errorMessage: string | null;
+    manualReview: boolean;
     paymentId: string;
   }>(sql`
     select
       p.id as "paymentId",
-      (p.metadata ->> 'invoiceCreationError') as "errorMessage"
+      (p.metadata ->> 'invoiceCreationError') as "errorMessage",
+      coalesce((p.metadata ->> 'invoiceCreationManualReview')::boolean, false) as "manualReview"
     from payments p
     where p.tenant_id = ${resolvedTenantId}
-      and ${buildFailedFirstPaymentRetryFilter(mode, resolvedTenantId)}
+      and ${buildFailedFirstPaymentRetryFilter(mode, resolvedTenantId, true)}
   `);
 
   return countSafeInvoiceRetryFailures(result.rows);

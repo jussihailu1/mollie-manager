@@ -10,6 +10,7 @@ import {
 } from "@/lib/eboekhouden/invoice-creation-metadata";
 import { serializeInvoiceErrorMessage } from "@/lib/eboekhouden/invoice-flow-helpers";
 import { saveStoredInvoice } from "@/lib/invoices";
+import type { TaxTreatment } from "@/lib/invoicing/tax-treatment";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { deliverAlertEmail, openAlert } from "@/lib/reliability/alerts";
 
@@ -43,6 +44,7 @@ export async function claimScheduleForInvoice(input: {
   mode: "live" | "test";
   scheduleId: string;
   tenantId: string;
+  taxTreatment?: TaxTreatment;
 }) {
   const result = await getDb().execute<{ id: string }>(sql`
     update recurring_billing_schedules
@@ -53,12 +55,14 @@ export async function claimScheduleForInvoice(input: {
       metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(
         buildInvoiceCreationClaimMetadata({
           actorEmail: input.actor.email,
+          taxTreatment: input.taxTreatment,
         }),
       )}::jsonb
     where id = ${input.scheduleId}
       and tenant_id = ${input.tenantId}
       and mode = ${input.mode}
       and invoice_state = 'pending_invoice'
+      and coalesce(metadata ->> 'invoiceCreationManualReview', 'false') = 'false'
       and not exists (
         select 1
         from invoices i
@@ -189,6 +193,9 @@ export async function storeRecurringInvoiceCreationFailure(input: {
   actor: RecurringInvoiceActor;
   candidate: RecurringInvoicePersistenceCandidate;
   error: unknown;
+  externalInvoice?: EboekhoudenInvoice | null;
+  postAttempted?: boolean;
+  reference?: string;
 }) {
   const errorMessage = serializeRecurringInvoiceError(input.error);
   const alertResult = await transaction<AlertResult>(async (tx) => {
@@ -198,7 +205,7 @@ export async function storeRecurringInvoiceCreationFailure(input: {
         invoice_state = 'invoice_failed',
         invoice_failed_at = now(),
         metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(
-          buildInvoiceCreationFailureMetadata({ errorMessage }),
+          buildInvoiceCreationFailureMetadata({ errorMessage, externalInvoice: input.externalInvoice, postAttempted: input.postAttempted, reference: input.reference }),
         )}::jsonb,
         updated_at = now()
       where id = ${input.candidate.scheduleId}
@@ -211,6 +218,9 @@ export async function storeRecurringInvoiceCreationFailure(input: {
         action: "recurring_invoice.create",
         details: {
           error: errorMessage,
+          eboekhoudenInvoiceId: input.externalInvoice?.id ?? null,
+          eboekhoudenInvoiceNumber: input.externalInvoice?.invoiceNumber ?? input.externalInvoice?.number ?? null,
+          reference: input.reference ?? null,
           plannedCollectionDate: input.candidate.plannedCollectionDate,
           scheduleId: input.candidate.scheduleId,
           subscriptionId: input.candidate.subscriptionId,
@@ -228,9 +238,16 @@ export async function storeRecurringInvoiceCreationFailure(input: {
     return openAlert(
       {
         customerId: input.candidate.customerId,
-        message: `Could not create the recurring e-Boekhouden invoice for ${input.candidate.plannedCollectionDate}. Review the schedule row before retrying so a duplicate invoice is not created upstream.`,
+        message: input.externalInvoice
+          ? `e-Boekhouden invoice ${input.externalInvoice.invoiceNumber ?? input.externalInvoice.number ?? input.externalInvoice.id} exists but failed verification or recording. Do not retry creation. Inspect the invoice and PDF; follow documentation/operations/eboekhouden-invoice-recovery.md.`
+          : input.postAttempted
+            ? `The e-Boekhouden create request may have succeeded, but Kify could not confirm it. Do not retry creation. Inspect e-Boekhouden by reference ${input.reference ?? "unknown"} and follow documentation/operations/eboekhouden-invoice-recovery.md.`
+          : `Could not confirm creation of the recurring e-Boekhouden invoice for ${input.candidate.plannedCollectionDate}. Search e-Boekhouden by reference before retrying so a duplicate is not created.`,
         payload: {
           error: errorMessage,
+          eboekhoudenInvoiceId: input.externalInvoice?.id ?? null,
+          eboekhoudenInvoiceNumber: input.externalInvoice?.invoiceNumber ?? input.externalInvoice?.number ?? null,
+          reference: input.reference ?? null,
           kind: "recurring_invoice_creation_failed",
           mode: input.candidate.mode,
           plannedCollectionDate: input.candidate.plannedCollectionDate,
@@ -256,6 +273,8 @@ export async function storeRecurringInvoiceCreationFailure(input: {
         `Schedule row: ${input.candidate.scheduleId}`,
         `Planned collection date: ${input.candidate.plannedCollectionDate}`,
         `Error: ${errorMessage}`,
+        `e-Boekhouden invoice: ${input.externalInvoice?.invoiceNumber ?? input.externalInvoice?.number ?? input.externalInvoice?.id ?? "not confirmed"}`,
+        `Reference: ${input.reference ?? "unknown"}`,
       ].join("\n"),
       tenantId: input.candidate.tenantId,
       title: "Recurring invoice creation failed",

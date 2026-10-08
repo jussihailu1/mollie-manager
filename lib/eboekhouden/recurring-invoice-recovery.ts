@@ -1,10 +1,11 @@
 import { sql } from "drizzle-orm";
 
 import { writeAuditLog } from "@/lib/audit";
-import { getDb } from "@/lib/db";
+import { getDb, transaction } from "@/lib/db";
 import type { EboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import { buildRecurringFailedInvoiceFilter } from "@/lib/eboekhouden/recurring-invoice-query";
 import { saveStoredInvoice } from "@/lib/invoices";
+import type { TaxTreatment } from "@/lib/invoicing/tax-treatment";
 import { notificationsAreConfigured } from "@/lib/notifications/email";
 import { deliverAlertEmail, openAlert } from "@/lib/reliability/alerts";
 
@@ -14,6 +15,7 @@ export type RecurringInvoiceActor = {
 };
 
 export type RecurringInvoiceRecoveryCandidate = {
+  amountValue: string;
   customerEmail: string;
   customerId: string;
   eboekhoudenRelationId: number;
@@ -23,12 +25,14 @@ export type RecurringInvoiceRecoveryCandidate = {
   scheduleId: string;
   subscriptionId: string;
   tenantId: string;
+  taxTreatment: TaxTreatment | null;
 };
 
 export async function listFailedRecurringRecoveryCandidates(
   mode: "live" | "test",
   limit: number,
   tenantId?: string,
+  scheduleId?: string,
 ) {
   if (!tenantId) {
     throw new Error("Tenant id is required.");
@@ -42,6 +46,8 @@ export async function listFailedRecurringRecoveryCandidates(
       rbs.tenant_id as "tenantId",
       rbs.invoice_send_due_date::text as "invoiceSendDueDate",
       rbs.planned_collection_date::text as "plannedCollectionDate",
+      rbs.amount_value::text as "amountValue",
+      rbs.metadata ->> 'invoiceTaxTreatment' as "taxTreatment",
       rbs.subscription_id as "subscriptionId",
       s.customer_id as "customerId",
       c.email as "customerEmail",
@@ -65,6 +71,7 @@ export async function listFailedRecurringRecoveryCandidates(
       and cal.provider = 'eboekhouden'
     where rbs.tenant_id = ${resolvedTenantId}
       and ${buildRecurringFailedInvoiceFilter(mode, resolvedTenantId)}
+      and ${scheduleId ? sql`rbs.id = ${scheduleId}` : sql`true`}
       and cal.provider_customer_id is not null
     order by rbs.updated_at asc, rbs.created_at asc
     limit ${Math.max(1, limit)}
@@ -77,10 +84,12 @@ export async function storeRecoveredFailedInvoiceSuccess(input: {
   actor: RecurringInvoiceActor;
   candidate: RecurringInvoiceRecoveryCandidate;
   invoice: EboekhoudenInvoice;
+  originalCreditNumber?: string;
 }) {
   const invoiceId = input.invoice.id ? String(input.invoice.id) : null;
   const invoiceNumber = input.invoice.invoiceNumber ?? input.invoice.number ?? null;
-  const result = await getDb().execute<{ id: string }>(sql`
+  const recovered = await transaction(async (tx) => {
+    const result = await tx.execute<{ id: string }>(sql`
     update recurring_billing_schedules
     set
       invoice_state = 'invoice_created',
@@ -88,11 +97,16 @@ export async function storeRecoveredFailedInvoiceSuccess(input: {
       invoice_failed_at = null,
       metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify({
         eboekhoudenInvoice: input.invoice,
+        eboekhoudenUnverifiedInvoice: null,
+        invoiceCreationManualReview: false,
         invoiceRecoveredAt: new Date().toISOString(),
-        invoiceRecoverySource: "reconciled_existing",
+        invoiceRecoverySource: input.originalCreditNumber ? "manual_replacement" : "reconciled_existing",
+        invoiceOriginalCreditNumber: input.originalCreditNumber ?? null,
       })}::jsonb,
       updated_at = now()
     where id = ${input.candidate.scheduleId}
+      and tenant_id = ${input.candidate.tenantId}
+      and mode = ${input.candidate.mode}
       and invoice_state = 'invoice_failed'
       and not exists (
         select 1
@@ -102,25 +116,33 @@ export async function storeRecoveredFailedInvoiceSuccess(input: {
           and i.owner_id = recurring_billing_schedules.id
       )
     returning id
-  `);
-
-  if (!result.rows[0]?.id) {
-    return null;
-  }
-
-  await saveStoredInvoice({
-    mode: input.candidate.mode,
-    ownerId: input.candidate.scheduleId,
-    ownerType: "recurring_schedule",
-    provider: "eboekhouden",
-    providerCustomerId: String(input.candidate.eboekhoudenRelationId),
-    providerDocumentUrl: input.invoice.urlPdfFile ?? null,
-    providerInvoiceId: invoiceId,
-    providerInvoiceNumber: invoiceNumber,
-    providerSnapshot: input.invoice as Record<string, unknown>,
-    syncedAt: new Date().toISOString(),
-    tenantId: input.candidate.tenantId,
+    `);
+    if (!result.rows[0]?.id) return false;
+    await saveStoredInvoice({
+      mode: input.candidate.mode,
+      ownerId: input.candidate.scheduleId,
+      ownerType: "recurring_schedule",
+      provider: "eboekhouden",
+      providerCustomerId: String(input.candidate.eboekhoudenRelationId),
+      providerDocumentUrl: input.invoice.urlPdfFile ?? null,
+      providerInvoiceId: invoiceId,
+      providerInvoiceNumber: invoiceNumber,
+      providerSnapshot: input.invoice as Record<string, unknown>,
+      syncedAt: new Date().toISOString(),
+      tenantId: input.candidate.tenantId,
+    }, tx);
+    await tx.execute(sql`
+      update alerts set status = 'resolved', resolved_at = now(), updated_at = now()
+      where tenant_id = ${input.candidate.tenantId} and status = 'open'
+        and (
+          (payload ->> 'kind' = 'recurring_invoice_creation_failed' and payload ->> 'scheduleId' = ${input.candidate.scheduleId})
+          or (payload ->> 'kind' = 'eboekhouden_invoice_verification_failed' and payload ->> 'ownerId' = ${input.candidate.scheduleId})
+        )
+    `);
+    return true;
   });
+
+  if (!recovered) return null;
 
   await writeAuditLog(
     {
@@ -130,7 +152,8 @@ export async function storeRecoveredFailedInvoiceSuccess(input: {
         eboekhoudenInvoiceNumber: invoiceNumber,
         plannedCollectionDate: input.candidate.plannedCollectionDate,
         scheduleId: input.candidate.scheduleId,
-        source: "reconciled_existing",
+        source: input.originalCreditNumber ? "manual_replacement" : "reconciled_existing",
+        originalCreditNumber: input.originalCreditNumber ?? null,
       },
       entityId: input.candidate.scheduleId,
       entityType: "recurring_billing_schedule",

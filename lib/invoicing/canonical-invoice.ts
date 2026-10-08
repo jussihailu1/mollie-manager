@@ -16,7 +16,7 @@ export type CanonicalKifyInvoiceLine = {
   quantity: number;
   unitGrossCents: number;
   vatCents: number;
-  vatRateBasisPoints: 2100;
+  vatRateBasisPoints: 0 | 2100;
 };
 
 export type CanonicalKifyInvoiceTotals = {
@@ -57,8 +57,8 @@ export function buildCanonicalKifyInvoice(input: {
   if (line.currency !== "EUR") {
     throw new Error("Kify v1 supports EUR invoices only.");
   }
-  if (line.vatRateBasisPoints !== KIFY_VAT_RATE_BASIS_POINTS) {
-    throw new Error("Kify v1 supports 21% VAT only.");
+  if (line.vatRateBasisPoints !== 0 && line.vatRateBasisPoints !== KIFY_VAT_RATE_BASIS_POINTS) {
+    throw new Error("Kify supports KOR or 21% VAT only.");
   }
   if (!Number.isFinite(line.quantity) || line.quantity <= 0) {
     throw new Error("Invoice quantity must be positive.");
@@ -68,7 +68,9 @@ export function buildCanonicalKifyInvoice(input: {
   }
   requireIntegerCents(line.grossCents, "Line gross amount");
 
-  const money = calculateVatInclusiveLine(line.grossCents);
+  const money = line.vatRateBasisPoints === 0
+    ? { grossCents: line.grossCents, netCents: line.grossCents, vatCents: 0 }
+    : calculateVatInclusiveLine(line.grossCents);
   if (money.grossCents !== input.sourceAmountCents) {
     throw new Error("Invoice total must exactly equal the source Mollie amount.");
   }
@@ -81,7 +83,7 @@ export function buildCanonicalKifyInvoice(input: {
       quantity: line.quantity,
       unitGrossCents: money.grossCents,
       vatCents: money.vatCents,
-      vatRateBasisPoints: KIFY_VAT_RATE_BASIS_POINTS,
+      vatRateBasisPoints: line.vatRateBasisPoints,
     }],
     subtotalCents: money.netCents,
     totalCents: money.grossCents,

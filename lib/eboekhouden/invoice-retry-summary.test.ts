@@ -11,10 +11,11 @@ describe("invoice retry summary helpers", () => {
         { errorMessage: "Mutation failed: FACT_VERWERK_004 Payment reference already exists." },
         { errorMessage: "SECURITY_010 unauthorized" },
         { errorMessage: null },
+        { errorMessage: "FACT_014", manualReview: true },
       ]),
       {
         retryableCount: 2,
-        totalFailedCount: 4,
+        totalFailedCount: 5,
       },
     );
   });

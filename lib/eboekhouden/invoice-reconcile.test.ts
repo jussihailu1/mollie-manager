@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { filterMatchingInvoicesByReference } from "@/lib/eboekhouden/invoice-reconcile-match";
 
 describe("invoice reconcile match filter", () => {
-  it("returns only exact reference+relation+date matches with id and number", () => {
+  it("includes exact reference+relation+date matches even when a number is missing", () => {
     const input = {
       date: "2026-06-02",
       reference: "FP-12345678-260602",
@@ -37,7 +37,8 @@ describe("invoice reconcile match filter", () => {
       input,
     );
 
-    assert.equal(matches.length, 1);
+    assert.equal(matches.length, 2);
     assert.equal(matches[0]?.id, 1);
+    assert.equal(matches[1]?.id, 3);
   });
 });

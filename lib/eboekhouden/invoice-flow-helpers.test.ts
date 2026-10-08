@@ -14,7 +14,8 @@ describe("invoice flow helpers", () => {
     assert.equal(toInvoiceCount(3), 3);
     assert.equal(toInvoiceCount("4"), 4);
     assert.equal(toInvoiceCount(null), 0);
-    assert.equal(toInvoiceAmountNumber("12.345"), 12.35);
+    assert.equal(toInvoiceAmountNumber("12.35"), 12.35);
+    assert.throws(() => toInvoiceAmountNumber("12.345"), /exactly two decimal places/);
   });
 
   it("serializes errors and dates safely", () => {

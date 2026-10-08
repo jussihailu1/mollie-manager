@@ -11,6 +11,7 @@ describe("invoice retry candidate helpers", () => {
         { errorMessage: "Mutation failed: FACT_VERWERK_004 Payment reference already exists.", id: "p2" },
         { errorMessage: "SECURITY_010 unauthorized", id: "p3" },
         { errorMessage: null, id: "p4" },
+        { errorMessage: "FACT_014", id: "p5", manualReview: true },
       ]),
       ["p1", "p2"],
     );

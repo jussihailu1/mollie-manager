@@ -2,7 +2,10 @@ import "server-only";
 
 import { createEboekhoudenInvoice, getEboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
+import { verifiedEboekhoudenInvoice } from "@/lib/eboekhouden/invoice-total-verification";
 import { type InvoiceProviderAdapter } from "@/lib/invoicing/provider-types";
+import { eboekhoudenInvoiceDescription, eboekhoudenTaxFields, requireTaxTreatment } from "@/lib/invoicing/tax-treatment";
+import { toInvoiceAmountNumber } from "@/lib/eboekhouden/invoice-flow-helpers";
 
 export const eboekhoudenInvoiceProvider: InvoiceProviderAdapter = {
   async createInvoice(input) {
@@ -21,27 +24,31 @@ export const eboekhoudenInvoiceProvider: InvoiceProviderAdapter = {
       throw new Error("Stored e-Boekhouden relation id is invalid.");
     }
 
-    const invoice = await createEboekhoudenInvoice(
+    const taxTreatment = requireTaxTreatment(input.settings.taxTreatment);
+    const tax = eboekhoudenTaxFields(taxTreatment);
+    const createdInvoice = await createEboekhoudenInvoice(
       {
         date: input.invoiceDate,
-        inExVat: "EX",
+        inExVat: tax.inExVat,
         items: [
           {
-            description: input.description,
+            description: eboekhoudenInvoiceDescription(input.description, taxTreatment),
             ledgerId: input.settings.revenueLedgerId,
-            pricePerUnit: Number(input.amountValue),
+            pricePerUnit: toInvoiceAmountNumber(input.amountValue),
             quantity: 1,
-            vatCode: input.settings.vatCode,
+            vatCode: tax.vatCode,
           },
         ],
         print: false,
         reference: input.reference,
         relationId,
         templateId: input.settings.invoiceTemplateId,
+        text: tax.text,
         termOfPayment: input.termOfPaymentDays ?? 0,
       },
       input.tenantId,
     );
+    const invoice = await verifiedEboekhoudenInvoice({ expectedAmount: input.amountValue, expectedRelationId: relationId, expectedReference: input.reference, invoice: createdInvoice, taxTreatment, tenantId: input.tenantId });
 
     return {
       provider: "eboekhouden",
@@ -133,6 +140,10 @@ export const eboekhoudenInvoiceProvider: InvoiceProviderAdapter = {
 
     if (!settings) {
       return { ok: false, reason: "Tenant invoice settings are missing." };
+    }
+
+    if (settings.taxTreatment !== "kor" && settings.taxTreatment !== "standard") {
+      return { ok: false, reason: "Select the organization's KOR status before issuing invoices." };
     }
 
     if (!settings.invoiceTemplateId || !settings.revenueLedgerId) {

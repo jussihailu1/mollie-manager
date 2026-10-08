@@ -271,11 +271,13 @@ export async function POST(request: Request) {
             ambiguousCount: 0,
             recoveredCount: 0,
             scannedCount: 0,
+            verificationFailedCount: 0,
           },
           failedRecurringRecoveryResult: {
             ambiguousCount: 0,
             recoveredCount: 0,
             scannedCount: 0,
+            verificationFailedCount: 0,
           },
           firstPaymentCreateResult: {
             actionableCount: 0,
@@ -388,6 +390,9 @@ export async function POST(request: Request) {
           scannedCount:
             accumulator.failedFirstPaymentRecoveryResult.scannedCount +
             result.failedFirstPaymentRecoveryResult.scannedCount,
+          verificationFailedCount:
+            accumulator.failedFirstPaymentRecoveryResult.verificationFailedCount +
+            result.failedFirstPaymentRecoveryResult.verificationFailedCount,
         },
         failedRecurringRecoveryResult: {
           ambiguousCount:
@@ -399,6 +404,9 @@ export async function POST(request: Request) {
           scannedCount:
             accumulator.failedRecurringRecoveryResult.scannedCount +
             result.failedRecurringRecoveryResult.scannedCount,
+          verificationFailedCount:
+            accumulator.failedRecurringRecoveryResult.verificationFailedCount +
+            result.failedRecurringRecoveryResult.verificationFailedCount,
         },
         firstPaymentCreateResult: {
           actionableCount:
@@ -515,11 +523,13 @@ export async function POST(request: Request) {
           ambiguousCount: 0,
           recoveredCount: 0,
           scannedCount: 0,
+          verificationFailedCount: 0,
         },
         failedRecurringRecoveryResult: {
           ambiguousCount: 0,
           recoveredCount: 0,
           scannedCount: 0,
+          verificationFailedCount: 0,
         },
         firstPaymentCreateResult: {
           actionableCount: 0,

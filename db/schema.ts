@@ -624,6 +624,7 @@ export const tenantBillingSettings = pgTable(
       .notNull()
       .default("mollie"),
     vatCode: text("vat_code").notNull().default("HOOG_VERK_21"),
+    taxTreatment: text("tax_treatment"),
     vatPercentage: numeric("vat_percentage", {
       precision: 5,
       scale: 2,

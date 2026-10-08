@@ -10,6 +10,7 @@ import {
   type EboekhoudenLedger,
 } from "@/lib/eboekhouden/client";
 import type { InvoiceProvider } from "@/lib/invoices";
+import type { TaxTreatment } from "@/lib/invoicing/tax-treatment";
 
 export const DEFAULT_SUBSCRIPTION_VAT_CODE = "HOOG_VERK_21";
 export const DEFAULT_SUBSCRIPTION_VAT_PERCENTAGE = "21.00";
@@ -23,6 +24,7 @@ export type TenantBillingSettings = {
   revenueLedgerId: number | null;
   revenueLedgerName: string;
   tenantId: string;
+  taxTreatment: TaxTreatment | null;
   vatCode: string;
   vatPercentage: string;
 };
@@ -110,6 +112,7 @@ export async function getTenantBillingSettings(tenantId: string) {
       teis.revenue_ledger_id as "revenueLedgerId",
       teis.revenue_ledger_name as "revenueLedgerName",
       tbs.vat_code as "vatCode",
+      tbs.tax_treatment as "taxTreatment",
       tbs.vat_percentage::text as "vatPercentage",
       tbs.invoice_line_description_source as "invoiceLineDescriptionSource",
       tbs.invoice_email_delivery_mode as "invoiceEmailDeliveryMode"
@@ -134,6 +137,7 @@ export async function updateTenantBillingSettings(
     invoiceEmailDeliveryMode: "app_smtp" | "eboekhouden" | "none";
     invoiceTemplateId: number | null;
     revenueLedgerId: number | null;
+    taxTreatment: TaxTreatment;
   },
   tenantId: string,
 ) {
@@ -145,6 +149,7 @@ export async function updateTenantBillingSettings(
         id,
         tenant_id,
         active_invoice_provider,
+        tax_treatment,
         vat_code,
         vat_percentage,
         invoice_line_description_source,
@@ -155,8 +160,9 @@ export async function updateTenantBillingSettings(
         ${resolvedTenantId},
         ${resolvedTenantId},
         ${input.activeInvoiceProvider}::invoice_provider,
-        ${DEFAULT_SUBSCRIPTION_VAT_CODE},
-        ${DEFAULT_SUBSCRIPTION_VAT_PERCENTAGE},
+        ${input.taxTreatment},
+        ${input.taxTreatment === "kor" ? "GEEN" : DEFAULT_SUBSCRIPTION_VAT_CODE},
+        ${input.taxTreatment === "kor" ? "0.00" : DEFAULT_SUBSCRIPTION_VAT_PERCENTAGE},
         'subscription_description',
         ${input.invoiceEmailDeliveryMode},
         now(),
@@ -165,6 +171,7 @@ export async function updateTenantBillingSettings(
       on conflict (tenant_id)
       do update set
         active_invoice_provider = excluded.active_invoice_provider,
+        tax_treatment = excluded.tax_treatment,
         vat_code = excluded.vat_code,
         vat_percentage = excluded.vat_percentage,
         invoice_line_description_source = excluded.invoice_line_description_source,
@@ -230,6 +237,14 @@ export function billingSettingsAreComplete(
   settings: TenantBillingSettings | null,
 ) {
   if (!settings) {
+    return false;
+  }
+
+  if (settings.taxTreatment !== "kor" && settings.taxTreatment !== "standard") {
+    return false;
+  }
+
+  if (settings.activeInvoiceProvider === "mollie" && settings.taxTreatment === "kor") {
     return false;
   }
 

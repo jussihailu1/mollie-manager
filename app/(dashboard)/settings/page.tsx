@@ -279,6 +279,67 @@ export default async function SettingsPage({
   const activeInvoiceProviderLabel =
     activeInvoiceProvider === "eboekhouden" ? "e-Boekhouden" : activeInvoiceProvider === "kify" ? "Kify" : "Mollie";
 
+  const invoiceProviderSettingsCard = (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-4">
+          <CardTitle className="text-lg">Invoice provider settings</CardTitle>
+          {activeInvoiceProvider === "eboekhouden" ? (
+            <form>
+              <Button
+                type="submit"
+                variant="ghost"
+                size="icon-sm"
+                title="Refresh invoice templates and ledger accounts from e-Boekhouden."
+              >
+                <RefreshCw className="size-4" />
+                <span className="sr-only">Refresh e-Boekhouden billing data</span>
+              </Button>
+            </form>
+          ) : null}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+          New invoices use the active provider. Existing invoices stay owned by the
+          provider that created them. Customer delivery stays app-owned for both
+          providers.
+        </div>
+
+        {activeInvoiceProvider === "eboekhouden" &&
+        billingDiscovery &&
+        "error" in billingDiscovery ? (
+          <Alert variant="destructive">
+            <AlertTitle>Discovery failed</AlertTitle>
+            <AlertDescription>{billingDiscovery.error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <BillingSettingsForm
+          defaultActiveInvoiceProvider={activeInvoiceProvider}
+          defaultTaxTreatment={billingSettings?.taxTreatment ?? null}
+          defaultInvoiceTemplateId={billingSettings?.invoiceTemplateId}
+          defaultRevenueLedgerId={billingSettings?.revenueLedgerId}
+          hasSavedLedgerOutsideDiscovery={hasSavedLedgerOutsideDiscovery}
+          hasSavedTemplateOutsideDiscovery={hasSavedTemplateOutsideDiscovery}
+          invoiceTemplates={invoiceTemplates}
+          ledgers={ledgers}
+        />
+
+        {activeInvoiceProvider === "kify" ? (
+          <form action={saveTenantInvoiceProfileAction} className="grid gap-3 md:grid-cols-2">
+            <p className="md:col-span-2 text-sm text-muted-foreground">Complete the issuer profile for future Kify invoices. Issued invoices are never changed.</p>
+            <input type="hidden" name="countryCode" value="NL" />
+            {([['legalName','Legal name'],['street','Street'],['houseNumber','House number'],['postalCode','Postal code'],['city','City'],['kvkNumber','KvK number'],['vatId','VAT ID'],['invoiceEmail','Invoice email'],['invoicePrefix','Invoice prefix']] as const).map(([name,label]) => <label key={name} className="grid gap-1 text-sm"><span>{label}<span aria-label="Required to issue future Kify invoices" className="ml-1 cursor-help text-foreground" title="Required to issue future Kify invoices">*</span></span><input name={name} required defaultValue={tenantInvoiceProfile?.[name] ?? ''} className="h-10 rounded-md border border-input bg-background px-3" /></label>)}
+            <label className="grid gap-1 text-sm"><span>Payment term days<span aria-label="Required to issue future Kify invoices" className="ml-1 cursor-help text-foreground" title="Required to issue future Kify invoices">*</span></span><input name="paymentTermDays" required type="number" min="0" defaultValue={tenantInvoiceProfile?.paymentTermDays ?? 14} className="h-10 rounded-md border border-input bg-background px-3" /></label>
+            <input type="hidden" name="returnTo" value="/settings" />
+            <div className="md:col-span-2"><Button type="submit">Save invoice profile</Button></div>
+          </form>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+
   if (!canManageAdvancedOperations) {
     return (
       <div className="mx-auto max-w-6xl space-y-6 p-8">
@@ -345,65 +406,9 @@ export default async function SettingsPage({
 
         <EboekhoudenConnectionCard connected={hasEboekhoudenConnection} />
 
+        {invoiceProviderSettingsCard}
+
         <RetentionPolicyCard />
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-start justify-between gap-4">
-              <CardTitle className="text-lg">Invoice provider settings</CardTitle>
-              {activeInvoiceProvider === "eboekhouden" ? (
-                <form>
-                  <Button
-                    type="submit"
-                    variant="ghost"
-                    size="icon-sm"
-                    title="Refresh invoice templates and ledger accounts from e-Boekhouden."
-                  >
-                    <RefreshCw className="size-4" />
-                    <span className="sr-only">Refresh e-Boekhouden billing data</span>
-                  </Button>
-                </form>
-              ) : null}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-              New invoices use the active provider. Existing invoices stay owned by the
-              provider that created them. Customer delivery stays app-owned for both
-              providers.
-            </div>
-
-            {activeInvoiceProvider === "eboekhouden" &&
-            billingDiscovery &&
-            "error" in billingDiscovery ? (
-              <Alert variant="destructive">
-                <AlertTitle>Discovery failed</AlertTitle>
-                <AlertDescription>{billingDiscovery.error}</AlertDescription>
-              </Alert>
-            ) : null}
-
-            <BillingSettingsForm
-              defaultActiveInvoiceProvider={activeInvoiceProvider}
-              defaultInvoiceTemplateId={billingSettings?.invoiceTemplateId}
-              defaultRevenueLedgerId={billingSettings?.revenueLedgerId}
-              hasSavedLedgerOutsideDiscovery={hasSavedLedgerOutsideDiscovery}
-              hasSavedTemplateOutsideDiscovery={hasSavedTemplateOutsideDiscovery}
-              invoiceTemplates={invoiceTemplates}
-              ledgers={ledgers}
-            />
-
-            {activeInvoiceProvider === "kify" ? (
-              <form action={saveTenantInvoiceProfileAction} className="grid gap-3 md:grid-cols-2">
-                <p className="md:col-span-2 text-sm text-muted-foreground">Complete the issuer profile for future Kify invoices. Issued invoices are never changed.</p>
-                <input type="hidden" name="countryCode" value="NL" />
-                {([['legalName','Legal name'],['street','Street'],['houseNumber','House number'],['postalCode','Postal code'],['city','City'],['kvkNumber','KvK number'],['vatId','VAT ID'],['invoiceEmail','Invoice email'],['invoicePrefix','Invoice prefix']] as const).map(([name,label]) => <label key={name} className="grid gap-1 text-sm"><span>{label}<span aria-label="Required to issue future Kify invoices" className="ml-1 cursor-help text-foreground" title="Required to issue future Kify invoices">*</span></span><input name={name} required defaultValue={tenantInvoiceProfile?.[name] ?? ''} className="h-10 rounded-md border border-input bg-background px-3" /></label>)}
-                <label className="grid gap-1 text-sm"><span>Payment term days<span aria-label="Required to issue future Kify invoices" className="ml-1 cursor-help text-foreground" title="Required to issue future Kify invoices">*</span></span><input name="paymentTermDays" required type="number" min="0" defaultValue={tenantInvoiceProfile?.paymentTermDays ?? 14} className="h-10 rounded-md border border-input bg-background px-3" /></label>
-                <input type="hidden" name="returnTo" value="/settings" />
-                <div className="md:col-span-2"><Button type="submit">Save invoice profile</Button></div>
-              </form>
-            ) : null}
-          </CardContent>
-        </Card>
       </div>
     );
   }
@@ -521,6 +526,8 @@ export default async function SettingsPage({
       </Card>
 
       <EboekhoudenConnectionCard connected={hasEboekhoudenConnection} />
+
+      {invoiceProviderSettingsCard}
 
       <RetentionPolicyCard />
 

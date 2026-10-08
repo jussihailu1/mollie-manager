@@ -5,6 +5,7 @@ import { getDb, transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { openAlert } from "@/lib/reliability/alerts";
 import { saveStoredInvoice } from "@/lib/invoices";
+import type { TaxTreatment } from "@/lib/invoicing/tax-treatment";
 import {
   buildInvoiceCreationClaimMetadata,
   buildInvoiceCreationFailureMetadata,
@@ -46,6 +47,7 @@ export async function claimFirstPaymentInvoiceForCreation(input: {
   mode: MollieMode;
   paymentId: string;
   tenantId: string;
+  taxTreatment?: TaxTreatment;
 }) {
   const result = await getDb().execute<{ id: string }>(sql`
     update payments
@@ -56,6 +58,7 @@ export async function claimFirstPaymentInvoiceForCreation(input: {
       metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(
         buildInvoiceCreationClaimMetadata({
           actorEmail: input.actor.email,
+          taxTreatment: input.taxTreatment,
         }),
       )}::jsonb
     where id = ${input.paymentId}
@@ -64,6 +67,7 @@ export async function claimFirstPaymentInvoiceForCreation(input: {
       and payment_type = 'first'
       and mollie_status = 'paid'
       and invoice_state = 'pending_invoice'
+      and coalesce(metadata ->> 'invoiceCreationManualReview', 'false') = 'false'
       and not exists (
         select 1
         from invoices i
@@ -196,6 +200,9 @@ export async function storeFirstPaymentInvoiceCreationFailure(input: {
   actor: FirstPaymentInvoiceActor;
   candidate: FirstPaymentInvoicePersistenceCandidate;
   error: unknown;
+  externalInvoice?: EboekhoudenInvoice | null;
+  postAttempted?: boolean;
+  reference?: string;
 }) {
   const errorMessage = serializeFirstPaymentInvoiceError(input.error);
   const alertResult = await transaction<AlertResult>(async (tx) => {
@@ -205,7 +212,7 @@ export async function storeFirstPaymentInvoiceCreationFailure(input: {
         invoice_state = 'invoice_failed',
         invoice_failed_at = now(),
         metadata = coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(
-          buildInvoiceCreationFailureMetadata({ errorMessage }),
+          buildInvoiceCreationFailureMetadata({ errorMessage, externalInvoice: input.externalInvoice, postAttempted: input.postAttempted, reference: input.reference }),
         )}::jsonb,
         updated_at = now()
       where id = ${input.candidate.paymentId}
@@ -219,6 +226,9 @@ export async function storeFirstPaymentInvoiceCreationFailure(input: {
         details: {
           consentId: input.candidate.consentId,
           error: errorMessage,
+          eboekhoudenInvoiceId: input.externalInvoice?.id ?? null,
+          eboekhoudenInvoiceNumber: input.externalInvoice?.invoiceNumber ?? input.externalInvoice?.number ?? null,
+          reference: input.reference ?? null,
           molliePaymentId: input.candidate.molliePaymentId,
           paymentId: input.candidate.paymentId,
           paymentLinkId: input.candidate.paymentLinkId,
@@ -236,12 +246,18 @@ export async function storeFirstPaymentInvoiceCreationFailure(input: {
     return openAlert(
       {
         customerId: input.candidate.customerId,
-        message:
-          "Could not create the first-payment e-Boekhouden invoice. Review the payment before retrying so a duplicate invoice is not created upstream.",
+        message: input.externalInvoice
+          ? `e-Boekhouden invoice ${input.externalInvoice.invoiceNumber ?? input.externalInvoice.number ?? input.externalInvoice.id} exists but failed verification or recording. Do not retry creation. Inspect the invoice and PDF; follow documentation/operations/eboekhouden-invoice-recovery.md.`
+          : input.postAttempted
+            ? `The e-Boekhouden create request may have succeeded, but Kify could not confirm it. Do not retry creation. Inspect e-Boekhouden by reference ${input.reference ?? "unknown"} and follow documentation/operations/eboekhouden-invoice-recovery.md.`
+          : "Could not confirm creation of the first-payment e-Boekhouden invoice. Search e-Boekhouden by reference before retrying so a duplicate is not created.",
         paymentId: input.candidate.paymentId,
         payload: {
           consentId: input.candidate.consentId,
           error: errorMessage,
+          eboekhoudenInvoiceId: input.externalInvoice?.id ?? null,
+          eboekhoudenInvoiceNumber: input.externalInvoice?.invoiceNumber ?? input.externalInvoice?.number ?? null,
+          reference: input.reference ?? null,
           kind: "first_payment_invoice_creation_failed",
           mode: input.candidate.mode,
           paymentId: input.candidate.paymentId,

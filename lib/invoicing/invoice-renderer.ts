@@ -16,7 +16,7 @@ export type FrozenInvoiceLine = {
   netCents: number;
   quantity: number;
   vatCents: number;
-  vatRateBasisPoints: 2100;
+  vatRateBasisPoints: 0 | 2100;
 };
 
 export type FrozenPaymentContext = {
@@ -39,6 +39,7 @@ export type CanonicalInvoiceSnapshot = {
   paymentContext: FrozenPaymentContext;
   recipient: FrozenBillingParty;
   schemaVersion: 1;
+  taxTreatment?: "kor" | "standard";
   subtotalCents: number;
   tenantId: string;
   totalCents: number;

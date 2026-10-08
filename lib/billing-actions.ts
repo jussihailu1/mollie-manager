@@ -29,6 +29,7 @@ import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
 const billingSettingsSchema = z.object({
   activeInvoiceProvider: z.enum(["eboekhouden", "kify"]).default("kify"),
+  taxTreatment: z.enum(["kor", "standard"]),
   invoiceEmailDeliveryMode: z
     .enum(["app_smtp", "eboekhouden", "none"])
     .default("app_smtp"),
@@ -113,6 +114,7 @@ function serializeError(error: unknown) {
 export async function updateBillingSettingsAction(formData: FormData) {
   const parsed = billingSettingsSchema.safeParse({
     activeInvoiceProvider: formData.get("activeInvoiceProvider") || undefined,
+    taxTreatment: formData.get("taxTreatment") || undefined,
     invoiceEmailDeliveryMode:
       formData.get("invoiceEmailDeliveryMode") || undefined,
     invoiceTemplateId: formData.get("invoiceTemplateId") ?? "",
@@ -142,6 +144,7 @@ export async function updateBillingSettingsAction(formData: FormData) {
       invoiceEmailDeliveryMode: parsed.data.invoiceEmailDeliveryMode,
       invoiceTemplateId: parsed.data.invoiceTemplateId,
       revenueLedgerId: parsed.data.revenueLedgerId,
+      taxTreatment: parsed.data.taxTreatment,
     }, tenantSelection.currentTenant.id);
 
     await writeAuditLog(
@@ -153,6 +156,7 @@ export async function updateBillingSettingsAction(formData: FormData) {
           invoiceTemplateId: settings?.invoiceTemplateId ?? null,
           revenueLedgerId: settings?.revenueLedgerId ?? null,
           vatCode: settings?.vatCode ?? null,
+          taxTreatment: settings?.taxTreatment ?? null,
         },
         entityId: tenantSelection.currentTenant.id,
         entityType: "tenant_billing_settings",

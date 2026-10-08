@@ -17,6 +17,8 @@ import {
 } from "@/lib/eboekhouden/invoice-flow-helpers";
 import { buildRecurringInvoiceReference } from "@/lib/eboekhouden/invoice-reference";
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
+import { verifiedEboekhoudenInvoice } from "@/lib/eboekhouden/invoice-total-verification";
+import { recordFailedEboekhoudenInvoiceReview } from "@/lib/eboekhouden/invoice-recovery-review";
 import {
   buildRecurringDueInvoiceFilter,
   buildRecurringFailedInvoiceFilter,
@@ -52,6 +54,7 @@ import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
 import { saveStoredInvoice, type InvoiceProvider } from "@/lib/invoices";
 import { getInvoiceProviderAdapterById } from "@/lib/invoicing/provider-resolver";
 import { issueKifyInvoice } from "@/lib/invoicing/kify-invoice-workflow";
+import { requireTaxTreatment } from "@/lib/invoicing/tax-treatment";
 import type {
   InvoiceProviderCreateResult,
 } from "@/lib/invoicing/provider-types";
@@ -84,6 +87,7 @@ type FailedRecurringRecoveryBatchResult = {
   ambiguousCount: number;
   recoveredCount: number;
   scannedCount: number;
+  verificationFailedCount: number;
 };
 
 type FailedRecurringRetryBatchResult = {
@@ -226,6 +230,7 @@ async function queueProviderAgnosticRecurringRetries(input: {
       where rbs.id = ${scheduleId}
         and rbs.tenant_id = ${resolvedTenantId}
         and ${buildRecurringFailedInvoiceFilter(input.mode, resolvedTenantId)}
+        and coalesce(rbs.metadata ->> 'invoiceCreationManualReview', 'false') = 'false'
       returning rbs.id as id
     `);
 
@@ -765,6 +770,7 @@ export async function recoverFailedRecurringInvoicesBatch(input: {
       ambiguousCount: 0,
       recoveredCount: 0,
       scannedCount: 0,
+      verificationFailedCount: 0,
     };
   }
 
@@ -775,6 +781,8 @@ export async function recoverFailedRecurringInvoicesBatch(input: {
   );
   let recoveredCount = 0;
   let ambiguousCount = 0;
+  let verificationFailedCount = 0;
+  const taxTreatment = requireTaxTreatment((await getTenantBillingSettings(resolvedTenantId))?.taxTreatment);
 
   for (const candidate of candidates) {
     const reference = buildRecurringInvoiceReference({
@@ -797,10 +805,36 @@ export async function recoverFailedRecurringInvoicesBatch(input: {
       continue;
     }
 
+    let verifiedInvoice;
+    try {
+      verifiedInvoice = await verifiedEboekhoudenInvoice({
+        expectedAmount: candidate.amountValue,
+        expectedRelationId: candidate.eboekhoudenRelationId,
+        expectedReference: reference,
+        invoice: existing.invoice,
+        taxTreatment: candidate.taxTreatment ? requireTaxTreatment(candidate.taxTreatment) : taxTreatment,
+        tenantId: candidate.tenantId,
+      });
+    } catch (error) {
+      await recordFailedEboekhoudenInvoiceReview({
+        customerId: candidate.customerId,
+        error,
+        invoice: existing.invoice,
+        mode: candidate.mode,
+        ownerId: candidate.scheduleId,
+        ownerType: "recurring_schedule",
+        reference,
+        subscriptionId: candidate.subscriptionId,
+        tenantId: candidate.tenantId,
+      });
+      verificationFailedCount += 1;
+      continue;
+    }
+
     const recovered = await storeRecoveredFailedInvoiceSuccess({
       actor: input.actor,
       candidate,
-      invoice: existing.invoice,
+      invoice: verifiedInvoice,
     });
 
     if (!recovered) {
@@ -813,7 +847,7 @@ export async function recoverFailedRecurringInvoicesBatch(input: {
       customerEmail: candidate.customerEmail,
       customerId: candidate.customerId,
       entityId: candidate.scheduleId,
-      invoiceDocumentUrl: existing.invoice.urlPdfFile ?? null,
+      invoiceDocumentUrl: verifiedInvoice.urlPdfFile ?? null,
       invoiceId: recovered.invoiceId,
       invoiceNumber: recovered.invoiceNumber,
       invoiceProvider: "eboekhouden",
@@ -829,6 +863,7 @@ export async function recoverFailedRecurringInvoicesBatch(input: {
     ambiguousCount,
     recoveredCount,
     scannedCount: candidates.length,
+    verificationFailedCount,
   };
 }
 

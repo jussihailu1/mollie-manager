@@ -44,6 +44,7 @@ function ledgerLabel(ledger: {
 
 export function BillingSettingsForm({
   defaultActiveInvoiceProvider,
+  defaultTaxTreatment,
   invoiceTemplates,
   ledgers,
   defaultInvoiceTemplateId,
@@ -52,6 +53,7 @@ export function BillingSettingsForm({
   hasSavedLedgerOutsideDiscovery,
 }: {
   defaultActiveInvoiceProvider: "eboekhouden" | "kify" | "mollie";
+  defaultTaxTreatment: "kor" | "standard" | null;
   defaultInvoiceTemplateId: number | null | undefined;
   defaultRevenueLedgerId: number | null | undefined;
   hasSavedLedgerOutsideDiscovery: boolean;
@@ -74,6 +76,7 @@ export function BillingSettingsForm({
   const [activeInvoiceProvider, setActiveInvoiceProvider] = useState(
     defaultActiveInvoiceProvider,
   );
+  const [taxTreatment, setTaxTreatment] = useState(defaultTaxTreatment ?? "");
   const [selectedInvoiceTemplateId, setSelectedInvoiceTemplateId] = useState(
     defaultInvoiceTemplateId ? String(defaultInvoiceTemplateId) : "",
   );
@@ -86,6 +89,11 @@ export function BillingSettingsForm({
     <form className="space-y-4" action={updateBillingSettingsAction} ref={formRef}>
       <input type="hidden" name="returnTo" value="/settings" />
       <input type="hidden" name="invoiceEmailDeliveryMode" value="app_smtp" />
+      {!defaultTaxTreatment ? (
+        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          Select whether this organization participates in the KOR. Invoice creation stays paused until you save a choice.
+        </p>
+      ) : null}
       {activeInvoiceProvider !== "eboekhouden" ? (
         <>
           <input type="hidden" name="invoiceTemplateId" value={selectedInvoiceTemplateId} />
@@ -120,6 +128,24 @@ export function BillingSettingsForm({
               <option value="kify">Kify (default)</option>
               <option value="eboekhouden">e-Boekhouden</option>
             </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="taxTreatment">VAT treatment</Label>
+            <select
+              className={selectClassName}
+              id="taxTreatment"
+              name="taxTreatment"
+              required
+              value={taxTreatment}
+              onChange={(event) => setTaxTreatment(event.target.value)}
+            >
+              <option value="">Select VAT treatment</option>
+              <option value="kor">KOR — no VAT on invoices</option>
+              <option value="standard">Standard — 21% VAT included in subscription price</option>
+            </select>
+            <p className="text-xs text-muted-foreground">
+              Use your confirmed Belastingdienst status. Changing this setting affects new invoices, including overdue invoices created later; it does not correct sent invoices.
+            </p>
           </div>
         </div>
 
@@ -180,7 +206,7 @@ export function BillingSettingsForm({
 
       <p className="text-xs text-muted-foreground">
         {activeInvoiceProvider === "eboekhouden"
-          ? `Loaded ${invoiceTemplates.length} invoice templates and ${ledgers.length} ledger accounts from e-Boekhouden. VAT is fixed to 21% for now.`
+          ? `Loaded ${invoiceTemplates.length} invoice templates and ${ledgers.length} ledger accounts from e-Boekhouden. The selected VAT treatment applies to future invoices; the invoice total equals the subscription price.`
           : activeInvoiceProvider === "mollie"
             ? "Legacy Mollie remains selected for this existing tenant. Choose Kify for future invoices, or choose e-Boekhouden only after tenant-scoped accounting setup is complete."
           : "Kify is the default issuer. e-Boekhouden remains optional for tenants with completed tenant-scoped accounting setup."}
@@ -197,6 +223,7 @@ export function BillingSettingsForm({
                 event.preventDefault();
                 formRef.current?.reset();
                 setActiveInvoiceProvider(defaultActiveInvoiceProvider);
+                setTaxTreatment(defaultTaxTreatment ?? "");
                 setSelectedInvoiceTemplateId(
                   defaultInvoiceTemplateId ? String(defaultInvoiceTemplateId) : "",
                 );

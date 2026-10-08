@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 
 import { writeAuditLog } from "@/lib/audit";
 import { getDb, transaction } from "@/lib/db";
+import { verifiedEboekhoudenInvoiceForDelivery } from "@/lib/eboekhouden/invoice-total-verification";
 import type { MollieMode } from "@/lib/env";
 import { env } from "@/lib/env";
 import { getStoredInvoiceByOwner } from "@/lib/invoices";
@@ -82,6 +83,7 @@ function serializeErrorMessage(error: unknown) {
 }
 
 function buildEmailContent(input: {
+  invoiceAttached?: boolean;
   invoicePdfUrl: string | null;
   invoiceNumber: string;
   invoiceType: "first_payment" | "recurring";
@@ -91,7 +93,9 @@ function buildEmailContent(input: {
     input.invoiceType === "first_payment"
       ? `${env.APP_URL}/payments`
       : `${env.APP_URL}/customers`;
-  const documentLine = input.invoicePdfUrl
+  const documentLine = input.invoiceAttached
+    ? "Factuurdocument: bijgevoegd als PDF"
+    : input.invoicePdfUrl
     ? `Factuurdocument: ${input.invoicePdfUrl}`
     : `Factuurdocument: ${invoicePortalUrl}`;
 
@@ -464,39 +468,54 @@ export async function deliverCustomerInvoiceEmail(input: DeliveryInput) {
     };
   }
 
-  const invoicePdfUrl = await resolveInvoicePdfUrl({
-    entityId: input.entityId,
-    invoiceDocumentUrl: input.invoiceDocumentUrl,
-    invoiceType: input.invoiceType,
-    tenantId: input.tenantId,
-  });
-  const storedInvoice = await getStoredInvoiceByOwner({ ownerId: input.entityId, ownerType: toInvoiceOwnerType(input.invoiceType), tenantId: input.tenantId });
-  const storedDocument = storedInvoice
-    ? await invoiceDocumentService.getDocument({
-      invoiceId: storedInvoice.id,
-      tenantId: input.tenantId,
-    })
-    : null;
-  const attachmentResult = storedDocument?.source === "kify"
-    ? await buildPrivateInvoicePdfAttachment({
-      invoiceNumber,
-      stream: storedDocument.stream,
-    })
-    : await buildTrustedInvoicePdfAttachment({
-      invoiceNumber,
-      invoicePdfUrl: storedDocument?.source === "legacy"
-        ? storedDocument.url
-        : invoicePdfUrl,
-    });
-  const finalRecipient = env.INVOICE_EMAIL_OVERRIDE_TO ?? input.customerEmail;
-  const content = buildEmailContent({
-    invoicePdfUrl: attachmentResult.trustedInvoicePdfUrl,
-    invoiceNumber,
-    invoiceType: input.invoiceType,
-    plannedCollectionDate: input.plannedCollectionDate,
-  });
-
   try {
+    const storedInvoice = await getStoredInvoiceByOwner({ ownerId: input.entityId, ownerType: toInvoiceOwnerType(input.invoiceType), tenantId: input.tenantId });
+    let verifiedProviderPdfUrl: string | null = null;
+    if (input.invoiceProvider === "eboekhouden") {
+      if (storedInvoice?.provider !== "eboekhouden" || storedInvoice.mode !== input.mode ||
+          storedInvoice.providerInvoiceId !== input.invoiceId || storedInvoice.providerInvoiceNumber !== invoiceNumber) {
+        throw new Error("e-Boekhouden invoice record does not match this delivery; review before sending.");
+      }
+      const verified = await verifiedEboekhoudenInvoiceForDelivery({ ...storedInvoice, tenantId: input.tenantId });
+      verifiedProviderPdfUrl = verified.urlPdfFile ?? null;
+    }
+    const invoicePdfUrl = input.invoiceProvider === "eboekhouden" ? verifiedProviderPdfUrl : await resolveInvoicePdfUrl({
+      entityId: input.entityId,
+      invoiceDocumentUrl: input.invoiceDocumentUrl,
+      invoiceType: input.invoiceType,
+      tenantId: input.tenantId,
+    });
+    const storedDocument = storedInvoice && input.invoiceProvider !== "eboekhouden"
+      ? await invoiceDocumentService.getDocument({
+        invoiceId: storedInvoice.id,
+        tenantId: input.tenantId,
+      })
+      : null;
+    const attachmentResult = storedDocument?.source === "kify"
+      ? await buildPrivateInvoicePdfAttachment({
+        invoiceNumber,
+        stream: storedDocument.stream,
+      })
+      : await buildTrustedInvoicePdfAttachment({
+        invoiceNumber,
+        invoicePdfUrl: storedDocument?.source === "legacy"
+          ? storedDocument.url
+          : invoicePdfUrl,
+      });
+    const finalRecipient = env.INVOICE_EMAIL_OVERRIDE_TO ?? input.customerEmail;
+    const content = buildEmailContent({
+      invoiceAttached: input.invoiceProvider === "eboekhouden" && Boolean(attachmentResult.attachment),
+      invoicePdfUrl: input.invoiceProvider === "eboekhouden" ? null : attachmentResult.trustedInvoicePdfUrl,
+      invoiceNumber,
+      invoiceType: input.invoiceType,
+      plannedCollectionDate: input.plannedCollectionDate,
+    });
+
+    if (input.invoiceProvider === "eboekhouden") {
+      if (!attachmentResult.attachment) {
+        throw new Error(`e-Boekhouden invoice PDF is unavailable or invalid (${attachmentResult.attachmentStatus}); retry delivery without recreating the invoice.`);
+      }
+    }
     await sendEmailTo({
       attachments: attachmentResult.attachment
         ? [attachmentResult.attachment]

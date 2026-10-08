@@ -11,7 +11,12 @@ export function toInvoiceCount(value: unknown) {
 }
 
 export function toInvoiceAmountNumber(value: string) {
-  return Number(Number(value).toFixed(2));
+  const match = /^(0|[1-9]\d*)\.(\d{2})$/.exec(value);
+  const cents = match ? Number(match[1]) * 100 + Number(match[2]) : NaN;
+  if (!Number.isSafeInteger(cents) || cents <= 0) {
+    throw new Error("Invoice amount must be a positive EUR amount with exactly two decimal places before e-Boekhouden creation.");
+  }
+  return Number(value);
 }
 
 export function serializeInvoiceErrorMessage(

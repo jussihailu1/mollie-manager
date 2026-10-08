@@ -44,6 +44,8 @@ import {
 } from "@/lib/eboekhouden/first-payment-invoice-retry";
 import { resolveFirstPaymentInvoiceDate } from "@/lib/eboekhouden/first-payment-invoice-date";
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
+import { verifiedEboekhoudenInvoice } from "@/lib/eboekhouden/invoice-total-verification";
+import { recordFailedEboekhoudenInvoiceReview } from "@/lib/eboekhouden/invoice-recovery-review";
 import {
   buildInvoiceCreationFailureMetadata,
 } from "@/lib/eboekhouden/invoice-creation-metadata";
@@ -62,6 +64,7 @@ import {
   getInvoiceProviderAdapterById,
 } from "@/lib/invoicing/provider-resolver";
 import { issueKifyInvoice } from "@/lib/invoicing/kify-invoice-workflow";
+import { requireTaxTreatment } from "@/lib/invoicing/tax-treatment";
 import type {
   InvoiceProviderCreateResult,
 } from "@/lib/invoicing/provider-types";
@@ -92,6 +95,7 @@ type FailedFirstPaymentRecoveryBatchResult = {
   ambiguousCount: number;
   recoveredCount: number;
   scannedCount: number;
+  verificationFailedCount: number;
 };
 
 type FailedFirstPaymentRetryBatchResult = {
@@ -271,6 +275,7 @@ async function queueProviderAgnosticFirstPaymentRetries(input: {
         and p.tenant_id = ${resolvedTenantId}
         and p.payment_type = 'first'
         and p.invoice_state = 'invoice_failed'
+        and coalesce(p.metadata ->> 'invoiceCreationManualReview', 'false') = 'false'
         and not exists (
           select 1
           from invoices i
@@ -903,6 +908,7 @@ export async function recoverFailedFirstPaymentInvoicesBatch(input: {
       ambiguousCount: 0,
       recoveredCount: 0,
       scannedCount: 0,
+      verificationFailedCount: 0,
     };
   }
 
@@ -913,6 +919,8 @@ export async function recoverFailedFirstPaymentInvoicesBatch(input: {
   );
   let recoveredCount = 0;
   let ambiguousCount = 0;
+  let verificationFailedCount = 0;
+  const taxTreatment = requireTaxTreatment((await getTenantBillingSettings(input.tenantId))?.taxTreatment);
 
   for (const candidate of candidates) {
     const invoiceDate = resolveFirstPaymentInvoiceDate({
@@ -943,10 +951,36 @@ export async function recoverFailedFirstPaymentInvoicesBatch(input: {
       continue;
     }
 
+    let verifiedInvoice;
+    try {
+      verifiedInvoice = await verifiedEboekhoudenInvoice({
+        expectedAmount: candidate.amountValue,
+        expectedRelationId: candidate.eboekhoudenRelationId,
+        expectedReference: reference,
+        invoice: existing.invoice,
+        taxTreatment: candidate.taxTreatment ? requireTaxTreatment(candidate.taxTreatment) : taxTreatment,
+        tenantId: candidate.tenantId,
+      });
+    } catch (error) {
+      await recordFailedEboekhoudenInvoiceReview({
+        customerId: candidate.customerId,
+        error,
+        invoice: existing.invoice,
+        mode: candidate.mode,
+        ownerId: candidate.paymentId,
+        ownerType: "payment",
+        reference,
+        subscriptionId: candidate.subscriptionId,
+        tenantId: candidate.tenantId,
+      });
+      verificationFailedCount += 1;
+      continue;
+    }
+
     const recovered = await storeRecoveredFailedFirstPaymentSuccess({
       actor: input.actor,
       candidate,
-      invoice: existing.invoice,
+      invoice: verifiedInvoice,
     });
     if (!recovered) {
       continue;
@@ -959,7 +993,7 @@ export async function recoverFailedFirstPaymentInvoicesBatch(input: {
         customerEmail: candidate.customerEmail,
         customerId: candidate.customerId,
         entityId: candidate.paymentId,
-        invoiceDocumentUrl: existing.invoice.urlPdfFile ?? null,
+        invoiceDocumentUrl: verifiedInvoice.urlPdfFile ?? null,
         invoiceId: recovered.invoiceId,
         invoiceNumber: recovered.invoiceNumber,
         mode: candidate.mode,
@@ -973,5 +1007,6 @@ export async function recoverFailedFirstPaymentInvoicesBatch(input: {
     ambiguousCount,
     recoveredCount,
     scannedCount: candidates.length,
+    verificationFailedCount,
   };
 }

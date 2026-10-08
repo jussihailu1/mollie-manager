@@ -45,11 +45,13 @@ async function queueRetryForFailedRecurringInvoice(input: {
   const resolvedTenantId = await resolveTenantId(input.tenantId);
   const candidate = await getDb().execute<{
     errorMessage: string | null;
+    manualReview: boolean;
     scheduleId: string;
   }>(sql`
     select
       rbs.id as "scheduleId",
-      (rbs.metadata ->> 'invoiceCreationError') as "errorMessage"
+      (rbs.metadata ->> 'invoiceCreationError') as "errorMessage",
+      coalesce((rbs.metadata ->> 'invoiceCreationManualReview')::boolean, false) as "manualReview"
     from recurring_billing_schedules rbs
     where rbs.id = ${input.scheduleId}
       and ${buildRecurringFailedInvoiceFilter(input.mode, resolvedTenantId)}
@@ -57,7 +59,7 @@ async function queueRetryForFailedRecurringInvoice(input: {
   `);
   const row = candidate.rows[0];
 
-  if (!row || !isSafeInvoiceRetryFailure(row.errorMessage)) {
+  if (!row || row.manualReview || !isSafeInvoiceRetryFailure(row.errorMessage)) {
     return "skipped";
   }
 
@@ -74,6 +76,7 @@ async function queueRetryForFailedRecurringInvoice(input: {
       updated_at = now()
     where rbs.id = ${input.scheduleId}
       and ${buildRecurringFailedInvoiceFilter(input.mode, resolvedTenantId)}
+      and coalesce((rbs.metadata ->> 'invoiceCreationManualReview')::boolean, false) = false
     returning id
   `);
 
@@ -109,11 +112,13 @@ export async function getFailedRecurringInvoiceRetrySummary(
   const resolvedTenantId = await resolveTenantId(tenantId);
   const result = await getDb().execute<{
     errorMessage: string | null;
+    manualReview: boolean;
     scheduleId: string;
   }>(sql`
     select
       rbs.id as "scheduleId",
-      (rbs.metadata ->> 'invoiceCreationError') as "errorMessage"
+      (rbs.metadata ->> 'invoiceCreationError') as "errorMessage",
+      coalesce((rbs.metadata ->> 'invoiceCreationManualReview')::boolean, false) as "manualReview"
     from recurring_billing_schedules rbs
     where rbs.tenant_id = ${resolvedTenantId}
       and ${buildRecurringFailedInvoiceFilter(mode, resolvedTenantId)}
@@ -163,10 +168,12 @@ export async function queueRetryForSafeFailedRecurringInvoicesBatch(input: {
   const failedRows = await getDb().execute<{
     errorMessage: string | null;
     id: string;
+    manualReview: boolean;
   }>(sql`
     select
       rbs.id as id,
-      (rbs.metadata ->> 'invoiceCreationError') as "errorMessage"
+      (rbs.metadata ->> 'invoiceCreationError') as "errorMessage",
+      coalesce((rbs.metadata ->> 'invoiceCreationManualReview')::boolean, false) as "manualReview"
     from recurring_billing_schedules rbs
     where ${buildRecurringFailedInvoiceFilter(input.mode, resolvedTenantId)}
     order by rbs.updated_at asc, rbs.created_at asc

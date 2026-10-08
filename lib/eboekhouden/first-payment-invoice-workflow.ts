@@ -3,7 +3,8 @@ import {
   getTenantBillingSettings,
   type TenantBillingSettings,
 } from "@/lib/billing-settings";
-import { createEboekhoudenInvoice } from "@/lib/eboekhouden/client";
+import { createEboekhoudenInvoice, type EboekhoudenInvoice } from "@/lib/eboekhouden/client";
+import { verifiedEboekhoudenInvoice } from "@/lib/eboekhouden/invoice-total-verification";
 import {
   isEboekhoudenReferenceAlreadyExistsError,
   toInvoiceAmountNumber,
@@ -27,6 +28,7 @@ import { resolveFirstPaymentInvoiceDate } from "@/lib/eboekhouden/first-payment-
 import { findExistingEboekhoudenInvoiceByReference } from "@/lib/eboekhouden/invoice-reconcile";
 import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
 import { subscriptionConsentPlanSnapshotSchema } from "@/lib/subscription-consent";
+import { eboekhoudenInvoiceDescription, eboekhoudenTaxFields, requireTaxTreatment } from "@/lib/invoicing/tax-treatment";
 
 type CreateFirstPaymentInvoiceResult =
   | {
@@ -94,11 +96,13 @@ export async function createEboekhoudenInvoiceForFirstPayment(
   }
   const eligibleCandidate = eligibility.candidate;
 
+  const taxTreatment = requireTaxTreatment(settings!.taxTreatment);
   const claimedPaymentId = await claimFirstPaymentInvoiceForCreation({
     actor,
     mode: candidate.mode,
     paymentId,
     tenantId: options.tenantId,
+    taxTreatment,
   });
 
   if (!claimedPaymentId) {
@@ -127,6 +131,8 @@ export async function createEboekhoudenInvoiceForFirstPayment(
     };
   }
   const reference = buildReference(candidate);
+  let externalInvoice: EboekhoudenInvoice | null = null;
+  let postAttempted = false;
 
   try {
     const existing = await findExistingEboekhoudenInvoiceByReference({
@@ -143,10 +149,12 @@ export async function createEboekhoudenInvoiceForFirstPayment(
     }
 
     if (existing.status === "found") {
+      externalInvoice = existing.invoice;
+      const verifiedInvoice = await verifiedEboekhoudenInvoice({ expectedAmount: candidate.amountValue, expectedRelationId: eligibleCandidate.eboekhoudenRelationId, expectedReference: reference, invoice: existing.invoice, taxTreatment, tenantId: candidate.tenantId });
       const storedRecoveredInvoice = await storeFirstPaymentInvoiceCreationSuccess({
         actor,
         candidate,
-        invoice: existing.invoice,
+        invoice: verifiedInvoice,
         source: "reconciled_existing",
       });
       await deliverCustomerInvoiceEmail(
@@ -155,7 +163,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
           customerEmail: candidate.customerEmail,
           customerId: candidate.customerId,
           entityId: candidate.paymentId,
-          invoiceDocumentUrl: existing.invoice.urlPdfFile ?? null,
+          invoiceDocumentUrl: verifiedInvoice.urlPdfFile ?? null,
           invoiceId: storedRecoveredInvoice.invoiceId,
           invoiceNumber: storedRecoveredInvoice.invoiceNumber,
           mode: candidate.mode,
@@ -180,32 +188,37 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       throw new Error("Stored onboarding consent snapshot is invalid.");
     }
 
+    const tax = eboekhoudenTaxFields(taxTreatment);
     const invoiceInput: Parameters<typeof createEboekhoudenInvoice>[0] = {
       date: invoiceDate,
-      inExVat: "EX",
+      inExVat: tax.inExVat,
       items: [
         {
-          description: parsedPlanSnapshot.data.description,
+          description: eboekhoudenInvoiceDescription(parsedPlanSnapshot.data.description, taxTreatment),
           ledgerId: settings!.revenueLedgerId!,
           pricePerUnit: toInvoiceAmountNumber(candidate.amountValue),
           quantity: 1,
-          vatCode: settings!.vatCode,
+          vatCode: tax.vatCode,
         },
       ],
       print: false,
       reference,
       relationId: eligibleCandidate.eboekhoudenRelationId,
       templateId: settings!.invoiceTemplateId!,
+      text: tax.text,
       termOfPayment: 0,
     };
+    postAttempted = true;
     const invoice = await createEboekhoudenInvoice(
       invoiceInput,
       candidate.tenantId,
     );
+    externalInvoice = invoice;
+    const verifiedInvoice = await verifiedEboekhoudenInvoice({ expectedAmount: candidate.amountValue, expectedRelationId: eligibleCandidate.eboekhoudenRelationId, expectedReference: reference, invoice, taxTreatment, tenantId: candidate.tenantId });
     const storedInvoice = await storeFirstPaymentInvoiceCreationSuccess({
       actor,
       candidate,
-      invoice,
+      invoice: verifiedInvoice,
     });
     await deliverCustomerInvoiceEmail(
       buildFirstPaymentInvoiceDelivery({
@@ -213,7 +226,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
         customerEmail: candidate.customerEmail,
         customerId: candidate.customerId,
         entityId: candidate.paymentId,
-        invoiceDocumentUrl: invoice.urlPdfFile ?? null,
+        invoiceDocumentUrl: verifiedInvoice.urlPdfFile ?? null,
         invoiceId: storedInvoice.invoiceId,
         invoiceNumber: storedInvoice.invoiceNumber,
         mode: candidate.mode,
@@ -229,7 +242,9 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       status: "created",
     };
   } catch (error) {
+    let failureError = error;
     if (isEboekhoudenReferenceAlreadyExistsError(error)) {
+      try {
       const existing = await findExistingEboekhoudenInvoiceByReference({
         date: invoiceDate,
         reference,
@@ -238,10 +253,12 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       });
 
       if (existing.status === "found") {
+        externalInvoice = existing.invoice;
+        const verifiedInvoice = await verifiedEboekhoudenInvoice({ expectedAmount: candidate.amountValue, expectedRelationId: eligibleCandidate.eboekhoudenRelationId, expectedReference: reference, invoice: existing.invoice, taxTreatment, tenantId: candidate.tenantId });
         const storedRecoveredInvoice = await storeFirstPaymentInvoiceCreationSuccess({
           actor,
           candidate,
-          invoice: existing.invoice,
+          invoice: verifiedInvoice,
           source: "reconciled_existing",
         });
         await deliverCustomerInvoiceEmail(
@@ -250,7 +267,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
             customerEmail: candidate.customerEmail,
             customerId: candidate.customerId,
             entityId: candidate.paymentId,
-            invoiceDocumentUrl: existing.invoice.urlPdfFile ?? null,
+            invoiceDocumentUrl: verifiedInvoice.urlPdfFile ?? null,
             invoiceId: storedRecoveredInvoice.invoiceId,
             invoiceNumber: storedRecoveredInvoice.invoiceNumber,
             mode: candidate.mode,
@@ -266,12 +283,18 @@ export async function createEboekhoudenInvoiceForFirstPayment(
           status: "created",
         };
       }
+      } catch (recoveryError) {
+        failureError = recoveryError;
+      }
     }
 
     const failure = await storeFirstPaymentInvoiceCreationFailure({
       actor,
       candidate,
-      error,
+      error: failureError,
+      externalInvoice,
+      postAttempted,
+      reference,
     });
 
     return {

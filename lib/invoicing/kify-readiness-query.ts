@@ -26,6 +26,7 @@ type KifyProfileRow = {
   customerPostalCode: string | null;
   customerStreet: string | null;
   tenantLegalName: string | null;
+  taxTreatment: string | null;
 };
 
 export async function getKifyInvoiceReadiness(input: { customerId: string; tenantId: string }) {
@@ -35,17 +36,22 @@ export async function getKifyInvoiceReadiness(input: { customerId: string; tenan
       tip.postal_code as "postalCode", tip.city, tip.country_code as "countryCode",
       tip.kvk_number as "kvkNumber", tip.vat_id as "vatId", tip.invoice_email as "invoiceEmail",
       tip.invoice_prefix as "invoicePrefix", tip.payment_term_days as "paymentTermDays",
+      tbs.tax_treatment as "taxTreatment",
       cbp.legal_name as "customerLegalName", cbp.street as "customerStreet",
       cbp.house_number as "customerHouseNumber", cbp.postal_code as "customerPostalCode",
       cbp.city as "customerCity", cbp.country_code as "customerCountryCode", cbp.email as "customerEmail"
     from tenants t
     left join tenant_invoice_profiles tip on tip.tenant_id = t.id
+    left join tenant_billing_settings tbs on tbs.tenant_id = t.id
     left join customer_billing_profiles cbp
       on cbp.tenant_id = t.id and cbp.customer_id = ${input.customerId}
     where t.id = ${input.tenantId}
     limit 1
   `);
   const row = result.rows[0];
+  if (row?.taxTreatment !== "kor" && row?.taxTreatment !== "standard") {
+    return { ok: false as const, reason: "Select the organization's KOR status before creating an invoice." };
+  }
   const tenantProfile = row?.tenantLegalName && row.city && row.countryCode && row.houseNumber && row.invoiceEmail && row.invoicePrefix && row.kvkNumber && row.paymentTermDays !== null && row.postalCode && row.street && row.vatId
     ? { city: row.city, countryCode: row.countryCode, houseNumber: row.houseNumber, invoiceEmail: row.invoiceEmail, invoicePrefix: row.invoicePrefix, kvkNumber: row.kvkNumber, legalName: row.tenantLegalName, paymentTermDays: row.paymentTermDays, postalCode: row.postalCode, street: row.street, vatId: row.vatId }
     : null;
@@ -59,18 +65,22 @@ export async function getKifyInvoiceReadiness(input: { customerId: string; tenan
 }
 
 export async function getKifyTenantInvoiceReadiness(tenantId: string) {
-  const result = await getDb().execute<Pick<KifyProfileRow, "city" | "countryCode" | "houseNumber" | "invoiceEmail" | "invoicePrefix" | "kvkNumber" | "paymentTermDays" | "postalCode" | "street" | "tenantLegalName" | "vatId">>(sql`
+  const result = await getDb().execute<Pick<KifyProfileRow, "city" | "countryCode" | "houseNumber" | "invoiceEmail" | "invoicePrefix" | "kvkNumber" | "paymentTermDays" | "postalCode" | "street" | "tenantLegalName" | "vatId" | "taxTreatment">>(sql`
     select
       tip.legal_name as "tenantLegalName", tip.street, tip.house_number as "houseNumber",
       tip.postal_code as "postalCode", tip.city, tip.country_code as "countryCode",
       tip.kvk_number as "kvkNumber", tip.vat_id as "vatId", tip.invoice_email as "invoiceEmail",
-      tip.invoice_prefix as "invoicePrefix", tip.payment_term_days as "paymentTermDays"
+      tip.invoice_prefix as "invoicePrefix", tip.payment_term_days as "paymentTermDays", tbs.tax_treatment as "taxTreatment"
     from tenants t
     left join tenant_invoice_profiles tip on tip.tenant_id = t.id
+    left join tenant_billing_settings tbs on tbs.tenant_id = t.id
     where t.id = ${tenantId}
     limit 1
   `);
   const row = result.rows[0];
+  if (row?.taxTreatment !== "kor" && row?.taxTreatment !== "standard") {
+    return { ok: false as const, reason: "Select the organization's KOR status before enabling invoicing." };
+  }
   const tenantProfile = row?.tenantLegalName && row.city && row.countryCode && row.houseNumber && row.invoiceEmail && row.invoicePrefix && row.kvkNumber && row.paymentTermDays !== null && row.postalCode && row.street && row.vatId
     ? { city: row.city, countryCode: row.countryCode, houseNumber: row.houseNumber, invoiceEmail: row.invoiceEmail, invoicePrefix: row.invoicePrefix, kvkNumber: row.kvkNumber, legalName: row.tenantLegalName, paymentTermDays: row.paymentTermDays, postalCode: row.postalCode, street: row.street, vatId: row.vatId }
     : null;

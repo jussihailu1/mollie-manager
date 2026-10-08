@@ -27,13 +27,28 @@ type ReconcileResult =
 export async function findExistingEboekhoudenInvoiceByReference(
   input: ReconcileInput,
 ): Promise<ReconcileResult> {
-  const response = await listEboekhoudenInvoices({
-    date: input.date,
-    limit: 500,
-    relationId: input.relationId,
-    tenantId: input.tenantId,
-  });
-  const matches = filterMatchingInvoicesByReference(response.items ?? [], input);
+  const pageSize = 500;
+  const maxPages = 20;
+  const matches: EboekhoudenInvoice[] = [];
+  let complete = false;
+  for (let page = 0; page < maxPages; page += 1) {
+    const response = await listEboekhoudenInvoices({
+      date: input.date,
+      limit: pageSize,
+      offset: page * pageSize,
+      relationId: input.relationId,
+      tenantId: input.tenantId,
+    });
+    const items = response.items ?? [];
+    matches.push(...filterMatchingInvoicesByReference(items, input));
+    if (items.length < pageSize || (typeof response.count === "number" && (page + 1) * pageSize >= response.count)) {
+      complete = true;
+      break;
+    }
+  }
+  if (!complete) {
+    throw new Error(`e-Boekhouden invoice search exceeded ${maxPages * pageSize} rows; manual review required before creating another invoice.`);
+  }
 
   if (matches.length === 0) {
     return {

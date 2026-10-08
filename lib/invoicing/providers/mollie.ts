@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { getTenantMollieRequestAuthentication } from "@/lib/mollie/client";
 import { type InvoiceProviderAdapter } from "@/lib/invoicing/provider-types";
+import { requireTaxTreatment } from "@/lib/invoicing/tax-treatment";
 
 type MollieRecipientProfile = {
   address: string | null;
@@ -137,7 +138,7 @@ function buildMolliePayload(input: {
     paymentTerm: "30 days",
     ...recipient,
     status: "draft",
-    vatMode: "exclusive",
+    vatMode: "inclusive",
     vatScheme: "standard",
   };
 }
@@ -251,6 +252,10 @@ async function validateMollieSalesInvoicesAccess(input: {
 
 export const mollieInvoiceProvider: InvoiceProviderAdapter = {
   async createInvoice(input) {
+    const treatment = requireTaxTreatment(input.settings.taxTreatment);
+    if (treatment === "kor") {
+      throw new MollieSalesInvoiceError("Mollie Sales Invoices cannot issue a verified KOR invoice; choose Kify or e-Boekhouden.");
+    }
     const profile = await getRecipientProfile(input.customer.id, input.tenantId);
     const payload = buildMolliePayload({
       amountCurrency: input.amountCurrency,
@@ -315,6 +320,10 @@ export const mollieInvoiceProvider: InvoiceProviderAdapter = {
 
   async validateTenantSetup(input) {
     try {
+      const treatment = requireTaxTreatment(input.settings?.taxTreatment);
+      if (treatment === "kor") {
+        return { ok: false, reason: "Choose Kify or e-Boekhouden for KOR invoices." };
+      }
       await validateMollieSalesInvoicesAccess({
         mode: input.mode,
         tenantId: input.tenantId,

@@ -57,15 +57,19 @@ export type EboekhoudenCreateInvoiceInput = {
   relationId: number;
   templateId: number;
   termOfPayment: number;
+  text?: string;
 };
 
 export type EboekhoudenInvoice = {
+  apiVerification?: import("@/lib/eboekhouden/invoice-total-verification").EboekhoudenApiVerification;
   date?: string | null;
   id?: number;
   invoiceNumber?: string | null;
   reference?: string | null;
   relationId?: number | null;
   number?: string | null;
+  totalAmount?: number;
+  vatAmount?: number;
   urlPdfFile?: string | null;
 };
 

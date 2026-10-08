@@ -13,10 +13,12 @@ describe("invoice creation metadata helpers", () => {
       buildInvoiceCreationClaimMetadata({
         actorEmail: "ops@example.test",
         claimedAt: "2026-06-09T09:00:00.000Z",
+        taxTreatment: "kor",
       }),
       {
         invoiceCreationClaimedAt: "2026-06-09T09:00:00.000Z",
         invoiceCreationClaimedBy: "ops@example.test",
+        invoiceTaxTreatment: "kor",
       },
     );
   });
@@ -33,6 +35,8 @@ describe("invoice creation metadata helpers", () => {
         eboekhoudenInvoice: invoice,
         invoiceCreationCompletedAt: "2026-06-09T10:00:00.000Z",
         invoiceCreationStatus: "success",
+        invoiceCreationManualReview: false,
+        eboekhoudenUnverifiedInvoice: null,
       },
     );
   });
@@ -47,7 +51,19 @@ describe("invoice creation metadata helpers", () => {
         invoiceCreationCompletedAt: "2026-06-09T10:00:00.000Z",
         invoiceCreationError: "FACT_014 duplicate",
         invoiceCreationStatus: "failure",
+        invoiceCreationManualReview: false,
+        eboekhoudenUnverifiedInvoice: null,
       },
     );
+  });
+
+  it("holds an uncertain POST for manual review", () => {
+    const metadata = buildInvoiceCreationFailureMetadata({
+      errorMessage: "Request timed out",
+      postAttempted: true,
+      reference: "RB-123",
+    });
+    assert.equal(metadata.invoiceCreationManualReview, true);
+    assert.equal(metadata.eboekhoudenUnverifiedInvoice, null);
   });
 });

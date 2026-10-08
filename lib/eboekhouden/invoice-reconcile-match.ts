@@ -13,10 +13,6 @@ export type ReconcileInvoiceCandidate = {
   relationId?: number | null;
 };
 
-function normalizeInvoiceNumber(invoice: ReconcileInvoiceCandidate) {
-  return invoice.invoiceNumber ?? invoice.number ?? null;
-}
-
 export function filterMatchingInvoicesByReference(
   invoices: ReconcileInvoiceCandidate[],
   input: ReconcileMatchInput,
@@ -25,8 +21,6 @@ export function filterMatchingInvoicesByReference(
     (invoice) =>
       invoice.reference === input.reference &&
       invoice.relationId === input.relationId &&
-      invoice.date === input.date &&
-      Boolean(invoice.id) &&
-      Boolean(normalizeInvoiceNumber(invoice)),
+      invoice.date === input.date,
   );
 }
