@@ -122,14 +122,22 @@ This slice preserves the deployed KOR safeguards from `81ac2fe`. It routes Kify 
 
 JHS retirement is removed from scope. Latest user update reports JHS cleanup complete: 380 JHS-only production records deleted after an encrypted backup, retained records across 33 tables unchanged, only Ayal Web visible. Backup location: `C:\Users\Jussi\Kify-Recovery\2026-10-08-jhs-cleanup`. This continuation has not reverified that operation. Fix the provider bug independently of JHS removal. Controlled live Kify-provider invoice proof (K7) and final documentation (K8) remain later milestones.
 
-## 5. Faster Cloudflare recovery — PENDING, last
+## 5. Faster Cloudflare recovery — OPTIONAL, reassess after current-flow verification
 
 Timestamp-only stale alerts were already removed in `a56566d`. Recurring-payment discovery and isolated recovery were added in `b5f5cd4` / `e43605b`. Current repository schedule remains the daily full invoice cron at `0 3 * * *` UTC. Current deployment must be verified separately.
 
-- [ ] Design a separate authenticated, bounded sync-only endpoint with overlap protection and monitoring.
-- [ ] Trigger it from Cloudflare at the chosen cadence (previous discussion: 15–30 minutes).
-- [ ] Keep invoice creation and customer email out of that faster path; do not simply increase the full billing cron frequency.
-- [ ] Verify recovery behavior, schedule execution and missed-run monitoring.
+Decision recorded on 8 October 2026: an additional recovery scheduler is optional, not an automatic next implementation task. Webhooks handle normal payment updates; the daily cron handles scheduled billing, delivery retries and fallback recovery. First verify the webhook flow and observe the fixed daily cron's scheduled execution. Add faster recovery only if waiting until the next daily run for a missed update is unacceptable.
+
+If needed, start the separate sync-only job **every two hours**, replacing the earlier tentative 15–30-minute cadence. That is 12 runs/day, about 360 per 30-day month. A missed update would normally be recovered within roughly two hours, subject to successful execution and sufficient batch capacity; this is not a guaranteed recovery deadline.
+
+Cost planning estimate only: if each run wakes an otherwise idle Neon compute at 0.25 CU for approximately five minutes, those wakeups use about **7.5 CU-hours per 30-day month**, excluding execution time and other activity. Actual compute sizing, autoscaling and overlap with normal traffic change the result. Measure usage before increasing frequency; current account headroom has not been established.
+
+- [ ] Verify existing webhooks and the daily cron before deciding whether shorter recovery is needed.
+- [ ] If justified, design a separate authenticated, bounded sync-only endpoint with overlap protection and monitoring, initially triggered every two hours.
+- [ ] Keep invoice creation, payment collection and customer email out of that path; retain the daily full billing cron at its existing frequency.
+- [ ] Verify recovery latency, batch capacity, resource usage and schedule execution. Independent missed-run monitoring remains a separate roadmap item.
+
+This decision records the preferred starting cadence; it does not authorize implementation, deployment or schedule changes.
 
 ## Continuation log
 

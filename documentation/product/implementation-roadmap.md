@@ -100,9 +100,12 @@ adds consolidated operator notifications without replaying billing on alert
 failure. Local validation and release evidence are recorded in the
 [cron release procedure](../operations/cron-reliability-release-2026-10-08.md).
 Deployment, scheduled execution and inbox receipt are separate open gates.
-The next recovery task is a separate bounded Cloudflare sync-only path; the full
-billing cron stays daily. Independent monitoring and Mollie Connect ownership
-remain separate backlog items.
+Additional Cloudflare sync-only recovery is optional: first verify the webhook
+flow and scheduled daily cron. If daily fallback latency is unacceptable, start
+a separate bounded job every two hours and measure usage before increasing its
+frequency. See step 5 of the temporary roadmap for the decision and estimate.
+The full billing cron stays daily. Independent monitoring and Mollie Connect
+ownership remain separate backlog items.
 
 ## Externally Blocked Milestone: Mollie Connect M6
 

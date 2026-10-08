@@ -118,5 +118,7 @@ schema, tax settings, invoices or payments. Never replay full billing as rollbac
 - Scheduled execution of this version: not yet observed.
 - Synthetic operator email: not authorized or sent.
 - Actual inbox receipt: unverified.
-- Next development task: separately bounded Cloudflare sync-only recovery;
-  independent monitoring and Connect ownership remain separate items.
+- Next recovery decision: verify webhooks and scheduled daily execution first.
+  Additional bounded Cloudflare sync-only recovery is optional; if needed, start
+  every two hours as recorded in temporary-roadmap step 5. Independent monitoring
+  and Connect ownership remain separate items.
