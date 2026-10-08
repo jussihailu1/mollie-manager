@@ -112,31 +112,26 @@ ownership remain separate backlog items.
 
 These are correctness and readiness follow-ups, not additional product milestones.
 
-- **Security maintenance is the immediate engineering priority.** A fresh
-  `npm audit --omit=dev` against the current lockfile reports 10 affected package
-  entries: 1 critical, 8 high and 1 moderate. The lockfile pins Next.js 16.2.2
-  and Nodemailer 7.0.13. Next.js advisories include conditional critical issues
-  and a [Server Actions denial of service](https://github.com/vercel/next.js/security/advisories/GHSA-m99w-x7hq-7vfj);
-  this app uses Server Actions. These counts include transitive/inherited
-  findings and are not evidence of exploitation or ten independently exploitable
-  application bugs. Prepare a compatible dependency update, verify auth,
-  billing/email flows and build, then separately release it. Do not use
-  `npm audit fix --force`: its suggested next-auth downgrade is incompatible
-  with the current v5 integration. No dependency changes were made in this
-  documentation cleanup.
+- **Production dependency security update prepared locally.** The updated
+  lockfile uses Next.js/eslint-config-next 16.4.0, Nodemailer 10.0.16 and patched
+  compatible transitive dependencies. `npm audit --omit=dev` now reports zero
+  vulnerabilities (previously 1 critical, 8 high and 1 moderate package entries).
+  The app mailer uses an npm alias to keep it independent from NextAuth v5's
+  unused optional email-login peer; Google OAuth stays on v5. Full development
+  dependency findings remain separately documented. See the
+  [security update evidence](../operations/security-dependency-update-2026-10-08.md)
+  for validation, limitations and the remaining production release gate. Do not
+  use `npm audit fix --force` or downgrade authentication to silence audit output.
 - **Observe the next scheduled cron execution**, 9 October at 05:00
   Europe/Amsterdam, and verify operator inbox receipt. The release ledger proves
   deployment and schedule configuration; it does not yet prove a scheduled run.
   Do not invoke full production billing for a smoke test.
-- **Resolve customer email routing before ordinary delivery is expected.** The
-  last recorded production verification at 14:54 on 8 October still has
-  `INVOICE_EMAIL_OVERRIDE_TO=info@ayalweb.com`. Code sends to that override and
-  records successful delivery even though the intended customer did not receive
-  the email. Keep operator review deliberate; enabling direct customer delivery
-  requires a reviewed configuration change and review of already overridden
-  deliveries. The last checked next recurring invoice is due 27 October; this
-  does not rule out newly arising first payments. Configuration/backlog were
-  not refreshed during Git cleanup.
+- **Invoice email routing is intentional and correct.** On 8 October the user
+  confirmed that `INVOICE_EMAIL_OVERRIDE_TO=info@ayalweb.com` must remain active.
+  Successful delivery records refer to operator delivery under that override;
+  this is the accepted workflow, not an outstanding defect or configuration TODO.
+  Do not remove the override or resend invoices to customers without a later
+  explicit change request.
 
 Independent missed-run monitoring remains an important reliability follow-up.
 K7 controlled Kify-native invoice proof remains a gate before broader rollout;

@@ -135,6 +135,18 @@ schema, tax settings, invoices or payments. Never replay full billing as rollbac
 - No error/fatal logs were returned for this deployment in the inspected 12:39:53–12:54:53 UTC window; the deployment only existed for the final portion of that window.
 - No full cron invocation, invoice creation, payment collection, operator test email, or customer email was performed by this release verification. The next scheduled run is 9 October at 05:00 Europe/Amsterdam; actual execution and inbox receipt remain open evidence gates. No follow-up automation was created.
 
+## Scheduled follow-up
+
+At the user's request, a one-time Codex verification is scheduled for 9 October
+2026 at 06:15 Europe/Amsterdam, after the daily cron's expected execution window.
+Automation: `verify-kify-scheduled-billing-run`, attached to the security-update
+chat. It will inspect the naturally scheduled run and operator email evidence
+without replaying billing or sending mail. Summaries are issue-only: a healthy
+run correctly sends no email and does not establish live delivery proof.
+The invoice-recipient override to
+`info@ayalweb.com` is explicitly intentional and must remain enabled. This is a
+scheduled verification, not completed execution or inbox proof.
+
 These evidence updates are local documentation changes after the released commit;
 they were not pushed as another deployment. Detailed read-only snapshots are in
 ignored `tmp/cron-release-before.json` and `tmp/cron-release-after.json`.

@@ -2,13 +2,14 @@ import "server-only";
 
 import { lookup } from "node:dns/promises";
 
-import nodemailer from "nodemailer";
+// Keep app SMTP independent of NextAuth's unused, older optional email-login peer.
+import nodemailer, { type Transporter } from "nodemailer-smtp";
 
 import { getNotificationConfig } from "@/lib/env";
 import { sendNotificationEmailWithTransport } from "@/lib/notifications/email-core";
 
-let transport: nodemailer.Transporter | null = null;
-let fallbackIpv6Transport: nodemailer.Transporter | null = null;
+let transport: Transporter | null = null;
+let fallbackIpv6Transport: Transporter | null = null;
 
 export function notificationsAreConfigured() {
   try {
