@@ -859,18 +859,21 @@ export async function createDueFirstPaymentInvoicesBatch(input: {
 }): Promise<FirstPaymentInvoiceBatchResult> {
   const settings = await getTenantBillingSettings(input.tenantId);
   const provider = settings?.activeInvoiceProvider ?? "mollie";
-  const adapter = getInvoiceProviderAdapterById(provider);
-  const validation = await adapter.validateTenantSetup({
-    mode: input.mode,
-    settings,
-    tenantId: input.tenantId,
-  });
+  // Kify validates readiness in its issuer, not through a legacy provider adapter.
+  if (provider !== "kify") {
+    const adapter = getInvoiceProviderAdapterById(provider);
+    const validation = await adapter.validateTenantSetup({
+      mode: input.mode,
+      settings,
+      tenantId: input.tenantId,
+    });
 
-  if (!validation.ok || !billingSettingsAreComplete(settings)) {
-    throw new Error(
-      validation.reason ??
-        "Tenant billing settings are incomplete. Select invoice settings first.",
-    );
+    if (!validation.ok || !billingSettingsAreComplete(settings)) {
+      throw new Error(
+        validation.reason ??
+          "Tenant billing settings are incomplete. Select invoice settings first.",
+      );
+    }
   }
 
   await normalizeFirstPaymentInvoiceStatesImpl({

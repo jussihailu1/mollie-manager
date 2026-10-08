@@ -24,6 +24,47 @@ Existing SMTP env remains required for app delivery:
 - `SMTP_USER`
 - `SMTP_PASSWORD`
 - `SMTP_FROM`
+- `ALERT_EMAIL_TO` (operator mailbox; currently intended: `info@ayalweb.com`)
+
+## Cron Issue Emails
+
+Authenticated cron runs send one consolidated issue summary to `ALERT_EMAIL_TO`
+when a tenant run aborts or a batch reports failed discovery, repair, invoice
+creation/verification, delivery, ambiguous recovery, or pending/exhausted
+activation retries. Healthy runs, empty checks, and successful repairs stay quiet.
+Existing entity-specific alerts are unchanged and may also email independently.
+
+The summary identifies tenant, mode, run ID, and affected stages without raw
+exception/provider payloads or customer details. Delivery is awaited and audited
+as `cron.issue_notification`. SMTP/audit failures are logged without replaying
+billing or recursively emailing. Every failing invocation can send a summary;
+manual reruns can therefore generate another email. There is no daily suppression.
+The summary uses one SMTP attempt with short connection, DNS, greeting and socket
+timeouts; it does not retry an uncertain SMTP acceptance through the shared
+sender's IPv6 fallback. SMTP acceptance and the delivery audit do not prove inbox
+receipt. `INVOICE_EMAIL_OVERRIDE_TO` continues to apply only to invoice delivery;
+it does not replace `ALERT_EMAIL_TO` for this summary.
+
+Tenant results and their batch audits include the same `runId`, `completedStages`
+and `failedStages`. An aborted stage may already have side effects: its zero
+counters are placeholders, not proof of zero invoices or emails. Aggregates
+retain completed stages, including concurrent siblings that finish after another
+stage fails. Later phases stop for that tenant, while other tenants continue.
+Partial failures return HTTP 200 with `status: partial` and an `issues` array;
+consumers must inspect the body/audits instead of treating HTTP 200 as a healthy
+run or automatically replaying billing. An empty tenant list is `status: ok`.
+For webhook/stale repair, `failedCount` is also included in `skippedCount` for
+compatibility; do not add both counters to calculate distinct targets.
+
+This is not whole-application monitoring: a cron that never starts, a hard runtime
+termination, or a total SMTP outage cannot reliably email through this path.
+Use an independent heartbeat/log monitor for those cases. Deployment and a safe
+test-mail delivery check are required before treating this as production-proven.
+See [the scoped cron release procedure](cron-reliability-release-2026-10-08.md).
+
+Google Workspace supports plus addressing: `info+kify@ayalweb.com` reaches the
+same inbox and can be filtered/labeled separately. Verify receipt before changing
+the production `ALERT_EMAIL_TO`; no additional mailbox is required.
 
 ## Protected Cron Endpoint
 
@@ -118,7 +159,9 @@ After each reconciliation, `/settings` now also shows the latest first-payment a
 - path: `/api/cron/recurring-invoices`
 - schedule: `0 3 * * *`
 
-That means the repo currently schedules the automation once daily at 03:00.
+That means the repo schedules the automation once daily at 03:00 UTC (05:00
+Europe/Amsterdam on 8 October 2026). Do not increase this full billing schedule
+for faster sync-only recovery.
 
 If you need a more frequent cadence, change `vercel.json` deliberately and keep this runbook aligned with that change.
 

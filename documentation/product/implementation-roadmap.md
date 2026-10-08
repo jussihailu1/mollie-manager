@@ -91,6 +91,19 @@ window provides recovery without a higher-frequency platform scheduler, and
 tenant/customer notifications remain tenant-scoped. Controlled test and live
 proof remain required.
 
+### Active Correctness Slice: Cron Reliability
+
+The bounded cron correctness slice under K7 is tracked in
+[`TEMP-billing-recovery-roadmap.md`, step 4](../operations/TEMP-billing-recovery-roadmap.md).
+It corrects Kify first-payment routing and empty/partial failure reporting, and
+adds consolidated operator notifications without replaying billing on alert
+failure. Local validation and release evidence are recorded in the
+[cron release procedure](../operations/cron-reliability-release-2026-10-08.md).
+Deployment, scheduled execution and inbox receipt are separate open gates.
+The next recovery task is a separate bounded Cloudflare sync-only path; the full
+billing cron stays daily. Independent monitoring and Mollie Connect ownership
+remain separate backlog items.
+
 ## Externally Blocked Milestone: Mollie Connect M6
 
 Mollie Connect M1 through M5 are complete under

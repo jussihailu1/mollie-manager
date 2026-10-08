@@ -41,7 +41,15 @@ export async function createInvoiceBatchWithDependencies(
   let skippedCount = 0;
 
   for (const candidate of candidates) {
-    const result = await dependencies.createInvoice(candidate.entityId);
+    let result: Awaited<ReturnType<InvoiceCreationBatchDependencies["createInvoice"]>>;
+    try {
+      result = await dependencies.createInvoice(candidate.entityId);
+    } catch {
+      // Issuers own claims and uncertain-outcome/manual-review state. Count the
+      // failed attempt without resetting it or retrying; retain earlier results.
+      failedCount += 1;
+      continue;
+    }
 
     if (result.status === "created") {
       createdCount += 1;

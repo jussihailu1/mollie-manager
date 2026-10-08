@@ -5,14 +5,19 @@ export async function recoverTargetsIndependently<T>(
 ) {
   let repairedCount = 0;
   let skippedCount = 0;
+  let failedCount = 0;
   for (const target of targets) {
     try {
       if (await repair(target) === "repaired") repairedCount++;
       else skippedCount++;
     } catch {
+      failedCount++;
+      // Keep failures in skippedCount for existing consumers; expose them separately too.
       skippedCount++;
-      await onFailure(target);
+      try { await onFailure(target); } catch {
+        console.error("Kify recovery failure audit unavailable; continuing remaining targets.");
+      }
     }
   }
-  return { repairedCount, skippedCount };
+  return { repairedCount, skippedCount, failedCount };
 }

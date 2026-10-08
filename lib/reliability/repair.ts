@@ -30,6 +30,7 @@ export type RepairTargetResult = {
 
 export type RepairBatchResult = {
   customersChecked: number;
+  failedCount: number;
   paymentsChecked: number;
   repairedCount: number;
   skippedCount: number;
@@ -560,10 +561,12 @@ export async function repairWebhookEventsBatch(input: {
 
   let repairedCount = 0;
   let skippedCount = 0;
+  let failedCount = 0;
 
   for (const candidate of candidates) {
     if (!candidate.resourceId) {
       skippedCount += 1;
+      failedCount += 1;
       continue;
     }
 
@@ -582,6 +585,7 @@ export async function repairWebhookEventsBatch(input: {
       });
       repairedCount += 1;
     } catch (error) {
+      failedCount += 1;
       const message = error instanceof Error ? error.message : "Webhook repair failed.";
       await updateWebhookEventStatus({
         errorMessage: message,
@@ -595,6 +599,7 @@ export async function repairWebhookEventsBatch(input: {
   }
 
   const result = {
+    failedCount,
     repairedCount,
     skippedCount,
     totalChecked: candidates.length,
@@ -607,7 +612,7 @@ export async function repairWebhookEventsBatch(input: {
       entityId: input.tenantId,
       entityType: "tenant_recurring_billing_cron",
       mode: input.mode,
-      outcome: repairedCount > 0 ? "success" : "failure",
+      outcome: failedCount > 0 ? "failure" : "success",
       summary: "Processed a bounded repair batch for failed Mollie webhook events.",
     },
     undefined,
@@ -664,7 +669,7 @@ export async function repairStaleRecordsBatch(input: {
 
   const repairedCustomerIds = new Set<string>();
 
-  const { repairedCount, skippedCount } = await recoverTargetsIndependently(candidates.slice(0, limit), async (candidate) => {
+  const { repairedCount, skippedCount, failedCount } = await recoverTargetsIndependently(candidates.slice(0, limit), async (candidate) => {
     if (candidate.kind === "customer") {
       const result = await repairCustomerTarget({
         actor,
@@ -720,6 +725,7 @@ export async function repairStaleRecordsBatch(input: {
 
   const batchResult: RepairBatchResult = {
     customersChecked: customerRows.length,
+    failedCount,
     paymentsChecked: paymentRows.length,
     repairedCount,
     skippedCount,
@@ -734,7 +740,7 @@ export async function repairStaleRecordsBatch(input: {
       entityId: input.tenantId,
       entityType: "tenant_recurring_billing_cron",
       mode: input.mode,
-      outcome: repairedCount > 0 ? "success" : "failure",
+      outcome: failedCount > 0 ? "failure" : "success",
       summary: "Processed a bounded repair batch for stale Mollie records.",
     },
     undefined,

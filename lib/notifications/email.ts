@@ -123,6 +123,31 @@ export async function sendPlainEmail(input: {
   }
 }
 
+// Cron summaries must not retry an uncertain SMTP acceptance or wait for the
+// shared transport's long defaults after billing has already completed.
+export async function sendOperatorEmailOnce(input: { subject: string; text: string }) {
+  const config = getNotificationConfig();
+  const transporter = nodemailer.createTransport({
+    auth: { pass: config.SMTP_PASSWORD, user: config.SMTP_USER },
+    host: config.SMTP_HOST,
+    port: config.SMTP_PORT,
+    secure: config.SMTP_PORT === 465,
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 10000,
+    dnsTimeout: 5000,
+  });
+  try {
+    await sendNotificationEmailWithTransport({
+      envelope: { from: config.SMTP_FROM, to: config.ALERT_EMAIL_TO },
+      message: input,
+      transport: transporter,
+    });
+  } finally {
+    transporter.close();
+  }
+}
+
 export async function sendEmailTo(input: {
   attachments?: Array<{
     content: Buffer;

@@ -106,14 +106,19 @@ The manual replacement helper belongs to the failed-attempt recovery safeguard. 
 
 Important: `scripts/recover-credited-eboekhouden-invoice.ts` only accepts owners in `invoice_failed` with a matching unverified upstream invoice identity. It does not implement historical correction of successfully recorded/sent invoices. Do not force those invoices into a failed state to reuse the command. The command records a credit note number but cannot independently prove that credit was issued.
 
-## 4. Finish cron reliability fixes — PENDING, separate commit
+## 4. Finish cron reliability fixes — LOCAL SLICE COMPLETE; RELEASE PENDING
 
-Already prepared locally: Kify first-payment routing bypasses the legacy provider adapter; empty repair batches no longer report failure; genuine/partial failures are counted; consolidated cron issue notifications use `ALERT_EMAIL_TO`. Previous chat reports saved configuration `info@ayalweb.com`, but production configuration and delivery need verification.
+This slice preserves the deployed KOR safeguards from `81ac2fe`. It routes Kify first payments through the Kify issuer, records empty recovery batches as successful no-ops, counts mixed failures, and sends a consolidated summary through `ALERT_EMAIL_TO`. Tenant results retain completed stages after a later failure and wait for in-flight siblings; failed/unfinished stage counts are not proof of no side effects. Notification/audit failures do not reset invoice or delivery state or request billing replay.
 
-- [ ] Review and test routing for an active Kify provider tenant, empty batches, partial failures and notification failures.
-- [ ] Keep notification failure from causing billing replay; verify recipient configuration without exposing secrets.
-- [ ] Commit independently, deploy when authorized and verify a scheduled run and issue-email behavior.
-- [ ] Keep independent monitoring as a separate roadmap item: a job cannot report its own failure to start.
+- [x] Review and test active Kify routing, legacy validation, empty batches, mixed results and notification failures using inert provider/DB/SMTP boundaries.
+- [x] Preserve tenant/mode scoping, claims, manual-review holds and KOR issuance/delivery safeguards. No tax, invoice or recipient configuration changes.
+- [x] Recheck production recipient settings read-only: `ALERT_EMAIL_TO` and `INVOICE_EMAIL_OVERRIDE_TO` both remain `info@ayalweb.com` on 8 October 2026. No email sent.
+- [x] Establish the clean parent baseline: `81ac2fe` has 470/471 tests passing; the sole failure is the customer lifecycle UI assertion.
+- [x] Isolate and validate the scoped commit `Fix cron reliability and isolate operator notifications`: 508/509 tests pass (same sole baseline failure), typecheck and production build pass, scoped lint has no errors. Full evidence and release gates are in [the cron release procedure](cron-reliability-release-2026-10-08.md); use Git history for the commit SHA.
+- [ ] Obtain approval to push the exact scoped commit; pushing master triggers Vercel deployment. Verify READY production SHA/configuration/health read-only.
+- [ ] Observe the next naturally scheduled execution; never invoke full production billing merely to test this patch.
+- [ ] Separately approve one synthetic operator summary with no billing calls; distinguish SMTP acceptance/audit from confirmed inbox receipt.
+- [ ] Keep independent missed-run monitoring and Mollie Connect platform/AYAL/tenant ownership as separate roadmap items.
 
 JHS retirement is removed from scope. Latest user update reports JHS cleanup complete: 380 JHS-only production records deleted after an encrypted backup, retained records across 33 tables unchanged, only Ayal Web visible. Backup location: `C:\Users\Jussi\Kify-Recovery\2026-10-08-jhs-cleanup`. This continuation has not reverified that operation. Fix the provider bug independently of JHS removal. Controlled live Kify-provider invoice proof (K7) and final documentation (K8) remain later milestones.
 

@@ -55,6 +55,7 @@ Statuses:
 | Payment and payment-link synchronization | complete | Provider state is re-fetched and persisted with explicit tenant context. |
 | Managed webhook processing | complete | Payment, subscription, and payment-link intake persists evidence, resolves tenant-local resources, and fails closed when unmanaged. |
 | Reconciliation and repair | complete | Protected tenant-aware sync, replay, targeted repair, and stale follow-up paths exist. |
+| Repair batch outcome reporting | complete | Empty batches and deliberate stale-target skips are successful no-ops; caught failures remain counted separately and mark the batch audit as failed even when other targets recover. Failure counts remain included in skipped totals for compatibility. |
 | Failed-payment correctness | complete | Failed, reversed, charged-back, mandate-problem, and unsafe-pending states are classified from reconciled Mollie truth. |
 | Failed-payment customer notification | complete | Claim-before-send persistence, bounded retry, audit-safe evidence, and operator alerts exist. |
 | Automated dunning or service consequences | missing | Pause, cancellation, fees, collection, and penalties remain manual by policy. |
@@ -68,6 +69,7 @@ Statuses:
 | --- | --- | --- |
 | Provider-neutral invoice ownership | complete | Stored invoices retain the provider that created them; provider switching affects new invoices only. |
 | First-payment and recurring invoice creation | complete | Provider adapters create invoices with tenant context and duplicate-prevention claims. |
+| Kify first-payment cron dispatch | complete | First-payment batches bypass legacy adapter setup for Kify and retain tenant-scoped Kify issuer validation; legacy providers still require their setup checks. Focused local regression coverage exists; deployed cron proof remains pending. |
 | e-Boekhouden invoicing | complete | Tenant credentials, relation links, invoice settings, creation, reconciliation, and documents exist. |
 | KOR and invoice verification | partial | Explicit tenant KOR/standard treatment, inclusive-price requests, per-invoice API identity/total/VAT checks, frozen delivery verification and duplicate safeguards are implemented. Provider PDFs are visually reviewed at setup and template/tax changes; routine delivery has no PDF text parser or byte-hash gate. Production rollout and historical corrections remain pending. |
 | Mollie Sales Invoices | partial | Adapter and readiness probe exist; live use still depends on Mollie Invoicing activation for each tenant organization. |
