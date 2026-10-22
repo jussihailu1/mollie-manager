@@ -195,6 +195,11 @@ delivery proof for the corrected subscriptions remains open. No issue 4 work.
 
 ## Remaining work and decisions
 
+Release authorization update: the user has now authorized commit/push to trigger
+the reviewed production release. Earlier no-deploy statements below are
+historical. See the [release checkpoint](security-release-2026-10-22.md) for
+target verification and deployment evidence; no billing or replay is authorized.
+
 | Item | Status / next step |
 | --- | --- |
 | Issue 2: independent monitoring | OPEN. External missed/late heartbeat, runtime and alert-delivery monitoring must work when Kify/SMTP is unavailable. See the main roadmap's monitoring acceptance criteria. |

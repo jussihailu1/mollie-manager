@@ -131,7 +131,10 @@ These are correctness and readiness follow-ups, not additional product milestone
   Exact IDs and evidence are in the current health handoff. The user subsequently
   authorized local documentation checkpoints and the issue 4 review below;
   push and deployment remain unauthorized.
-- **Dependency-security fixes validated locally; release not authorized.**
+- **Dependency-security fixes validated; production release authorized.**
+  User subsequently authorized commit/push to trigger the Git deployment.
+  See the [release checkpoint](../operations/security-release-2026-10-22.md)
+  for current release status; earlier no-deploy statements are historical.
   User authorized implementation and separate local dependency/UI commits.
   `3c263b9` updates Next.js/eslint-config-next to 16.4.2 and ip-address to 10.7.4.
   The separate UI/test changes resolve effect/state lint errors and restore
