@@ -195,16 +195,16 @@ delivery proof for the corrected subscriptions remains open. No issue 4 work.
 
 ## Remaining work and decisions
 
-Release authorization update: the user has now authorized commit/push to trigger
-the reviewed production release. Earlier no-deploy statements below are
-historical. See the [release checkpoint](security-release-2026-10-22.md) for
-target verification and deployment evidence; no billing or replay is authorized.
+Release update: authorized push deployed `e1f895c` to Kify; Vercel reports READY
+on the exact SHA. Ten read-only production checks pass, including database and
+platform health. Earlier no-deploy statements and unreleased statuses below are
+historical. See the [release evidence](security-release-2026-10-22.md).
 
 | Item | Status / next step |
 | --- | --- |
 | Issue 2: independent monitoring | OPEN. External missed/late heartbeat, runtime and alert-delivery monitoring must work when Kify/SMTP is unavailable. See the main roadmap's monitoring acceptance criteria. |
 | Issue 3: operator email proof | OPEN. Separately approve a bounded synthetic operator-only notification, with no billing/replay, then verify SMTP outcome, audit and actual inbox receipt. No test email is authorized by this documentation task. |
-| Issue 4: dependency-security release | FIXED AND VALIDATED LOCALLY; NOT RELEASED. Dependency commit `3c263b9` patches Next.js/eslint-config-next to 16.4.2 and ip-address to 10.7.4; UI/test fixes are a separate local commit. Clean install/build/typecheck/SMTP and 8 local auth/access checks pass; 518/518 tests, lint zero errors/warnings, production audit zero findings. Push/deployment remain prohibited. See [fixes and evidence](security-dependency-fixes-2026-10-22.md). |
+| Issue 4: dependency-security release | RELEASED as `e1f895c`, Vercel READY and production domain/SHA verified. Final local suite 528/528; lint/typecheck/build pass; production audit zero. Ten production GET checks pass, including authenticated database/platform health. See [release evidence](security-release-2026-10-22.md). |
 | Additional live payment-link destinations | REVIEW COMPLETE. All three are already-paid, single-use historical onboarding links. No new-payment repair needed; retained unchanged. Webhook URL updates are not documented for payment links. Evidence and historical-status limitation above. |
 | Validation debt | UI/test/lint debt resolved locally. Follow-up scoped esbuild override clears four moderate entries; full audit now retains nine development-only high entries, all from unpatched braces. 523/523 tests pass. No forced downgrades or rule suppression. See [development tooling review](dev-dependency-review-2026-10-22.md). Local checks do not prove real OAuth, external delivery or production behavior. |
 | Migration snapshot history | REPAIRED LOCALLY. Linked 0027–0029 snapshots and the existing tax-treatment check declaration now match current schema. Existing SQL/journal/snapshots unchanged; two generations produce no SQL. Offline guard rejects deliberate drift; full suite 528/528, lint/typecheck/build pass. No migration applied or deployment. See [repair evidence](migration-snapshot-repair-2026-10-22.md). |

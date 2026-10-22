@@ -1,7 +1,7 @@
 # Security release — 22 October 2026
 
-Status: user authorized commit/push to trigger the production Git deployment.
-Deployment and post-release verification are pending at this checkpoint.
+Status: RELEASED. User-authorized push deployed `e1f895c861f95b374293c44d6b908a5d8997dbc8`
+to production; deployment and read-only post-release checks passed.
 
 ## Scope and preflight
 
@@ -33,3 +33,34 @@ external SMTP/inbox delivery and independent monitoring remain separate checks.
 References: [snapshot validation](migration-snapshot-repair-2026-10-22.md),
 [dependency review](dev-dependency-review-2026-10-22.md),
 [UI/security validation](security-dependency-fixes-2026-10-22.md).
+
+## Result — 22 October, 23:37 Europe/Amsterdam
+
+- Pushed master from `1179c82` to `e1f895c`; independently verified the remote SHA.
+  Release checkpoint `e1f895c` contains documentation only above validated
+  application source `57b7bc2`.
+- Vercel production deployment `dpl_DukhWo1YHo2DZhhyQzwPabi5L6xa` is READY.
+  Domain lookup confirms `kify.app` and `www.kify.app` assigned to that deployment,
+  exact Git SHA and master branch, with no alias error. Hosted build reports
+  Next.js 16.4.2 / Turbopack; build-to-ready duration about 54 seconds.
+- Ten GET-only production checks passed: login render, sole Google OIDC provider,
+  CSRF response, anonymous session, three protected page/API/document redirects,
+  minimal public health, authenticated unscoped health and webhook GET 405.
+  Authenticated health reports database OK, platform readiness passed, live mode.
+  Health request ID: `fra1::iad1::kh844-1792705021155-25cbcaf872a3`.
+- Initial probe stopped after eight successful public/access checks because the
+  saved production environment file lacked a health credential. Reused the
+  existing local legacy cron credential in memory for the same Kify health route;
+  the server authenticated it and all ten checks passed. No credential was
+  printed, persisted in evidence, or changed. This confirms the legacy secret
+  is still accepted, not that external callers no longer need it.
+- Deployment-scoped runtime error/fatal log query returned no records in the
+  initial observation window. This is a limited observation, not proof of no errors.
+- No migration, billing/repair endpoint, invoice, webhook POST/replay, external
+  email or provider/account mutation was invoked. Real OAuth round-trip,
+  genuine webhook handling, external inbox delivery and independent monitoring
+  remain open. Nine development-only braces findings remain tracked.
+- Safe probe results and script are outside Git at
+  `C:\Users\Jussi\Kify-Recovery\2026-10-22-security-release`.
+  This post-release evidence is a separate local documentation checkpoint;
+  it is not pushed solely to trigger another identical application deployment.

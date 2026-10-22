@@ -131,8 +131,9 @@ These are correctness and readiness follow-ups, not additional product milestone
   Exact IDs and evidence are in the current health handoff. The user subsequently
   authorized local documentation checkpoints and the issue 4 review below;
   push and deployment remain unauthorized.
-- **Dependency-security fixes validated; production release authorized.**
-  User subsequently authorized commit/push to trigger the Git deployment.
+- **Dependency-security fixes released and production checks passed.**
+  Authorized push deployed `e1f895c` to Kify; Vercel READY, exact SHA/alias
+  verified. Ten production GET checks pass, including database/platform health.
   See the [release checkpoint](../operations/security-release-2026-10-22.md)
   for current release status; earlier no-deploy statements are historical.
   User authorized implementation and separate local dependency/UI commits.
@@ -145,19 +146,19 @@ These are correctness and readiness follow-ups, not additional product milestone
   changing Drizzle/shadcn/Next versions. Full suite: 523/523; lint: zero
   errors/warnings; production audit: zero findings. Full audit retains nine
   development-only high entries, all derived from unpatched braces. Original implementation
-  `4cb19ed` and these follow-ups remain undeployed; production is unchanged.
+  `4cb19ed` and these follow-ups are included in the verified production release.
   The app mailer uses an npm alias to keep it independent from NextAuth v5's
   unused optional email-login peer; Google OAuth stays on v5. Full development
   dependency findings remain separately documented. See the
   [22 October fixes and validation](../operations/security-dependency-fixes-2026-10-22.md)
   for validation, limitations and the remaining production release gate. Do not
   use `npm audit fix --force` or downgrade authentication to silence audit output.
-- **Migration snapshot debt repaired locally.** Added linked 0027–0029 snapshots
+- **Migration snapshot debt repaired and included in the release.** Added linked 0027–0029 snapshots
   and declared the tax-treatment check already present in SQL. Existing SQL,
   journal and snapshots are byte-for-byte unchanged. Two offline generations
   produce no SQL; the new `db:check-snapshots` guard rejects deliberate drift.
-  Full suite 528/528, lint/typecheck/build pass. No database operations or
-  deployment. See [repair evidence](../operations/migration-snapshot-repair-2026-10-22.md).
+  Full suite 528/528, lint/typecheck/build pass. No migration was applied.
+  See [repair evidence](../operations/migration-snapshot-repair-2026-10-22.md).
   The [development dependency review](../operations/dev-dependency-review-2026-10-22.md)
   retains override compatibility evidence and the separate remaining braces risk.
 - **Scheduled cron execution verified through 22 October.** All 15 daily
