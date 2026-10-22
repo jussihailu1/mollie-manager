@@ -151,11 +151,47 @@ of Mollie organizations, OAuth ownership, or invoice provider is included.
 - Separately inspected three locally managed live payment links. All are
   unarchived with no expiry: `pl_gjpWpseknZMYxFfhfUcBK` retains the dead Vercel
   hostname; `pl_cn5ShB2pA3zDDmbW78H3s` and `pl_kmyVff6ycdYKZFToPMiEx` retain
-  an old ngrok hostname. No query values were disclosed. These links are outside
-  the two-subscription mutation scope: review their intended use and any repair
-  separately. This does not claim an account-wide historical payment inventory.
+  an old ngrok hostname. No query values were disclosed. The later review below
+  confirms all three are already-paid, single-use historical links; unarchived
+  with no expiry did not establish availability for another payment. This does
+  not claim an account-wide historical payment inventory.
 - Issue 1's authorized mutation is complete. Genuine webhook receipt/processing
   remains an observation gate. Stop here; issue 4 requires the user's next request.
+
+### Payment-link follow-up — 22 October, 22:23 Europe/Amsterdam
+
+The user asked whether the three legacy payment-link destinations should also be
+fixed. Read-only provider GETs and fully paginated payment lists reverified the
+same Ayal Web tenant and profile ownership, and established:
+
+| Payment link | Reusable | Provider/local state | Paid at (UTC) |
+| --- | --- | --- | --- |
+| `pl_cn5ShB2pA3zDDmbW78H3s` | false | paid / paid | 10 April 2026 13:30:14 |
+| `pl_gjpWpseknZMYxFfhfUcBK` | false | paid / paid | 10 April 2026 14:45:18 |
+| `pl_kmyVff6ycdYKZFToPMiEx` | false | paid / paid | 27 April 2026 15:30:15 |
+
+Each has exactly one paid first payment and no additional payment-list pages.
+Mollie's [creation reference](https://docs.mollie.com/reference/create-payment-link)
+defines `reusable=false` as a single-payment link. These are consumed historical
+onboarding links, not reusable unpaid checkout links. The earlier warning that
+these specific links might still accept another payment was too broad.
+
+The current [update reference](https://docs.mollie.com/reference/update-payment-link)
+does not list `webhookUrl` as an update field; the installed SDK's update type
+also omits it. No undocumented PATCH was attempted. Decision: retain these paid
+historical objects unchanged, rather than recreate, archive, or modify them to
+address a new-checkout risk that the usage-state check did not substantiate.
+Their historical callback URLs remain stale; this review does not establish
+delivery of any later status changes on historical payments. Historical payment
+mutation/replay remains excluded. New app-created onboarding links already use
+Kify's configured URL, independently of these old links.
+
+All 33 application-table counts/fingerprints were identical across the review;
+zero provider mutations or checkout visits were made. Evidence is retained in
+the existing recovery directory as `payment-link-review.json` (sanitized) and
+`payment-link-review-state.dpapi` (encrypted full state). Close the additional
+payment-link repair item as **reviewed; no new-payment repair needed**. Genuine
+delivery proof for the corrected subscriptions remains open. No issue 4 work.
 
 ## Remaining work and decisions
 
@@ -164,7 +200,7 @@ of Mollie organizations, OAuth ownership, or invoice provider is included.
 | Issue 2: independent monitoring | OPEN. External missed/late heartbeat, runtime and alert-delivery monitoring must work when Kify/SMTP is unavailable. See the main roadmap's monitoring acceptance criteria. |
 | Issue 3: operator email proof | OPEN. Separately approve a bounded synthetic operator-only notification, with no billing/replay, then verify SMTP outcome, audit and actual inbox receipt. No test email is authorized by this documentation task. |
 | Issue 4: dependency-security release | OPEN. Local commit `4cb19ed` is not deployed. Refresh audit/tests/build/auth/SMTP checks and review introduced lint findings before any release. Existing 8 October evidence is historical, not a current vulnerability scan. See the security release document. |
-| Additional live payment-link destinations | SEPARATE REVIEW. Three unarchived, non-expiring managed links retain legacy destinations (one dead Vercel, two ngrok); IDs and evidence above. Left unchanged under the two-subscription repair scope. |
+| Additional live payment-link destinations | REVIEW COMPLETE. All three are already-paid, single-use historical onboarding links. No new-payment repair needed; retained unchanged. Webhook URL updates are not documented for payment links. Evidence and historical-status limitation above. |
 | Validation debt | OPEN. Security update introduced full-lint errors in existing React effect code; one pre-existing customer lifecycle UI test fails. Keep these distinct from passing focused checks. Development-only dependency findings also need reassessment; no force-upgrades/downgrades to hide findings. |
 | Actual invoice issuance/delivery | Next naturally due live invoice is 27 October. KOR live test was waived, not passed; no invoice created since the KOR release yet. Observe ordinary issuance/API totals and intended operator delivery without manufacturing early invoices. |
 | Faster Cloudflare recovery | OPTIONAL, not implemented. Fix webhooks first, then decide whether daily fallback latency is acceptable. If needed, initial cadence is every two hours, sync-only; never increase full billing frequency. |
@@ -179,6 +215,13 @@ Other product backlog remains in `../product/implementation-roadmap.md`; this
 handoff does not promote every deferred feature into an immediate fix.
 
 ## Decision log and handoff boundaries
+
+- 22 October, 22:23: user asked to address the legacy payment links. Current
+  provider usage-state inspection showed all three already paid and non-reusable.
+  Corrected the prior overly broad risk statement and closed the new-payment
+  repair follow-up without production changes. Retain historical records; no
+  undocumented webhook-field update, recreation, archival or replay. Record this
+  clarification in a separate local documentation checkpoint; no push/deployment.
 
 - 22 October, follow-up: user explicitly authorized a local documentation commit
   between issue 1 and any later work. This supersedes the earlier no-commit

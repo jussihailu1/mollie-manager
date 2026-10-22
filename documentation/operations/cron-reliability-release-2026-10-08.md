@@ -151,7 +151,9 @@ Historical scheduling record below; completion of that automation was not checke
 The independent 22 October read-only inspection now closes the scheduled-run
 evidence gate. The subsequent bounded repair corrected both subscription URLs;
 operator email proof and genuine webhook receipt/processing remain open.
-See the current health handoff for repair evidence and separate payment-link findings.
+See the current health handoff for repair evidence. Subsequent payment-link review
+confirmed the three flagged links are already-paid, single-use historical records;
+their new-payment repair follow-up is closed without production changes.
 
 At the user's request, a one-time Codex verification is scheduled for 9 October
 2026 at 06:15 Europe/Amsterdam, after the daily cron's expected execution window.

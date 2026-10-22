@@ -124,7 +124,10 @@ These are correctness and readiness follow-ups, not additional product milestone
   retained outside Git. Observe the next genuine tenant-scoped webhook and
   successful processing; no replay, billing, email, or deployment test.
   Three managed live payment links also retain legacy destinations (one Vercel,
-  two ngrok); they were left untouched and need a separate scope decision.
+  two ngrok). Follow-up provider inspection confirmed all three were already paid
+  in April and are single-use; retain these historical records unchanged. Their
+  new-payment repair follow-up is closed; payment-link webhook URL updates are
+  not documented by Mollie. New onboarding links already use the configured URL.
   Exact IDs and evidence are in the current health handoff. Issue 4 starts only
   when the user separately asks. The user subsequently authorized a local
   documentation checkpoint commit; push and deployment remain unauthorized.
