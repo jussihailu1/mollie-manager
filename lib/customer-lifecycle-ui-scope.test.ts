@@ -9,8 +9,10 @@ describe("customer lifecycle UI surface", () => {
   it("derives lifecycle state in the customer UI without manual override fields", () => {
     assert.match(drawerSource, /deriveCustomerLifecycleState/);
     assert.match(drawerSource, /Lifecycle/);
-    assert.match(drawerSource, /lifecycle\.summary/);
-    assert.match(drawerSource, /lifecycle\.reason/);
+    assert.match(drawerSource, /const lifecycle = getCustomerLifecycleState\(customer\)/);
+    assert.match(drawerSource, /<section aria-label="Lifecycle"/);
+    assert.match(drawerSource, /<p[^>]*>\{lifecycle\.summary\}<\/p>/);
+    assert.match(drawerSource, /<p[^>]*>\{formatLabel\(lifecycle\.reason\)\}<\/p>/);
     assert.doesNotMatch(drawerSource, /manual.*lifecycle/i);
     assert.doesNotMatch(drawerSource, /override.*lifecycle/i);
   });

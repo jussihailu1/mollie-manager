@@ -36,7 +36,8 @@ describe("customer invoice links surface", () => {
     const source = readFileSync(resolve("components/customer-flow-dialogs.tsx"), "utf8");
 
     assert.match(source, /CustomerInvoiceLinks/);
-    assert.match(source, /\/api\/customers\/\$\{encodeURIComponent\(resolvedCustomerId\)\}\/invoices/);
+    assert.match(source, /"\/api\/customers\/" \+ encodeURIComponent\(currentCustomerId\)/);
+    assert.match(source, /useJsonResource<CustomerInvoiceLinks>\([\s\S]*?customerUrl \? customerUrl \+ "\/invoices" : null/);
     assert.match(source, /No trusted PDF link/);
     assert.match(source, /Download/);
   });

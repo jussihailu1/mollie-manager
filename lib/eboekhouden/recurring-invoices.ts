@@ -30,8 +30,6 @@ import {
 import {
   type RecurringInvoiceActor,
   claimScheduleForInvoice,
-  storeRecurringInvoiceCreationFailure,
-  storeRecurringInvoiceCreationSuccess,
 } from "@/lib/eboekhouden/recurring-invoice-persistence";
 import { createEboekhoudenInvoiceForSchedule } from "@/lib/eboekhouden/recurring-invoice-workflow";
 import {

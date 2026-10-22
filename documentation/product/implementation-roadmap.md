@@ -131,20 +131,20 @@ These are correctness and readiness follow-ups, not additional product milestone
   Exact IDs and evidence are in the current health handoff. The user subsequently
   authorized local documentation checkpoints and the issue 4 review below;
   push and deployment remain unauthorized.
-- **Dependency-security review complete; release blocked.** Local implementation
-  `4cb19ed` remains undeployed. The 22 October production audit now reports one
-  critical Next.js package entry covering three advisories published after the
-  old validation. Upgrade Next.js and eslint-config-next from 16.4.0 to 16.4.2
-  together; refresh development-only ip-address 10.7.3 to patched 10.7.4.
-  Full audit: 15 entries (1 critical, 9 high, 5 moderate). No versions changed
-  during this review. Clean install, build, typecheck, loopback SMTP and eight
-  local auth/access checks pass. Full suite remains 510/511; full lint has
-  10 errors and 11 warnings. Resolve the effect/state lint errors and existing
-  lifecycle UI/test mismatch before claiming clean validation.
+- **Dependency-security fixes validated locally; release not authorized.**
+  User authorized implementation and separate local dependency/UI commits.
+  `3c263b9` updates Next.js/eslint-config-next to 16.4.2 and ip-address to 10.7.4.
+  The separate UI/test changes resolve effect/state lint errors and restore
+  lifecycle explanations, with cancellation and repair-throttle coverage.
+  Clean install, build, typecheck, loopback SMTP and eight local auth/access
+  checks pass. Full suite: 518/518; lint: zero errors/warnings; production audit:
+  zero findings. Full audit retains 13 development-only entries (9 high,
+  4 moderate) in the braces and drizzle-kit loader chains. Original implementation
+  `4cb19ed` and these follow-ups remain undeployed; production is unchanged.
   The app mailer uses an npm alias to keep it independent from NextAuth v5's
   unused optional email-login peer; Google OAuth stays on v5. Full development
   dependency findings remain separately documented. See the
-  [22 October security review](../operations/security-dependency-review-2026-10-22.md)
+  [22 October fixes and validation](../operations/security-dependency-fixes-2026-10-22.md)
   for validation, limitations and the remaining production release gate. Do not
   use `npm audit fix --force` or downgrade authentication to silence audit output.
 - **Scheduled cron execution verified through 22 October.** All 15 daily

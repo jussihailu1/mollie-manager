@@ -17,7 +17,6 @@ import {
   Phone,
   Plus,
   LoaderCircle,
-  Repeat,
   RotateCcw,
   Search,
   Share2,
@@ -69,7 +68,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useJsonResource } from "@/lib/use-async-resource";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1105,6 +1104,7 @@ export function CreateCustomerDialog({
   onOpenChange: (open: boolean) => void;
 }>) {
   const pathname = usePathname();
+  const router = useRouter();
   const [step, setStep] = useState<"source" | "scratch" | "import">("source");
   const [selectedRelation, setSelectedRelation] =
     useState<EboekhoudenRelationDetail | null>(null);
@@ -1150,7 +1150,7 @@ export function CreateCustomerDialog({
                 if (hasEboekhoudenConnection) {
                   setStep("import");
                 } else {
-                  window.location.assign("/settings#eboekhouden-connection");
+                  router.push("/settings#eboekhouden-connection");
                 }
               }}
               className="flex flex-col items-center gap-3 rounded-lg border-2 border-border p-6 transition-colors hover:border-primary hover:bg-accent"
@@ -1259,23 +1259,30 @@ export function LinkEboekhoudenRelationDialog({
   );
 }
 
-export function CreatePaymentLinkDialog({
-  customer,
-  customers,
-  initialView = "create",
-  open,
-  onOpenChange,
-  onConsentDeleted,
-}: Readonly<{
+type CreatePaymentLinkDialogProps = Readonly<{
   customer: CustomerFlowRecord | null;
   customers: CustomerFlowRecord[];
   initialView?: "create" | "edit" | "share";
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConsentDeleted?: () => void;
-}>) {
+}>;
+
+export function CreatePaymentLinkDialog(props: CreatePaymentLinkDialogProps) {
+  if (!props.open) return null;
+  return <CreatePaymentLinkDialogSession key={`${props.customer?.id ?? "select"}:${props.initialView ?? "create"}`} {...props} />;
+}
+
+function CreatePaymentLinkDialogSession({
+  customer,
+  customers,
+  initialView = "create",
+  open,
+  onOpenChange,
+  onConsentDeleted,
+}: CreatePaymentLinkDialogProps) {
   const router = useRouter();
-  const [step, setStep] = useState<"select_customer" | "payment_details" | "share">(
+  const [requestedStep, setStep] = useState<"select_customer" | "payment_details" | "share">(
     initialView === "share" ? "share" : customer ? "payment_details" : "select_customer",
   );
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(customer?.id ?? null);
@@ -1295,9 +1302,6 @@ export function CreatePaymentLinkDialog({
     "open_ended" | "fixed_term"
   >("open_ended");
   const [totalPayments, setTotalPayments] = useState("12");
-  const [consentLinkUrl, setConsentLinkUrl] = useState<string | null>(null);
-  const [consentLinkError, setConsentLinkError] = useState<string | null>(null);
-  const [isConsentLinkLoading, setIsConsentLinkLoading] = useState(initialView === "share");
   const isEditing = initialView === "edit";
   const [isEditPlanLoading, setIsEditPlanLoading] = useState(isEditing);
   const [editPlanError, setEditPlanError] = useState<string | null>(null);
@@ -1365,76 +1369,37 @@ export function CreatePaymentLinkDialog({
     );
   }, [customers, searchQuery]);
 
+  const step = createPaymentState?.consentLinkUrl ? "share" : requestedStep;
+  const resolvedCustomerId = selectedCustomer?.id ?? null;
+  const consentResource = useJsonResource<{ latestConsentUrl?: string | null }>(
+    step === "share" && !createPaymentState?.consentLinkUrl && resolvedCustomerId
+      ? "/api/customer-consent-link?customerId=" + encodeURIComponent(resolvedCustomerId)
+      : null,
+    "Could not load the consent link.",
+  );
+  const consentLinkUrl = createPaymentState?.consentLinkUrl ?? consentResource.data?.latestConsentUrl ?? null;
+  const isConsentLinkLoading = consentResource.loading;
+  const consentLinkError = consentResource.error ??
+    (consentResource.data && !consentLinkUrl ? "Could not load the consent link." : null);
+
   useEffect(() => {
-    if (!createPaymentState?.consentLinkUrl) {
+    if (createPaymentState?.consentLinkUrl) router.refresh();
+  }, [createPaymentState?.consentLinkUrl, router]);
+
+  useEffect(() => {
+    if (!open || !isEditing || !resolvedCustomerId) {
       return;
     }
 
-    setConsentLinkUrl(createPaymentState.consentLinkUrl);
-    setConsentLinkError(null);
-    setStep("share");
-    router.refresh();
-  }, [createPaymentState, router]);
-
-  useEffect(() => {
-    if (!open || step !== "share" || consentLinkUrl || !selectedCustomer) {
-      return;
-    }
-
-    const customerId = selectedCustomer.id;
+    const customerId = resolvedCustomerId;
     let active = true;
-    setIsConsentLinkLoading(true);
-    setConsentLinkError(null);
-
-    async function loadConsentLink() {
-      try {
-        const url = new URL("/api/customer-consent-link", window.location.origin);
-        url.searchParams.set("customerId", customerId);
-        const response = await fetch(url.toString(), { cache: "no-store" });
-        const payload = (await response.json().catch(() => null)) as
-          | { error?: string; latestConsentUrl?: string | null }
-          | null;
-
-        if (!response.ok || !payload?.latestConsentUrl) {
-          throw new Error(payload?.error ?? "Could not load the consent link.");
-        }
-
-        if (active) {
-          setConsentLinkUrl(payload.latestConsentUrl);
-        }
-      } catch (error) {
-        if (active) {
-          setConsentLinkError(error instanceof Error ? error.message : "Could not load the consent link.");
-        }
-      } finally {
-        if (active) {
-          setIsConsentLinkLoading(false);
-        }
-      }
-    }
-
-    loadConsentLink();
-
-    return () => {
-      active = false;
-    };
-  }, [consentLinkUrl, open, selectedCustomer, step]);
-
-  useEffect(() => {
-    if (!open || !isEditing || !selectedCustomer) {
-      return;
-    }
-
-    const customerId = selectedCustomer.id;
-    let active = true;
-    setIsEditPlanLoading(true);
-    setEditPlanError(null);
+    const controller = new AbortController();
 
     async function loadPendingConsentPlan() {
       try {
         const url = new URL("/api/customer-consent-link", window.location.origin);
         url.searchParams.set("customerId", customerId);
-        const response = await fetch(url.toString(), { cache: "no-store" });
+        const response = await fetch(url.toString(), { cache: "no-store", signal: controller.signal });
         const payload = (await response.json().catch(() => null)) as {
           error?: string;
           pendingConsentLink?: {
@@ -1490,8 +1455,9 @@ export function CreatePaymentLinkDialog({
 
     return () => {
       active = false;
+      controller.abort();
     };
-  }, [isEditing, open, selectedCustomer]);
+  }, [isEditing, open, resolvedCustomerId]);
 
   useEffect(() => {
     if (!deleteConsentState?.deleted) {
@@ -1558,6 +1524,11 @@ export function CreatePaymentLinkDialog({
                       key={item.id}
                       type="button"
                       onClick={() => {
+                        if (isEditing && item.id !== selectedCustomerId) {
+                          setIsEditPlanLoading(true);
+                          setEditPlanError(null);
+                          setOriginalEditPlan(null);
+                        }
                         setSelectedCustomerId(item.id);
                         setStep("payment_details");
                       }}
@@ -2025,19 +1996,7 @@ export function RecordCancellationRequestDialog({
   );
 }
 
-export function CustomerDrawer({
-  customer,
-  open,
-  onOpenChange,
-  onOpenCreatePayment,
-  onOpenEditConsentLink,
-  onOpenShareConsentLink,
-  onOpenConfirmPayment,
-  onOpenCreateSubscription,
-  onOpenRecordCancellationRequest,
-  onOpenArchiveCustomer,
-  onOpenRestoreCustomer,
-}: Readonly<{
+type CustomerDrawerProps = Readonly<{
   customer: CustomerFlowRecord | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -2049,27 +2008,33 @@ export function CustomerDrawer({
   onOpenRecordCancellationRequest: (customer: CustomerFlowRecord) => void;
   onOpenArchiveCustomer: (customer: CustomerFlowRecord) => void;
   onOpenRestoreCustomer: (customer: CustomerFlowRecord) => void;
-}>) {
+}>;
+
+export function CustomerDrawer(props: CustomerDrawerProps) {
+  if (!props.open || !props.customer) return null;
+  return <CustomerDrawerSession key={props.customer.id} {...props} />;
+}
+
+function CustomerDrawerSession({
+  customer,
+  open,
+  onOpenChange,
+  onOpenCreatePayment,
+  onOpenEditConsentLink,
+  onOpenShareConsentLink,
+  onOpenConfirmPayment,
+  onOpenRecordCancellationRequest,
+  onOpenArchiveCustomer,
+  onOpenRestoreCustomer,
+}: CustomerDrawerProps) {
   const router = useRouter();
-  const [billingHistory, setBillingHistory] = useState<CustomerBillingHistory | null>(null);
-  const [billingHistoryError, setBillingHistoryError] = useState<string | null>(null);
-  const [isBillingHistoryLoading, setIsBillingHistoryLoading] = useState(false);
-  const [activityTimeline, setActivityTimeline] = useState<CustomerActivityTimeline | null>(null);
-  const [activityTimelineError, setActivityTimelineError] = useState<string | null>(null);
-  const [isActivityTimelineLoading, setIsActivityTimelineLoading] = useState(false);
   const [activityTimelineRefreshKey, setActivityTimelineRefreshKey] = useState(0);
   const [noteBody, setNoteBody] = useState("");
   const [noteError, setNoteError] = useState<string | null>(null);
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [isNoteComposerOpen, setIsNoteComposerOpen] = useState(false);
-  const [invoiceLinks, setInvoiceLinks] = useState<CustomerInvoiceLinks | null>(null);
-  const [invoiceLinksError, setInvoiceLinksError] = useState<string | null>(null);
-  const [isInvoiceLinksLoading, setIsInvoiceLinksLoading] = useState(false);
   const [resendingInvoiceKey, setResendingInvoiceKey] = useState<string | null>(null);
   const [invoiceResendError, setInvoiceResendError] = useState<string | null>(null);
-  const [invoiceProfile, setInvoiceProfile] = useState<CustomerInvoiceProfile | null>(null);
-  const [invoiceProfileError, setInvoiceProfileError] = useState<string | null>(null);
-  const [isInvoiceProfileLoading, setIsInvoiceProfileLoading] = useState(false);
   const [isInvoiceProfileOpen, setIsInvoiceProfileOpen] = useState(false);
   const [invoiceProfileRefreshKey, setInvoiceProfileRefreshKey] = useState(0);
   const currentCustomerId = customer?.id ?? null;
@@ -2077,241 +2042,26 @@ export function CustomerDrawer({
     customer?.latestPaymentId || customer?.latestSubscriptionId || customer?.latestFirstPaymentLinkStatus,
   );
 
-  useEffect(() => {
-    const customerId = currentCustomerId;
-
-    if (!open || !customerId) {
-      setInvoiceProfile(null);
-      setInvoiceProfileError(null);
-      setIsInvoiceProfileLoading(false);
-      return;
-    }
-
-    let active = true;
-    const resolvedCustomerId = customerId;
-    setInvoiceProfile(null);
-    setInvoiceProfileError(null);
-    setIsInvoiceProfileLoading(true);
-
-    async function loadInvoiceProfile() {
-      try {
-        const response = await fetch(
-          `/api/customers/${encodeURIComponent(resolvedCustomerId)}/invoice-profile`,
-          { cache: "no-store" },
-        );
-        const payload = (await response.json().catch(() => null)) as
-          | { profile?: CustomerInvoiceProfile | null }
-          | null;
-
-        if (!response.ok) {
-          throw new Error("Could not load the invoice profile.");
-        }
-
-        if (active) {
-          setInvoiceProfile(payload?.profile ?? null);
-        }
-      } catch (error) {
-        if (active) {
-          setInvoiceProfileError(
-            error instanceof Error ? error.message : "Could not load the invoice profile.",
-          );
-        }
-      } finally {
-        if (active) {
-          setIsInvoiceProfileLoading(false);
-        }
-      }
-    }
-
-    loadInvoiceProfile();
-
-    return () => {
-      active = false;
-    };
-  }, [currentCustomerId, invoiceProfileRefreshKey, open]);
-
-  useEffect(() => {
-    const customerId = currentCustomerId;
-
-    if (!open || !customerId || !hasBillingHistoryToLoad) {
-      setBillingHistory(null);
-      setBillingHistoryError(null);
-      setIsBillingHistoryLoading(false);
-      return;
-    }
-
-    let active = true;
-    const resolvedCustomerId = customerId;
-    setBillingHistory(null);
-    setBillingHistoryError(null);
-    setIsBillingHistoryLoading(true);
-
-    async function loadBillingHistory() {
-      try {
-        const response = await fetch(
-          `/api/customers/${encodeURIComponent(resolvedCustomerId)}/billing-history`,
-          {
-            cache: "no-store",
-          },
-        );
-        const payload = (await response.json().catch(() => null)) as
-          | (CustomerBillingHistory & { error?: string })
-          | null;
-
-        if (!response.ok) {
-          throw new Error(
-            payload && typeof payload.error === "string"
-              ? payload.error
-              : "Failed to load customer billing history.",
-          );
-        }
-
-        if (active) {
-          setBillingHistory(payload);
-        }
-      } catch (historyError) {
-        if (active) {
-          setBillingHistoryError(
-            historyError instanceof Error
-              ? historyError.message
-              : "Failed to load customer billing history.",
-          );
-        }
-      } finally {
-        if (active) {
-          setIsBillingHistoryLoading(false);
-        }
-      }
-    }
-
-    loadBillingHistory();
-
-    return () => {
-      active = false;
-    };
-  }, [currentCustomerId, open]);
-
-  useEffect(() => {
-    const customerId = currentCustomerId;
-
-    if (!open || !customerId || !hasBillingHistoryToLoad) {
-      setActivityTimeline(null);
-      setActivityTimelineError(null);
-      setIsActivityTimelineLoading(false);
-      return;
-    }
-
-    let active = true;
-    const resolvedCustomerId = customerId;
-    setActivityTimeline(null);
-    setActivityTimelineError(null);
-    setIsActivityTimelineLoading(true);
-
-    async function loadActivityTimeline() {
-      try {
-        const response = await fetch(
-          `/api/customers/${encodeURIComponent(resolvedCustomerId)}/activity`,
-          {
-            cache: "no-store",
-          },
-        );
-        const payload = (await response.json().catch(() => null)) as
-          | (CustomerActivityTimeline & { error?: string })
-          | null;
-
-        if (!response.ok) {
-          throw new Error(
-            payload && typeof payload.error === "string"
-              ? payload.error
-              : "Failed to load customer activity.",
-          );
-        }
-
-        if (active) {
-          setActivityTimeline(payload);
-        }
-      } catch (timelineError) {
-        if (active) {
-          setActivityTimelineError(
-            timelineError instanceof Error
-              ? timelineError.message
-              : "Failed to load customer activity.",
-          );
-        }
-      } finally {
-        if (active) {
-          setIsActivityTimelineLoading(false);
-        }
-      }
-    }
-
-    loadActivityTimeline();
-
-    return () => {
-      active = false;
-    };
-  }, [activityTimelineRefreshKey, currentCustomerId, hasBillingHistoryToLoad, open]);
-
-  useEffect(() => {
-    const customerId = currentCustomerId;
-
-    if (!open || !customerId) {
-      setInvoiceLinks(null);
-      setInvoiceLinksError(null);
-      setIsInvoiceLinksLoading(false);
-      return;
-    }
-
-    let active = true;
-    const resolvedCustomerId = customerId;
-    setInvoiceLinks(null);
-    setInvoiceLinksError(null);
-    setIsInvoiceLinksLoading(true);
-
-    async function loadInvoiceLinks() {
-      try {
-        const response = await fetch(
-          `/api/customers/${encodeURIComponent(resolvedCustomerId)}/invoices`,
-          {
-            cache: "no-store",
-          },
-        );
-        const payload = (await response.json().catch(() => null)) as
-          | (CustomerInvoiceLinks & { error?: string })
-          | null;
-
-        if (!response.ok) {
-          throw new Error(
-            payload && typeof payload.error === "string"
-              ? payload.error
-              : "Failed to load customer invoices.",
-          );
-        }
-
-        if (active) {
-          setInvoiceLinks(payload);
-        }
-      } catch (invoiceError) {
-        if (active) {
-          setInvoiceLinksError(
-            invoiceError instanceof Error
-              ? invoiceError.message
-              : "Failed to load customer invoices.",
-          );
-        }
-      } finally {
-        if (active) {
-          setIsInvoiceLinksLoading(false);
-        }
-      }
-    }
-
-    loadInvoiceLinks();
-
-    return () => {
-      active = false;
-    };
-  }, [currentCustomerId, open]);
+  const customerUrl = currentCustomerId ? "/api/customers/" + encodeURIComponent(currentCustomerId) : null;
+  const profileResource = useJsonResource<{ profile?: CustomerInvoiceProfile | null }>(
+    customerUrl ? customerUrl + "/invoice-profile" : null,
+    "Could not load the invoice profile.", invoiceProfileRefreshKey,
+  );
+  const invoiceProfile = profileResource.data?.profile ?? null;
+  const invoiceProfileError = profileResource.error;
+  const isInvoiceProfileLoading = profileResource.loading;
+  const { data: billingHistory, error: billingHistoryError, loading: isBillingHistoryLoading } = useJsonResource<CustomerBillingHistory>(
+    customerUrl && hasBillingHistoryToLoad ? customerUrl + "/billing-history" : null,
+    "Failed to load customer billing history.",
+  );
+  const { data: activityTimeline, error: activityTimelineError, loading: isActivityTimelineLoading } = useJsonResource<CustomerActivityTimeline>(
+    customerUrl && hasBillingHistoryToLoad ? customerUrl + "/activity" : null,
+    "Failed to load customer activity.", activityTimelineRefreshKey,
+  );
+  const { data: invoiceLinks, error: invoiceLinksError, loading: isInvoiceLinksLoading } = useJsonResource<CustomerInvoiceLinks>(
+    customerUrl ? customerUrl + "/invoices" : null,
+    "Failed to load customer invoices.",
+  );
 
   if (!customer) {
     return null;
@@ -2422,6 +2172,7 @@ export function CustomerDrawer({
     }
   }
 
+  const lifecycle = getCustomerLifecycleState(customer);
   const stage = getCustomerStage(customer);
   const isArchived = Boolean(customer.archivedAt);
   const invoiceProfileReady = Boolean(invoiceProfile) && !invoiceProfileError;
@@ -2583,6 +2334,11 @@ export function CustomerDrawer({
         </SheetHeader>
 
         <div className="space-y-8">
+          <section aria-label="Lifecycle" className="space-y-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Lifecycle</h3>
+            <p className="text-sm">{lifecycle.summary}</p>
+            <p className="text-sm text-muted-foreground">{formatLabel(lifecycle.reason)}</p>
+          </section>
           {workflowStatus}
 
           <Separator />

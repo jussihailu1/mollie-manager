@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
@@ -31,7 +31,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import {
-  REPAIR_RETRY_AFTER_MS,
   REPAIR_STALE_AFTER_MS,
   isOlderThan,
 } from "@/lib/freshness";
@@ -39,6 +38,8 @@ import { formatCurrency, formatDateTime, formatLabel } from "@/lib/format";
 import { buildDrawerPath } from "@/lib/dashboard-drawer-route";
 import type { PaymentDrawerData } from "@/lib/payment-details";
 import { cn } from "@/lib/utils";
+import { useAsyncResource, useJsonResource } from "@/lib/use-async-resource";
+import { repairPayment } from "@/lib/payment-repair-request";
 
 type PaymentRecord = {
   customerBusinessName: string;
@@ -181,10 +182,6 @@ function Section({
   );
 }
 
-function getRepairStorageKey(payment: PaymentRecord, fingerprint: string) {
-  return `repair:payment:${payment.id}:${fingerprint}`;
-}
-
 function formatInvoiceTriggerKind(
   value: PaymentDrawerData["invoice"]["triggerKind"],
 ) {
@@ -246,165 +243,50 @@ function shouldAutoRepairPayment(
   return details?.invoiceState === "invoice_failed";
 }
 
-export function PaymentDrawer({
-  onOpenChange,
-  open,
-  payment,
-}: Readonly<{
+type PaymentDrawerProps = Readonly<{
   onOpenChange: (open: boolean) => void;
   open: boolean;
   payment: PaymentRecord | null;
-}>) {
+}>;
+
+export function PaymentDrawer(props: PaymentDrawerProps) {
+  if (!props.open || !props.payment) return null;
+  return <PaymentDrawerSession key={props.payment.id} {...props} />;
+}
+
+function PaymentDrawerSession({
+  onOpenChange,
+  open,
+  payment,
+}: PaymentDrawerProps) {
   const router = useRouter();
-  const [details, setDetails] = useState<PaymentDrawerData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [repairError, setRepairError] = useState<string | null>(null);
-  const [isRepairing, setIsRepairing] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const [showMore, setShowMore] = useState(false);
-
+  const paymentId = payment?.id ?? null;
+  const lastSyncedAt = payment?.lastSyncedAt ?? null;
+  const molliePaymentId = payment?.molliePaymentId ?? null;
+  const params = new URLSearchParams();
+  if (paymentId) params.set("paymentId", paymentId);
+  if (molliePaymentId) params.set("molliePaymentId", molliePaymentId);
+  // A refreshed server payment snapshot also invalidates invoice details, which
+  // can change without advancing the provider's lastSyncedAt timestamp.
+  const { data: details, error, loading } = useJsonResource<PaymentDrawerData>(
+    paymentId ? "/api/payments/mollie?" + params.toString() : null,
+    "Failed to load payment details.", payment,
+  );
+  // Resolve details first so unknown -> invoice_failed cannot submit two repairs.
+  const needsRepair = !loading && !!payment && shouldAutoRepairPayment(payment, details);
+  const fingerprint = (lastSyncedAt ?? "never") + ":" + (details?.invoiceState ?? "unknown");
+  const loadRepair = useCallback(
+    () => repairPayment(paymentId!, fingerprint),
+    [paymentId, fingerprint],
+  );
+  const { data: repairResult, error: repairError, loading: isRepairing } = useAsyncResource(
+    needsRepair ? loadRepair : null,
+  );
   useEffect(() => {
-    const currentPayment = payment;
-
-    if (!open || !currentPayment) {
-      return;
-    }
-
-    const paymentId = currentPayment.id;
-
-    setShowMore(false);
-    setIsInvoiceDialogOpen(false);
-
-    let active = true;
-    const params = new URLSearchParams();
-    params.set("paymentId", paymentId);
-
-    if (currentPayment.molliePaymentId) {
-      params.set("molliePaymentId", currentPayment.molliePaymentId);
-    }
-
-    async function load() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const response = await fetch(`/api/payments/mollie?${params.toString()}`, {
-          cache: "no-store",
-        });
-        const payload = (await response.json().catch(() => null)) as
-          | PaymentDrawerData
-          | { error?: string }
-          | null;
-
-        if (!response.ok) {
-          throw new Error(
-            payload && "error" in payload && typeof payload.error === "string"
-              ? payload.error
-              : "Failed to load payment details.",
-          );
-        }
-
-        if (active) {
-          setDetails(payload as PaymentDrawerData);
-        }
-      } catch (fetchError) {
-        if (active) {
-          setDetails(null);
-          setError(
-            fetchError instanceof Error
-              ? fetchError.message
-              : "Failed to load payment details.",
-          );
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    load();
-
-    return () => {
-      active = false;
-    };
-  }, [open, payment]);
-
-  useEffect(() => {
-    const currentPayment = payment;
-
-    if (!open || !currentPayment || !shouldAutoRepairPayment(currentPayment, details)) {
-      return;
-    }
-
-    const paymentId = currentPayment.id;
-    const fingerprint = `${currentPayment.lastSyncedAt ?? "never"}:${details?.invoiceState ?? "unknown"}`;
-    const storageKey = getRepairStorageKey(currentPayment, fingerprint);
-    const lastAttempt = Number(window.localStorage.getItem(storageKey) ?? "0");
-
-    if (Number.isFinite(lastAttempt) && Date.now() - lastAttempt < REPAIR_RETRY_AFTER_MS) {
-      return;
-    }
-
-    let active = true;
-    window.localStorage.setItem(storageKey, String(Date.now()));
-    setIsRepairing(true);
-    setRepairError(null);
-
-    async function repair() {
-      try {
-        const response = await fetch("/api/reliability/repair", {
-          body: JSON.stringify({
-            id: paymentId,
-            kind: "payment",
-          }),
-          headers: {
-            "content-type": "application/json",
-          },
-          method: "POST",
-        });
-        const body = (await response.json().catch(() => null)) as
-          | { error?: string; status?: string }
-          | null;
-
-        if (!response.ok) {
-          throw new Error(
-            body && typeof body.error === "string"
-              ? body.error
-              : "Failed to repair payment state.",
-          );
-        }
-
-        if (active && body?.status === "repaired") {
-          router.refresh();
-        }
-      } catch (repairError) {
-        if (active) {
-          setRepairError(
-            repairError instanceof Error
-              ? repairError.message
-              : "Failed to repair payment state.",
-          );
-        }
-      } finally {
-        if (active) {
-          setIsRepairing(false);
-        }
-      }
-    }
-
-    repair();
-
-    return () => {
-      active = false;
-    };
-  }, [details, open, payment, router]);
-
-  useEffect(() => {
-    setRepairError(null);
-    setIsRepairing(false);
-  }, [payment?.id]);
+    if (repairResult?.status === "repaired") router.refresh();
+  }, [repairResult, router]);
 
   const drawerTitle = details?.molliePaymentId ?? payment?.reference ?? "Payment details";
   const mollieDashboardUrl = details?.payment.links.dashboard ?? null;

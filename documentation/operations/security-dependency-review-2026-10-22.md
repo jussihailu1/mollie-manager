@@ -1,6 +1,8 @@
 # Dependency-security review — 22 October 2026
 
-Status: review and refreshed validation complete; **release blocked**.
+Status: historical review; findings subsequently addressed in the
+[local fixes and validation](security-dependency-fixes-2026-10-22.md).
+The review below records the original **release-blocked** candidate.
 No dependency/source changes, production operations, push or deployment.
 This supersedes the current-readiness claims in the
 [8 October evidence](security-dependency-update-2026-10-08.md), which remains

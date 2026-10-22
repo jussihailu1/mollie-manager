@@ -15,8 +15,6 @@ import { buildFirstPaymentInvoiceReference } from "@/lib/eboekhouden/invoice-ref
 import {
   type FirstPaymentInvoiceActor,
   claimFirstPaymentInvoiceForCreation,
-  storeFirstPaymentInvoiceCreationFailure,
-  storeFirstPaymentInvoiceCreationSuccess,
 } from "@/lib/eboekhouden/first-payment-invoice-persistence";
 import {
   buildFirstPaymentInvoiceDelivery,
