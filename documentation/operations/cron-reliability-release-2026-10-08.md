@@ -117,10 +117,20 @@ schema, tax settings, invoices or payments. Never replay full billing as rollbac
 - Default `npm run build` passes with dependencies physically inside the isolated checkout and a dummy build-only AUTH_SECRET; no production environment file was copied. The initial dependency-junction attempt was rejected by Turbopack before compilation; correcting that validation layout resolved it.
 - Scoped local commit: this document is included in `Fix cron reliability and isolate operator notifications`; use Git history for the exact SHA. Its tree is checked independently of the mixed checkout.
 - Push/deployment: explicitly approved by the user and completed on 8 October 2026. Exact commit `1179c824859fe2068c3d78791a12e3e47f2b638e` pushed to master; READY production Git deployment `dpl_k3MdFPW76Uq2Xp14Jo2eqedr78AS` serves `kify.app` and `www.kify.app`.
-- Scheduled execution of this version: not yet observed.
+- Scheduled execution of this version: verified retrospectively on 22 October;
+  all 14 daily runs on 9–22 October completed all 13 stages with no failed stages.
+  See [the current health evidence](production-health-and-followups-2026-10-22.md).
 - Synthetic operator email: not authorized or sent.
 - Actual inbox receipt: unverified.
-- Next recovery decision: verify webhooks and scheduled daily execution first.
+- No `cron.issue_notification` attempts occurred during 8–22 October. Healthy
+  runs correctly remain silent; scheduled success does not establish email proof.
+- Existing subscription webhook URLs: corrected and provider-verified on
+  22 October at 22:09 Europe/Amsterdam. Exactly two URL fields changed; all other
+  subscription fields and all 33 application tables remained unchanged. Secure
+  rollback and additional payment-link findings are in the current health handoff.
+  No genuine webhook receipt/processing has yet been observed after correction.
+- Next recovery decision: observe genuine webhook delivery; daily scheduled
+  execution is already verified through 22 October.
   Additional bounded Cloudflare sync-only recovery is optional; if needed, start
   every two hours as recorded in temporary-roadmap step 5. Independent monitoring
   and Connect ownership remain separate items.
@@ -136,6 +146,12 @@ schema, tax settings, invoices or payments. Never replay full billing as rollbac
 - No full cron invocation, invoice creation, payment collection, operator test email, or customer email was performed by this release verification. The next scheduled run is 9 October at 05:00 Europe/Amsterdam; actual execution and inbox receipt remain open evidence gates. No follow-up automation was created.
 
 ## Scheduled follow-up
+
+Historical scheduling record below; completion of that automation was not checked.
+The independent 22 October read-only inspection now closes the scheduled-run
+evidence gate. The subsequent bounded repair corrected both subscription URLs;
+operator email proof and genuine webhook receipt/processing remain open.
+See the current health handoff for repair evidence and separate payment-link findings.
 
 At the user's request, a one-time Codex verification is scheduled for 9 October
 2026 at 06:15 Europe/Amsterdam, after the daily cron's expected execution window.

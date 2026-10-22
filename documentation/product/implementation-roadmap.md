@@ -100,7 +100,11 @@ adds consolidated operator notifications without replaying billing on alert
 failure. Local validation and release evidence are recorded in the
 [cron release procedure](../operations/cron-reliability-release-2026-10-08.md).
 Commit `1179c82` is deployed and release health/configuration checks passed on
-8 October 2026. Scheduled execution and inbox receipt remain separate open gates.
+8 October 2026. The 22 October read-only check verified daily completion through
+22 October; operator notification inbox receipt remains unproven. Both existing
+live Mollie subscription webhook URLs were corrected on 22 October and verified
+with provider GETs; genuine webhook receipt/processing remains unproven. See
+[current health findings and decision log](../operations/production-health-and-followups-2026-10-22.md).
 Additional Cloudflare sync-only recovery is optional: first verify the webhook
 flow and scheduled daily cron. If daily fallback latency is unacceptable, start
 a separate bounded job every two hours and measure usage before increasing its
@@ -108,24 +112,39 @@ frequency. See step 5 of the temporary roadmap for the decision and estimate.
 The full billing cron stays daily. Independent monitoring and Mollie Connect
 ownership remain separate backlog items.
 
-### Immediate Maintenance And Operational Follow-Up — 8 October 2026
+### Immediate Maintenance And Operational Follow-Up — 22 October 2026
 
 These are correctness and readiness follow-ups, not additional product milestones.
 
-- **Production dependency security update prepared locally.** The updated
+- **Subscription webhook URL repair complete; genuine delivery proof open.**
+  On 22 October both active live Ayal Web subscriptions were patched only to
+  `https://kify.app/api/webhooks/mollie`, without legacy secret query parameters.
+  Provider GETs verified all other fields unchanged; all 33 database tables and
+  seven historical provider payments were unchanged. Encrypted rollback is
+  retained outside Git. Observe the next genuine tenant-scoped webhook and
+  successful processing; no replay, billing, email, or deployment test.
+  Three managed live payment links also retain legacy destinations (one Vercel,
+  two ngrok); they were left untouched and need a separate scope decision.
+  Exact IDs and evidence are in the current health handoff. Issue 4 starts only
+  when the user separately asks. The user subsequently authorized a local
+  documentation checkpoint commit; push and deployment remain unauthorized.
+- **Production dependency security update committed locally as `4cb19ed`, not deployed.** The updated
   lockfile uses Next.js/eslint-config-next 16.4.0, Nodemailer 10.0.16 and patched
   compatible transitive dependencies. `npm audit --omit=dev` now reports zero
-  vulnerabilities (previously 1 critical, 8 high and 1 moderate package entries).
+  vulnerabilities in the 8 October validation (previously 1 critical, 8 high and
+  1 moderate package entries). Refresh the audit before release; this is not a
+  current vulnerability scan.
   The app mailer uses an npm alias to keep it independent from NextAuth v5's
   unused optional email-login peer; Google OAuth stays on v5. Full development
   dependency findings remain separately documented. See the
   [security update evidence](../operations/security-dependency-update-2026-10-08.md)
   for validation, limitations and the remaining production release gate. Do not
   use `npm audit fix --force` or downgrade authentication to silence audit output.
-- **Observe the next scheduled cron execution**, 9 October at 05:00
-  Europe/Amsterdam, and verify operator inbox receipt. The release ledger proves
-  deployment and schedule configuration; it does not yet prove a scheduled run.
-  Do not invoke full production billing for a smoke test.
+- **Scheduled cron execution verified through 22 October.** All 15 daily
+  completion audits succeeded; all 14 post-deployment runs completed all 13 stages.
+  No overdue live invoice backlog. No issue emails were attempted, as no issues
+  were recorded after deployment. A separately approved operator-only delivery
+  check and inbox confirmation remain open; never invoke billing to test email.
 - **Invoice email routing is intentional and correct.** On 8 October the user
   confirmed that `INVOICE_EMAIL_OVERRIDE_TO=info@ayalweb.com` must remain active.
   Successful delivery records refer to operator delivery under that override;
@@ -278,6 +297,12 @@ live proof visible:
   to `info+kify@ayalweb.com` only after receipt is verified. Acceptance requires
   controlled missed-heartbeat, runtime-failure, and SMTP-outage tests without
   replaying live billing. This is planned work, not implemented monitoring.
+
+- **LOW priority: legacy cron-secret cleanup.** Scheduled execution is now
+  verified, but external callers using `INVOICE_CRON_SHARED_SECRET` must be
+  inventoried before removing it. Keep `CRON_SECRET` authentication intact;
+  removal requires a separate approved configuration/code cleanup. Do not bundle
+  it with the webhook URL repair or assume successful runs prove it unused.
 
 - **By 17 November 2026:** verify the installed Mollie Node dependency
   (`@mollie/api-client`, currently 4.5.0) against Mollie's generated

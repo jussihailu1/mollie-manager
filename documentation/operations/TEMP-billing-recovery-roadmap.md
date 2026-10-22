@@ -1,12 +1,12 @@
 # Temporary billing recovery roadmap
 
-Updated: 2026-10-08. Working checklist for completing the concurrent Kify investigations sequentially. Remove or archive after completion; keep permanent behavior in the invoice runbooks.
+Updated: 2026-10-22. Working checklist for completing the concurrent Kify investigations sequentially. Remove or archive after completion; keep permanent behavior in the invoice runbooks.
 
 ## Scope and working rules
 
 Work from this chat, one topic at a time. Preserve existing changes and use separate, dependency-complete commits. Some files contain both KOR and cron changes: stage individual hunks rather than whole overlapping files. Do not commit the entire working tree. Commit, deployment, database changes, provider invoice changes, and customer delivery are separate milestones.
 
-Current recorded release state: KOR commit `81ac2fe` and cron reliability commit `1179c82` have been deployed and verified as described below. Historical corrections are resolved; the controlled live KOR test was waived. Scheduled cron execution and operator inbox receipt remain open. Faster recovery is optional. The dependency security follow-up is recorded in the main implementation roadmap.
+Current recorded release state: KOR commit `81ac2fe` and cron reliability commit `1179c82` have been deployed and verified as described below. Historical corrections are resolved; the controlled live KOR test was waived. The 22 October read-only check verified daily cron completion through 22 October; operator notification delivery remains unproven. Both live Mollie subscription webhook URLs were corrected on 22 October with all other fields preserved and provider GET verification; genuine webhook delivery/processing remains unproven. Three live payment links retain legacy destinations and need separate review. Security commit `4cb19ed` remains local, not deployed; issue 4 awaits the user's separate request. Use [the 22 October health findings, open-work checklist and decision log](production-health-and-followups-2026-10-22.md) as the current handoff; older snapshots below are historical. Faster recovery remains optional.
 
 At initial handoff, all three source chats were idle. The checkout was on `master` at `665599f`, with 63 modified/untracked files before this document. The commit-boundary notes and continuation log below preserve that earlier state; they are not current instructions to repeat release work.
 
@@ -16,7 +16,7 @@ Sources:
 - [Choose Kify reconciliation option](thread://01a00f84-208f-7310-a41e-e3c75f563c9a?hostId=local)
 - [Investigate Kify notification alerts](thread://01a01440-facd-7f82-84a8-4686bed47f1e?hostId=local)
 
-## 1. Finish and validate the KOR fix — LOCAL API-BASED REVIEW COMPLETE; RELEASE CHECKS OPEN
+## 1. Finish and validate the KOR fix — COMPLETE; RELEASE RECORDED IN STEP 2
 
 ### Decision update: PDF checks (2026-10-08)
 
@@ -119,7 +119,7 @@ Kify's historical delivery records correctly retain the original operator overri
 
 Important: `scripts/recover-credited-eboekhouden-invoice.ts` only accepts owners in `invoice_failed` with a matching unverified upstream invoice identity. It does not implement historical correction of successfully recorded/sent invoices. Do not force those invoices into a failed state to reuse the command. The command records a credit note number but cannot independently prove that credit was issued.
 
-## 4. Finish cron reliability fixes — DEPLOYED; SCHEDULED EXECUTION AND DELIVERY PROOF OPEN
+## 4. Finish cron reliability fixes — DEPLOYED; SCHEDULED EXECUTION VERIFIED; EMAIL PROOF OPEN
 
 This slice preserves the deployed KOR safeguards from `81ac2fe`. It routes Kify first payments through the Kify issuer, records empty recovery batches as successful no-ops, counts mixed failures, and sends a consolidated summary through `ALERT_EMAIL_TO`. Tenant results retain completed stages after a later failure and wait for in-flight siblings; failed/unfinished stage counts are not proof of no side effects. Notification/audit failures do not reset invoice or delivery state or request billing replay.
 
@@ -129,7 +129,7 @@ This slice preserves the deployed KOR safeguards from `81ac2fe`. It routes Kify 
 - [x] Establish the clean parent baseline: `81ac2fe` has 470/471 tests passing; the sole failure is the customer lifecycle UI assertion.
 - [x] Isolate and validate the scoped commit `Fix cron reliability and isolate operator notifications`: 508/509 tests pass (same sole baseline failure), typecheck and production build pass, scoped lint has no errors. Full evidence and release gates are in [the cron release procedure](cron-reliability-release-2026-10-08.md); use Git history for the commit SHA.
 - [x] User approved pushing `1179c824859fe2068c3d78791a12e3e47f2b638e`; pushed to master and verified READY production deployment `dpl_k3MdFPW76Uq2Xp14Jo2eqedr78AS` at `kify.app` on 8 October at 14:54 Europe/Amsterdam. Authenticated unscoped health passed; recipient/mode/schedule configuration, KOR settings, migration and backlog remain unchanged. No error/fatal logs returned for the new deployment in the inspected window. See the cron release procedure for evidence.
-- [ ] Observe the next naturally scheduled execution; never invoke full production billing merely to test this patch.
+- [x] Read-only inspection on 22 October verified successful daily completion on 8–22 October and all 13 stages on each of the 14 post-deployment runs. No cron was invoked for testing. See the current health handoff for evidence and the separate webhook failure.
 - [ ] Separately approve one synthetic operator summary with no billing calls; distinguish SMTP acceptance/audit from confirmed inbox receipt.
 - [ ] Keep independent missed-run monitoring and Mollie Connect platform/AYAL/tenant ownership as separate roadmap items.
 
@@ -145,7 +145,10 @@ If needed, start the separate sync-only job **every two hours**, replacing the e
 
 Cost planning estimate only: if each run wakes an otherwise idle Neon compute at 0.25 CU for approximately five minutes, those wakeups use about **7.5 CU-hours per 30-day month**, excluding execution time and other activity. Actual compute sizing, autoscaling and overlap with normal traffic change the result. Measure usage before increasing frequency; current account headroom has not been established.
 
-- [ ] Verify existing webhooks and the daily cron before deciding whether shorter recovery is needed.
+- [x] Verify daily scheduled completion through 22 October; no missing dates found.
+- [x] Repair the two existing live subscriptions' dead webhook destinations. On 22 October, URL-only PATCHes returned 200; provider GETs verified the exact Kify URL and every other field unchanged. Secure rollback retained outside Git; all 33 application tables and seven historical payments unchanged. See issue 1 in the 22 October handoff.
+- [ ] Observe the next genuine webhook and successful tenant-scoped processing before deciding whether shorter recovery is needed. URL correction and GET 405 do not prove delivery. No replay or early billing test.
+- [ ] Separately review the three managed live payment links with legacy destinations; one uses the dead Vercel hostname and two use old ngrok. Left unchanged under the two-subscription scope; IDs in the handoff.
 - [ ] If justified, design a separate authenticated, bounded sync-only endpoint with overlap protection and monitoring, initially triggered every two hours.
 - [ ] Keep invoice creation, payment collection and customer email out of that path; retain the daily full billing cron at its existing frequency.
 - [ ] Verify recovery latency, batch capacity, resource usage and schedule execution. Independent missed-run monitoring remains a separate roadmap item.
@@ -153,6 +156,10 @@ Cost planning estimate only: if each run wakes an otherwise idle Neon compute at
 This decision records the preferred starting cadence; it does not authorize implementation, deployment or schedule changes.
 
 ## Continuation log
+
+- 2026-10-22, follow-up: user authorized a local documentation checkpoint commit before any later issue. Include the existing production-health notes and issue 1 repair evidence; no push, deployment or issue 4 implementation/review. Confirmed the deployed creation paths use the configured Kify webhook URL for new onboarding links and subscriptions; existing stale payment links remain a separate review.
+- 2026-10-22: Completed read-only production health check. Cron runs and active-subscription payment completeness verified; no overdue live invoice backlog. Found obsolete provider webhook URLs returning `DEPLOYMENT_NOT_FOUND`. Recorded exact targets, remaining proof gates, pending security release and all operational decisions in the linked 22 October handoff. User requests issue 1 in a new chat, with issue 4 considered there later on request. Documentation only; no deployment or production mutation.
+- 2026-10-22, 22:09 Europe/Amsterdam: Completed the subsequently authorized issue 1 repair: exactly two existing subscription `webhookUrl` fields changed to the query-free Kify endpoint. Preserved all other provider fields; authoritative GETs and before/after database fingerprints verified. No new webhook event observed. Recorded three separate payment-link findings without modifying them. Preserved checkout/worktree edits; no commit, push, deployment, billing, replay, email, or account changes. Stop after this handoff; do not begin issue 4 until asked.
 
 - 2026-10-08: Created this roadmap after reading all three source chats and inspecting current diffs. Started step 1. Initial review found PDF amount verification uses a substring anywhere in document text, which does not prove the displayed final total. No production mutations performed.
 - 2026-10-08: Completed local KOR review/hardening and refreshed validation. Reconfirmed original provider amounts, production deployment and checkout database state. Production DB identity and a controlled newly issued KOR PDF/delivery remain release gates. Next: isolate the KOR commit using the boundaries above, verify it independently, then proceed to the authorized release/configuration process.

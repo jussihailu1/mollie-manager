@@ -3,6 +3,13 @@
 Status: local implementation and runtime validation complete; full-lint
 limitations recorded below. No push or deployment.
 
+22 October refresh: commit `4cb19ed` is still local; production remains
+`1179c82`. The user will address this release after the separate existing-Mollie-
+subscription webhook repair, in the same new chat when requested. No deployment
+is authorized. Refresh validation/audit before release; the results below are
+8 October evidence. See [the current operational handoff](production-health-and-followups-2026-10-22.md)
+for decisions, remaining work and production health findings.
+
 ## Change
 
 The user requested remediation of the production dependency audit findings.
