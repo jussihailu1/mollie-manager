@@ -137,9 +137,11 @@ These are correctness and readiness follow-ups, not additional product milestone
   The separate UI/test changes resolve effect/state lint errors and restore
   lifecycle explanations, with cancellation and repair-throttle coverage.
   Clean install, build, typecheck, loopback SMTP and eight local auth/access
-  checks pass. Full suite: 518/518; lint: zero errors/warnings; production audit:
-  zero findings. Full audit retains 13 development-only entries (9 high,
-  4 moderate) in the braces and drizzle-kit loader chains. Original implementation
+  checks pass. The subsequent development-tooling review adds a tested scoped
+  core-utils/esbuild 0.25.12 override, clearing four moderate entries without
+  changing Drizzle/shadcn/Next versions. Full suite: 523/523; lint: zero
+  errors/warnings; production audit: zero findings. Full audit retains nine
+  development-only high entries, all derived from unpatched braces. Original implementation
   `4cb19ed` and these follow-ups remain undeployed; production is unchanged.
   The app mailer uses an npm alias to keep it independent from NextAuth v5's
   unused optional email-login peer; Google OAuth stays on v5. Full development
@@ -147,6 +149,12 @@ These are correctness and readiness follow-ups, not additional product milestone
   [22 October fixes and validation](../operations/security-dependency-fixes-2026-10-22.md)
   for validation, limitations and the remaining production release gate. Do not
   use `npm audit fix --force` or downgrade authentication to silence audit output.
+- **Migration snapshot debt found during tooling validation.** Baseline and
+  patched Drizzle both generate duplicate schema changes already represented by
+  hand-written migrations 0027–0029; snapshots stop at 0026. Reconcile snapshot
+  history separately before the next schema-generation change. No generated SQL
+  was added or applied. See the [development dependency review](../operations/dev-dependency-review-2026-10-22.md)
+  for override compatibility evidence, remaining braces risk and this follow-up.
 - **Scheduled cron execution verified through 22 October.** All 15 daily
   completion audits succeeded; all 14 post-deployment runs completed all 13 stages.
   No overdue live invoice backlog. No issue emails were attempted, as no issues

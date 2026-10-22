@@ -1,6 +1,9 @@
 # Dependency-security fixes — 22 October 2026
 
 Status: local implementation and validation; **not pushed or deployed**.
+Follow-up: the [development dependency review](dev-dependency-review-2026-10-22.md)
+removes the four esbuild-chain findings with a tested scoped override; nine
+braces-derived findings remain. The counts below are this earlier validation.
 The user authorized fixing the remaining issue 4 findings and separate local
 dependency and UI/test commits. This supersedes the candidate-readiness findings
 in the [earlier review](security-dependency-review-2026-10-22.md), retained as
