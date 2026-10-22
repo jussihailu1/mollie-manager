@@ -128,19 +128,23 @@ These are correctness and readiness follow-ups, not additional product milestone
   in April and are single-use; retain these historical records unchanged. Their
   new-payment repair follow-up is closed; payment-link webhook URL updates are
   not documented by Mollie. New onboarding links already use the configured URL.
-  Exact IDs and evidence are in the current health handoff. Issue 4 starts only
-  when the user separately asks. The user subsequently authorized a local
-  documentation checkpoint commit; push and deployment remain unauthorized.
-- **Production dependency security update committed locally as `4cb19ed`, not deployed.** The updated
-  lockfile uses Next.js/eslint-config-next 16.4.0, Nodemailer 10.0.16 and patched
-  compatible transitive dependencies. `npm audit --omit=dev` now reports zero
-  vulnerabilities in the 8 October validation (previously 1 critical, 8 high and
-  1 moderate package entries). Refresh the audit before release; this is not a
-  current vulnerability scan.
+  Exact IDs and evidence are in the current health handoff. The user subsequently
+  authorized local documentation checkpoints and the issue 4 review below;
+  push and deployment remain unauthorized.
+- **Dependency-security review complete; release blocked.** Local implementation
+  `4cb19ed` remains undeployed. The 22 October production audit now reports one
+  critical Next.js package entry covering three advisories published after the
+  old validation. Upgrade Next.js and eslint-config-next from 16.4.0 to 16.4.2
+  together; refresh development-only ip-address 10.7.3 to patched 10.7.4.
+  Full audit: 15 entries (1 critical, 9 high, 5 moderate). No versions changed
+  during this review. Clean install, build, typecheck, loopback SMTP and eight
+  local auth/access checks pass. Full suite remains 510/511; full lint has
+  10 errors and 11 warnings. Resolve the effect/state lint errors and existing
+  lifecycle UI/test mismatch before claiming clean validation.
   The app mailer uses an npm alias to keep it independent from NextAuth v5's
   unused optional email-login peer; Google OAuth stays on v5. Full development
   dependency findings remain separately documented. See the
-  [security update evidence](../operations/security-dependency-update-2026-10-08.md)
+  [22 October security review](../operations/security-dependency-review-2026-10-22.md)
   for validation, limitations and the remaining production release gate. Do not
   use `npm audit fix --force` or downgrade authentication to silence audit output.
 - **Scheduled cron execution verified through 22 October.** All 15 daily

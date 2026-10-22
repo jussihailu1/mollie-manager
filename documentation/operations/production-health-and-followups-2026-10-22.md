@@ -199,9 +199,9 @@ delivery proof for the corrected subscriptions remains open. No issue 4 work.
 | --- | --- |
 | Issue 2: independent monitoring | OPEN. External missed/late heartbeat, runtime and alert-delivery monitoring must work when Kify/SMTP is unavailable. See the main roadmap's monitoring acceptance criteria. |
 | Issue 3: operator email proof | OPEN. Separately approve a bounded synthetic operator-only notification, with no billing/replay, then verify SMTP outcome, audit and actual inbox receipt. No test email is authorized by this documentation task. |
-| Issue 4: dependency-security release | OPEN. Local commit `4cb19ed` is not deployed. Refresh audit/tests/build/auth/SMTP checks and review introduced lint findings before any release. Existing 8 October evidence is historical, not a current vulnerability scan. See the security release document. |
+| Issue 4: dependency-security release | REVIEW COMPLETE; RELEASE BLOCKED. Fresh 22 October production audit finds one critical Next.js entry (three advisories); update Next.js/eslint-config-next to 16.4.2. Development-only ip-address has a compatible 10.7.4 patch. Clean install/build/typecheck/SMTP/local auth checks pass; full suite 510/511 and lint 10 errors/11 warnings. No implementation change, push or deployment. See [current review](security-dependency-review-2026-10-22.md). |
 | Additional live payment-link destinations | REVIEW COMPLETE. All three are already-paid, single-use historical onboarding links. No new-payment repair needed; retained unchanged. Webhook URL updates are not documented for payment links. Evidence and historical-status limitation above. |
-| Validation debt | OPEN. Security update introduced full-lint errors in existing React effect code; one pre-existing customer lifecycle UI test fails. Keep these distinct from passing focused checks. Development-only dependency findings also need reassessment; no force-upgrades/downgrades to hide findings. |
+| Validation debt | RECONFIRMED. Ten effect/state lint errors, eleven warnings and the pre-existing lifecycle UI assertion remain. Full audit now has 15 entries, 14 development-only. Track residual braces/drizzle-kit chains separately; no force-upgrades/downgrades or disabled rules to hide findings. |
 | Actual invoice issuance/delivery | Next naturally due live invoice is 27 October. KOR live test was waived, not passed; no invoice created since the KOR release yet. Observe ordinary issuance/API totals and intended operator delivery without manufacturing early invoices. |
 | Faster Cloudflare recovery | OPTIONAL, not implemented. Fix webhooks first, then decide whether daily fallback latency is acceptable. If needed, initial cadence is every two hours, sync-only; never increase full billing frequency. |
 | Legacy cron secret | LOW priority. Remove `INVOICE_CRON_SHARED_SECRET` only after checking external callers and preserving valid `CRON_SECRET` authentication. Successful cron runs alone do not prove the older secret is unused. Separate approved configuration/code cleanup. |
@@ -215,6 +215,15 @@ Other product backlog remains in `../product/implementation-roadmap.md`; this
 handoff does not promote every deferred feature into an immediate fix.
 
 ## Decision log and handoff boundaries
+
+- 22 October, 22:29–22:33: user authorized issue 4 review and validation refresh,
+  explicitly prohibiting push/deployment. Reviewed the existing implementation;
+  ran clean isolated install, audits, full tests/lint, typecheck, build, loopback
+  SMTP and local HTTP auth/access probes without production credentials. Current
+  candidate has new Next.js advisories plus unchanged lint/test debt. Recorded
+  exact remaining fixes in the linked review; application source and dependency
+  versions remain unchanged. No billing, provider/database mutation, real email,
+  account change or production test. Save a separate local documentation checkpoint.
 
 - 22 October, 22:23: user asked to address the legacy payment links. Current
   provider usage-state inspection showed all three already paid and non-reusable.

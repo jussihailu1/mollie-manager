@@ -1,14 +1,17 @@
 # Dependency security update — 8 October 2026
 
-Status: local implementation and runtime validation complete; full-lint
-limitations recorded below. No push or deployment.
+Status: historical implementation evidence; **release blocked after the
+22 October refresh**. No push or deployment.
 
-22 October refresh: commit `4cb19ed` is still local; production remains
-`1179c82`. The user will address this release after the separate existing-Mollie-
-subscription webhook repair, in the same new chat when requested. No deployment
-is authorized. Refresh validation/audit before release; the results below are
-8 October evidence. See [the current operational handoff](production-health-and-followups-2026-10-22.md)
-for decisions, remaining work and production health findings.
+22 October refresh: the user authorized review and refreshed validation of local
+commit `4cb19ed`, with no push/deployment. Production was last verified on
+`1179c82`. Current audit finds one critical Next.js package entry (three new
+advisories); recommend Next.js/eslint-config-next 16.4.2 before release. Full audit
+is 15 entries; ip-address has a compatible patch. Clean install, build, typecheck,
+SMTP integration and local auth/access probes pass; 10 lint errors and the same
+one baseline test failure remain. See the
+[complete 22 October review](security-dependency-review-2026-10-22.md) for current
+evidence, scope, exact findings and remaining work. Results below are historical.
 
 ## Change
 
@@ -37,7 +40,7 @@ explicitly confirmed `INVOICE_EMAIL_OVERRIDE_TO=info@ayalweb.com` is intentional
 and correct. Do not remove it or send invoices directly to customers as part of
 this update.
 
-## Verification
+## Historical verification — 8 October
 
 - Updated production dependency audit: zero vulnerabilities.
 - Baseline full Node suite, before changes: 508/509 pass. The existing
@@ -70,7 +73,7 @@ this update.
   one unrelated error/warning. No lint rules were weakened and no UI behavior
   was changed to silence these findings; resolve them in a separate UI slice.
 
-## Remaining development-only findings
+## Historical development-only findings — 8 October
 
 The full audit still reports 13 package entries (9 high, 4 moderate), with no
 critical findings. These are the unpatched `braces` dependency chain used by
