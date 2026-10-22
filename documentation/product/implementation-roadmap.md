@@ -149,12 +149,14 @@ These are correctness and readiness follow-ups, not additional product milestone
   [22 October fixes and validation](../operations/security-dependency-fixes-2026-10-22.md)
   for validation, limitations and the remaining production release gate. Do not
   use `npm audit fix --force` or downgrade authentication to silence audit output.
-- **Migration snapshot debt found during tooling validation.** Baseline and
-  patched Drizzle both generate duplicate schema changes already represented by
-  hand-written migrations 0027–0029; snapshots stop at 0026. Reconcile snapshot
-  history separately before the next schema-generation change. No generated SQL
-  was added or applied. See the [development dependency review](../operations/dev-dependency-review-2026-10-22.md)
-  for override compatibility evidence, remaining braces risk and this follow-up.
+- **Migration snapshot debt repaired locally.** Added linked 0027–0029 snapshots
+  and declared the tax-treatment check already present in SQL. Existing SQL,
+  journal and snapshots are byte-for-byte unchanged. Two offline generations
+  produce no SQL; the new `db:check-snapshots` guard rejects deliberate drift.
+  Full suite 528/528, lint/typecheck/build pass. No database operations or
+  deployment. See [repair evidence](../operations/migration-snapshot-repair-2026-10-22.md).
+  The [development dependency review](../operations/dev-dependency-review-2026-10-22.md)
+  retains override compatibility evidence and the separate remaining braces risk.
 - **Scheduled cron execution verified through 22 October.** All 15 daily
   completion audits succeeded; all 14 post-deployment runs completed all 13 stages.
   No overdue live invoice backlog. No issue emails were attempted, as no issues

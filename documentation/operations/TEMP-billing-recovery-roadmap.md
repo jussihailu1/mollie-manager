@@ -157,6 +157,8 @@ This decision records the preferred starting cadence; it does not authorize impl
 
 ## Continuation log
 
+- 2026-10-22, snapshot repair: user requested fixing the reported drift. Added linked 0027–0029 snapshots and the existing tax-treatment check to the schema declaration; all 36 pre-existing migration/metadata files remain byte-identical. Two CLI generations produce no SQL; offline guard rejects deliberate drift. Full suite 528/528, lint/typecheck/build pass. No database access, migration application, push or deployment. See [repair evidence](migration-snapshot-repair-2026-10-22.md).
+
 - 2026-10-22, development-tooling follow-up: tested scoped core-utils/esbuild 0.25.12 override removes four moderate findings with no Drizzle/shadcn/Next downgrade. Nine high braces-derived entries remain; no upstream patch. Full suite 523/523; tooling transforms/loader and baseline-versus-patched SQL/snapshots verified. Found existing snapshot debt (0027–0029 hand-written migrations lack corresponding snapshots); track separately before future generation, never apply the duplicate generated SQL. No push/deployment or production operations. See [review](dev-dependency-review-2026-10-22.md).
 
 - 2026-10-22, implementation follow-up: user authorized fixes, refreshed validation and separate local dependency/UI commits. Dependency-only `3c263b9`; UI fixes cover request identity/cancellation, payment-repair deduplication/throttling and lifecycle explanations. Clean install/build/typecheck, 518/518 tests, zero lint errors/warnings, SMTP and 8 local HTTP checks pass. Production audit zero; 13 development-only findings remain. No push/deployment or production actions. See [implementation evidence](security-dependency-fixes-2026-10-22.md).

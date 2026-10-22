@@ -659,6 +659,10 @@ export const tenantBillingSettings = pgTable(
       name: "tenant_billing_settings_tenant_id_fkey",
     }).onDelete("cascade"),
     unique("tenant_billing_settings_tenant_id_key").on(table.tenantId),
+    check(
+      "tenant_billing_settings_tax_treatment_check",
+      sql`${table.taxTreatment} in ('kor', 'standard')`,
+    ),
   ],
 );
 

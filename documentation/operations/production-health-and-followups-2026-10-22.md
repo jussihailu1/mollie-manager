@@ -202,7 +202,7 @@ delivery proof for the corrected subscriptions remains open. No issue 4 work.
 | Issue 4: dependency-security release | FIXED AND VALIDATED LOCALLY; NOT RELEASED. Dependency commit `3c263b9` patches Next.js/eslint-config-next to 16.4.2 and ip-address to 10.7.4; UI/test fixes are a separate local commit. Clean install/build/typecheck/SMTP and 8 local auth/access checks pass; 518/518 tests, lint zero errors/warnings, production audit zero findings. Push/deployment remain prohibited. See [fixes and evidence](security-dependency-fixes-2026-10-22.md). |
 | Additional live payment-link destinations | REVIEW COMPLETE. All three are already-paid, single-use historical onboarding links. No new-payment repair needed; retained unchanged. Webhook URL updates are not documented for payment links. Evidence and historical-status limitation above. |
 | Validation debt | UI/test/lint debt resolved locally. Follow-up scoped esbuild override clears four moderate entries; full audit now retains nine development-only high entries, all from unpatched braces. 523/523 tests pass. No forced downgrades or rule suppression. See [development tooling review](dev-dependency-review-2026-10-22.md). Local checks do not prove real OAuth, external delivery or production behavior. |
-| Migration snapshot history | NEW, PRE-EXISTING BASELINE DEBT. Snapshot history stops at 0026 while hand-written migrations continue through 0029; both original and patched Drizzle generate duplicate changes. No generated migration was added or applied. Reconcile snapshots in a separate bounded task before generating the next schema migration. |
+| Migration snapshot history | REPAIRED LOCALLY. Linked 0027–0029 snapshots and the existing tax-treatment check declaration now match current schema. Existing SQL/journal/snapshots unchanged; two generations produce no SQL. Offline guard rejects deliberate drift; full suite 528/528, lint/typecheck/build pass. No migration applied or deployment. See [repair evidence](migration-snapshot-repair-2026-10-22.md). |
 | Actual invoice issuance/delivery | Next naturally due live invoice is 27 October. KOR live test was waived, not passed; no invoice created since the KOR release yet. Observe ordinary issuance/API totals and intended operator delivery without manufacturing early invoices. |
 | Faster Cloudflare recovery | OPTIONAL, not implemented. Fix webhooks first, then decide whether daily fallback latency is acceptable. If needed, initial cadence is every two hours, sync-only; never increase full billing frequency. |
 | Legacy cron secret | LOW priority. Remove `INVOICE_CRON_SHARED_SECRET` only after checking external callers and preserving valid `CRON_SECRET` authentication. Successful cron runs alone do not prove the older secret is unused. Separate approved configuration/code cleanup. |
@@ -216,6 +216,13 @@ Other product backlog remains in `../product/implementation-roadmap.md`; this
 handoff does not promote every deferred feature into an immediate fix.
 
 ## Decision log and handoff boundaries
+
+- 22 October, snapshot follow-up: user requested repair of the reported drift.
+  Restored only the missing 0027–0029 metadata and existing tax-check schema
+  declaration. Preserved all prior migration bytes/IDs and verified no-op
+  generation twice plus a deliberately failing drift probe. Added the offline
+  snapshot guard to the full suite. Save as a separate local repair commit;
+  no migration application, DB access, provider action, push or deployment.
 
 - 22 October, development-tooling follow-up: user requested safe remediation of
   remaining findings without forced downgrades or push/deployment. Retained a

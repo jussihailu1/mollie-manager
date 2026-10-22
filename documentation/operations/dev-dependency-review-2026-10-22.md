@@ -86,6 +86,10 @@ detects this installed-version failure as well.
 
 ## Separate existing migration snapshot debt
 
+Subsequently repaired locally at the user's request; see the
+[snapshot repair and validation](migration-snapshot-repair-2026-10-22.md).
+The following preserves the original finding.
+
 The baseline already generates a new 0030 migration duplicating schema changes
 represented by hand-written migrations 0027–0029: activation jobs/notifications,
 nullable webhook mode and tenant tax treatment. The latest checked-in snapshot

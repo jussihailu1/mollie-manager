@@ -18,6 +18,8 @@ Audience: developers and operators
 - `npm run db:backfill-consent-tokens`: erase legacy plaintext consent tokens after the hashed-token migration is applied
 - `npm run db:migrate`: alias for `db:apply`
 - `npm run db:generate`: generate Drizzle migration files from schema changes
+- `npm run db:check-snapshots`: offline check of snapshot links, latest-journal
+  coverage and schema/snapshot equality; no database credentials or `.env` loading
 - `npm run db:smoke`: basic database smoke check
 - `npm run db:check-raw`: validate raw SQL assumptions and migration state
 - `npm run ops:retention-report -- inventory <live|test|all>`: inspect retention inventory without changing data
@@ -50,6 +52,14 @@ Example:
 Both commands require explicit scope. They return counts and policy impact only, never row identifiers or stored personal/payload values.
 
 ## Recommended Local Validation Before Shipping
+
+For schema changes, generate and review the migration and its snapshot together,
+then run `npm run db:check-snapshots`. The same guard runs in `test:node`.
+Hand-written schema migrations must also update `db/schema.ts` and add a linked
+snapshot for their final schema state, including constraints. Preserve already
+applied SQL, journal entries and snapshot IDs. Do not apply duplicate generated
+SQL to repair missing metadata. `drizzle-kit check` alone checks snapshot
+consistency/collisions and does not establish equality with the current schema.
 
 Run these before finishing non-trivial changes:
 
