@@ -1,7 +1,7 @@
 import { type NextRequest } from "next/server";
 
 import { getSelectedMollieMode } from "@/lib/dashboard-mode";
-import { getLatestConsentLinkUrl } from "@/lib/onboarding/data";
+import { getLatestConsentLinkPresentation } from "@/lib/consent-link-presentation";
 import { getPendingConsentLink } from "@/lib/onboarding/pending-consent-link";
 import { getCurrentTenantSelectionForViewer } from "@/lib/tenant-context";
 
@@ -19,17 +19,17 @@ export async function GET(request: NextRequest) {
   }
 
   const mode = await getSelectedMollieMode();
-  const [latestConsentUrl, pendingConsentLink] = await Promise.all([
-    getLatestConsentLinkUrl(
-    customerId,
-    mode,
-    currentTenant.id,
+  const [presentation, pendingConsentLink] = await Promise.all([
+    getLatestConsentLinkPresentation(
+      customerId,
+      mode,
+      currentTenant.id,
     ),
     getPendingConsentLink(customerId, mode, currentTenant.id),
   ]);
 
   return Response.json({
-    latestConsentUrl,
+    ...presentation,
     pendingConsentLink,
   });
 }

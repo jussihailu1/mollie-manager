@@ -294,6 +294,7 @@ export function CustomersWorkspace({
   const [isCreateCustomerOpen, setIsCreateCustomerOpen] = useState(false);
   const [isCreatePaymentOpen, setIsCreatePaymentOpen] = useState(false);
   const [paymentLinkDialogView, setPaymentLinkDialogView] = useState<"create" | "edit" | "share">("create");
+  const shareCustomer = customers.find((customer) => customer.id === searchParams.get("shareConsent")) ?? null;
   const [isConfirmPaymentOpen, setIsConfirmPaymentOpen] = useState(false);
   const [isCreateSubscriptionOpen, setIsCreateSubscriptionOpen] = useState(false);
   const [isRecordCancellationRequestOpen, setIsRecordCancellationRequestOpen] = useState(false);
@@ -827,12 +828,19 @@ export function CustomersWorkspace({
       />
 
       <CreatePaymentLinkDialog
-        key={`customers-payment-${selectedCustomer?.id ?? "none"}-${paymentLinkDialogView}-${Number(isCreatePaymentOpen)}`}
-        customer={selectedCustomer}
+        key={`customers-payment-${shareCustomer?.id ?? selectedCustomer?.id ?? "none"}-${shareCustomer ? "share" : paymentLinkDialogView}-${Number(isCreatePaymentOpen)}`}
+        customer={shareCustomer ?? selectedCustomer}
         customers={customers}
-        initialView={paymentLinkDialogView}
-        open={isCreatePaymentOpen}
-        onOpenChange={setIsCreatePaymentOpen}
+        initialView={shareCustomer ? "share" : paymentLinkDialogView}
+        open={Boolean(shareCustomer) || isCreatePaymentOpen}
+        onOpenChange={(open) => {
+          setIsCreatePaymentOpen(open);
+          if (!open && searchParams.has("shareConsent")) {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("shareConsent");
+            window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+          }
+        }}
         onConsentDeleted={() => {
           setIsCreatePaymentOpen(false);
           setIsCustomerDrawerOpen(true);

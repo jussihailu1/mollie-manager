@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { unstable_rethrow } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 import { requireViewerSession } from "@/lib/auth/session";
@@ -16,6 +16,7 @@ import { createCustomerFlow } from "@/lib/onboarding/customer-creation-flow";
 import { linkCustomerToEboekhoudenRelation } from "@/lib/onboarding/customer-relation-link-flow";
 import { createFirstPaymentActionFlow } from "@/lib/onboarding/first-payment-action-flow";
 import { getLatestConsentLinkUrl } from "@/lib/onboarding/data";
+import { buildConsentShareReturnPath } from "@/lib/consent-link-sharing";
 import { removePendingConsentLink } from "@/lib/onboarding/pending-consent-link";
 import { updateActionPath } from "@/lib/onboarding/action-path";
 import { buildDrawerPath } from "@/lib/dashboard-drawer-route";
@@ -341,8 +342,7 @@ export async function linkEboekhoudenRelationAction(formData: FormData) {
 }
 
 export type CreateFirstPaymentActionState =
-  | { consentLinkUrl: string; error?: never }
-  | { consentLinkUrl?: never; error: string }
+  | { error: string }
   | null;
 
 export type DeletePendingConsentLinkActionState =
@@ -408,9 +408,6 @@ export async function createFirstPaymentAction(
       return { error: result.reason };
     }
 
-    revalidatePath("/");
-    revalidatePath("/customers");
-    revalidatePath("/payments");
     const consentLinkUrl = await getLatestConsentLinkUrl(
       parsed.data.customerId,
       selectedMode,
@@ -423,7 +420,11 @@ export async function createFirstPaymentAction(
       };
     }
 
-    return { consentLinkUrl };
+    revalidatePath("/");
+    revalidatePath("/customers");
+    revalidatePath("/payments");
+    // The URL restores sharing even when revalidation remounts the workspace.
+    redirect(buildConsentShareReturnPath(parsed.data.returnTo, parsed.data.customerId));
   } catch (error) {
     unstable_rethrow(error);
     return { error: serializeError(error) };

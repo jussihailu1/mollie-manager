@@ -8,7 +8,7 @@ describe("customer consent link route scope", () => {
 
     assert.match(source, /getCurrentTenantSelectionForViewer/);
     assert.match(source, /const \{ currentTenant \} = await getCurrentTenantSelectionForViewer\(\)/);
-    assert.match(source, /getLatestConsentLinkUrl\(\s*customerId,\s*mode,\s*currentTenant\.id,\s*\)/);
+    assert.match(source, /getLatestConsentLinkPresentation\(\s*customerId,\s*mode,\s*currentTenant\.id,\s*\)/);
     assert.doesNotMatch(source, /requireViewerSession/);
   });
 });

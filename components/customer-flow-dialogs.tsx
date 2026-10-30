@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, type ReactNode, useActionState, useEffect, useMemo, useState } from "react";
 import {
   Activity,
@@ -85,6 +85,7 @@ import {
   type CustomerLifecycleStateResult,
 } from "@/lib/customer-lifecycle-state";
 import { formatCurrency, formatDate, formatDateTime, formatLabel } from "@/lib/format";
+import { buildConsentShareMessage, type ConsentLinkShareDetails } from "@/lib/consent-link-sharing";
 import { buildDrawerPath } from "@/lib/dashboard-drawer-route";
 import { deriveFinalChargeDate, deriveServiceEndAt } from "@/lib/subscription-policy";
 import {
@@ -558,28 +559,50 @@ function SubscriptionSummaryRow({
 function ConsentLinkShareActions({
   customer,
   value,
+  details,
 }: Readonly<{
   customer: CustomerFlowRecord;
   value: string;
+  details: ConsentLinkShareDetails;
 }>) {
-  const [copied, setCopied] = useState(false);
-  const message = `Hi ${getCustomerDisplayName(customer)}, please complete your subscription consent and first payment here: ${value}`;
-  const emailHref = `mailto:${encodeURIComponent(customer.email)}?subject=${encodeURIComponent("Complete your subscription consent")}&body=${encodeURIComponent(message)}`;
+  const [copied, setCopied] = useState<"message" | "link" | null>(null);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const message = buildConsentShareMessage({ ...details, recipientName: getCustomerDisplayName(customer), url: value });
+  const subject = details.issuerName ? `Your subscription with ${details.issuerName}` : "Confirm your subscription";
+  const emailHref = `mailto:${encodeURIComponent(customer.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
+
+  async function copy(kind: "message" | "link") {
+    try {
+      await navigator.clipboard.writeText(kind === "message" ? message : value);
+      setCopied(kind);
+      setCopyError(null);
+      window.setTimeout(() => setCopied(null), 2000);
+    } catch {
+      setCopyError("Could not copy. Select the message or link and copy it manually.");
+    }
+  }
 
   return (
     <>
+      <div className="space-y-2">
+        <Label htmlFor="consent-share-message">Message to your customer</Label>
+        <Textarea id="consent-share-message" value={message} readOnly rows={6} />
+      </div>
+      <Button type="button" onClick={() => copy("message")}>
+        {copied === "message" ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+        {copied === "message" ? "Message copied" : "Copy message"}
+      </Button>
+      {copyError ? <p role="alert" className="text-sm text-destructive">{copyError}</p> : null}
       <div className="flex gap-2">
-        <Input value={value} readOnly />
+        <Input aria-label="Consent link" className="min-w-0" value={value} readOnly />
         <Button
           type="button"
-          onClick={async () => {
-            await navigator.clipboard.writeText(value);
-            setCopied(true);
-            window.setTimeout(() => setCopied(false), 2000);
-          }}
+          variant="outline"
+          className="shrink-0 whitespace-nowrap"
+          onClick={() => copy("link")}
         >
-          {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
-          {copied ? "Copied" : "Copy"}
+          {copied === "link" ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+          {copied === "link" ? "Link copied" : "Copy link"}
         </Button>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -1282,7 +1305,10 @@ function CreatePaymentLinkDialogSession({
   onConsentDeleted,
 }: CreatePaymentLinkDialogProps) {
   const router = useRouter();
-  const [requestedStep, setStep] = useState<"select_customer" | "payment_details" | "share">(
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.size ? `${pathname}?${searchParams}` : pathname;
+  const [step, setStep] = useState<"select_customer" | "payment_details" | "share">(
     initialView === "share" ? "share" : customer ? "payment_details" : "select_customer",
   );
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(customer?.id ?? null);
@@ -1369,22 +1395,17 @@ function CreatePaymentLinkDialogSession({
     );
   }, [customers, searchQuery]);
 
-  const step = createPaymentState?.consentLinkUrl ? "share" : requestedStep;
   const resolvedCustomerId = selectedCustomer?.id ?? null;
-  const consentResource = useJsonResource<{ latestConsentUrl?: string | null }>(
-    step === "share" && !createPaymentState?.consentLinkUrl && resolvedCustomerId
+  const consentResource = useJsonResource<{ latestConsentUrl: string | null; shareDetails: ConsentLinkShareDetails | null }>(
+    step === "share" && resolvedCustomerId
       ? "/api/customer-consent-link?customerId=" + encodeURIComponent(resolvedCustomerId)
       : null,
     "Could not load the consent link.",
   );
-  const consentLinkUrl = createPaymentState?.consentLinkUrl ?? consentResource.data?.latestConsentUrl ?? null;
+  const consentLinkUrl = consentResource.data?.latestConsentUrl ?? null;
   const isConsentLinkLoading = consentResource.loading;
   const consentLinkError = consentResource.error ??
-    (consentResource.data && !consentLinkUrl ? "Could not load the consent link." : null);
-
-  useEffect(() => {
-    if (createPaymentState?.consentLinkUrl) router.refresh();
-  }, [createPaymentState?.consentLinkUrl, router]);
+    (consentResource.data && (!consentLinkUrl || !consentResource.data.shareDetails) ? "Could not load the consent link." : null);
 
   useEffect(() => {
     if (!open || !isEditing || !resolvedCustomerId) {
@@ -1495,7 +1516,7 @@ function CreatePaymentLinkDialogSession({
             {step === "select_customer"
               ? "Choose a customer to generate a consent link for."
               : step === "share"
-                ? `Share this link with ${selectedCustomer?.businessName ?? "the customer"} to collect consent and the first payment.`
+                ? `Share this link with ${selectedCustomer?.businessName ?? "the customer"} to confirm their subscription and continue to payment.`
                 : isEditing
                   ? "Changing this contract permanently invalidates the current consent link."
                   : `Generate a hosted consent link for ${selectedCustomer?.businessName ?? "this customer"}. The customer must accept terms in-app before entering Mollie checkout.`}
@@ -1556,6 +1577,7 @@ function CreatePaymentLinkDialogSession({
         {step === "payment_details" && selectedCustomer ? (
           <form id="consent-link-form" className="flex min-h-0 flex-1 flex-col" action={createPaymentAction}>
             <input type="hidden" name="customerId" value={selectedCustomer.id} />
+            <input type="hidden" name="returnTo" value={returnTo} />
             {isEditing ? <input type="hidden" name="replacePendingConsent" value="yes" /> : null}
 
             <div className="grid min-h-0 grid-cols-1 gap-4 overflow-y-auto px-6 py-2 sm:grid-cols-2">
@@ -1784,7 +1806,7 @@ function CreatePaymentLinkDialogSession({
         </AlertDialog>
 
         {step === "share" ? (
-          <div className="space-y-4 px-6 py-4">
+          <div className="min-h-0 space-y-4 overflow-y-auto px-6 py-4">
             {isConsentLinkLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -1792,8 +1814,8 @@ function CreatePaymentLinkDialogSession({
               </div>
             ) : null}
             {consentLinkError ? <p className="text-sm text-destructive">{consentLinkError}</p> : null}
-            {consentLinkUrl && selectedCustomer ? (
-              <ConsentLinkShareActions customer={selectedCustomer} value={consentLinkUrl} />
+            {consentLinkUrl && selectedCustomer && consentResource.data?.shareDetails ? (
+              <ConsentLinkShareActions customer={selectedCustomer} value={consentLinkUrl} details={consentResource.data.shareDetails} />
             ) : null}
             <DialogFooter className="pt-2">
               <Button type="button" onClick={() => onOpenChange(false)}>

@@ -1,5 +1,10 @@
 ﻿import Link from "next/link";
 
+import type { Metadata } from "next";
+
+import { getConsentLinkPresentationByToken } from "@/lib/consent-link-presentation";
+import { buildConsentPreviewMetadata } from "@/lib/consent-link-sharing";
+import { env } from "@/lib/env";
 import { acceptSubscriptionConsentAction, getSubscriptionConsentByToken } from "@/lib/subscription-consent";
 import { formatCurrency, formatDate } from "@/lib/format";
 
@@ -19,6 +24,13 @@ type SubscribePageProps = {
   }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
+
+export async function generateMetadata({ params }: SubscribePageProps): Promise<Metadata> {
+  const { token } = await params;
+  const details = await getConsentLinkPresentationByToken(token);
+  const imageUrl = new URL(`/subscribe/${encodeURIComponent(token)}/preview`, env.APP_URL).toString();
+  return buildConsentPreviewMetadata(details, imageUrl);
+}
 
 function getSingleParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;

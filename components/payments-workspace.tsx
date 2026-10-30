@@ -197,6 +197,7 @@ export function PaymentsWorkspace({
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [currentPage, setCurrentPage] = useState(() => getInitialPage(payments, initialDrawerId));
   const [isCreatePaymentOpen, setIsCreatePaymentOpen] = useState(false);
+  const shareCustomer = customers.find((customer) => customer.id === searchParams.get("shareConsent")) ?? null;
   const focusedPayment = initialDrawerId
     ? payments.find((payment) => payment.id === initialDrawerId) ?? null
     : null;
@@ -795,11 +796,19 @@ export function PaymentsWorkspace({
       />
 
       <CreatePaymentLinkDialog
-        key={`payments-create-${Number(isCreatePaymentOpen)}`}
-        customer={null}
+        key={`payments-create-${shareCustomer?.id ?? "new"}-${Number(isCreatePaymentOpen)}`}
+        customer={shareCustomer}
         customers={customers}
-        open={isCreatePaymentOpen}
-        onOpenChange={setIsCreatePaymentOpen}
+        initialView={shareCustomer ? "share" : "create"}
+        open={Boolean(shareCustomer) || isCreatePaymentOpen}
+        onOpenChange={(open) => {
+          setIsCreatePaymentOpen(open);
+          if (!open && searchParams.has("shareConsent")) {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("shareConsent");
+            window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+          }
+        }}
       />
     </div>
   );
