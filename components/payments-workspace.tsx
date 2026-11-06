@@ -64,7 +64,6 @@ type PaymentRecord = {
 };
 
 type SortField =
-  | "reference"
   | "customerName"
   | "amount"
   | "paymentType"
@@ -298,9 +297,6 @@ export function PaymentsWorkspace({
       let comparison = 0;
 
       switch (sortField) {
-        case "reference":
-          comparison = left.reference.localeCompare(right.reference);
-          break;
         case "customerName":
           comparison = left.customerBusinessName.localeCompare(right.customerBusinessName);
           break;
@@ -610,16 +606,6 @@ export function PaymentsWorkspace({
               <TableHead>
                 <button
                   type="button"
-                  onClick={() => handleSort("reference")}
-                  className="inline-flex items-center hover:text-foreground transition-colors"
-                >
-                  Reference
-                  <SortIcon field="reference" sortDirection={sortDirection} sortField={sortField} />
-                </button>
-              </TableHead>
-              <TableHead>
-                <button
-                  type="button"
                   onClick={() => handleSort("customerName")}
                   className="inline-flex items-center hover:text-foreground transition-colors"
                 >
@@ -686,7 +672,7 @@ export function PaymentsWorkspace({
           <TableBody>
             {paginatedPayments.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   {customerScopedPayments.length === 0
                     ? "No payments found."
                     : "No payments match your filters."}
@@ -698,12 +684,6 @@ export function PaymentsWorkspace({
                   key={payment.id}
                   className={cn(initialDrawerId === payment.id && "bg-accent/40")}
                 >
-                  <TableCell
-                    className="max-w-[9rem] truncate font-mono text-xs text-muted-foreground"
-                    title={payment.reference}
-                  >
-                    {payment.reference}
-                  </TableCell>
                   <TableCell className="font-medium">
                     <CustomerLink
                       customerId={payment.customerId}

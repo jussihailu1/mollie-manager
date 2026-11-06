@@ -1,28 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
   LoaderCircle,
   ExternalLink,
-  FileText,
-  FileXCorner,
+  Download,
+  ChevronRight,
 } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Sheet,
   SheetContent,
@@ -37,11 +28,18 @@ import {
 import { formatCurrency, formatDateTime, formatLabel } from "@/lib/format";
 import { buildDrawerPath } from "@/lib/dashboard-drawer-route";
 import type { PaymentDrawerData } from "@/lib/payment-details";
+import { getPaymentNotices, invoiceStatusLabels } from "@/lib/payment-drawer-presentation";
 import { cn } from "@/lib/utils";
 import { useAsyncResource, useJsonResource } from "@/lib/use-async-resource";
 import { repairPayment } from "@/lib/payment-repair-request";
 
 type PaymentRecord = {
+  amount: string;
+  currency: string;
+  description: string;
+  createdAt: string;
+  paidAt: string | null;
+  type: "first" | "recurring";
   customerBusinessName: string;
   customerId: string | null;
   id: string;
@@ -109,62 +107,6 @@ function AmountValue({
   return formatCurrency(amount.value, amount.currency);
 }
 
-function renderUnknownValue(value: unknown): React.ReactNode {
-  if (value == null) {
-    return <span className="text-muted-foreground">-</span>;
-  }
-
-  if (typeof value === "string") {
-    return value;
-  }
-
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-
-  if (Array.isArray(value)) {
-    if (value.length === 0) {
-      return <span className="text-muted-foreground">-</span>;
-    }
-
-    return (
-      <div className="space-y-2 text-left">
-        {value.map((item, index) => (
-          <div key={index} className="rounded-md border p-2">
-            {renderUnknownValue(item)}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>);
-
-    if (entries.length === 0) {
-      return <span className="text-muted-foreground">-</span>;
-    }
-
-    return (
-      <div className="space-y-2 text-left">
-        {entries.map(([key, entryValue]) => (
-          <div
-            key={key}
-            className="flex flex-col gap-1 border-b border-border/60 pb-2 last:border-b-0 last:pb-0 sm:flex-row sm:justify-between sm:gap-4"
-          >
-            <span className="text-muted-foreground">{formatLabel(key)}</span>
-            <span className="break-words sm:max-w-[58%] sm:text-right">
-              {renderUnknownValue(entryValue)}
-            </span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return String(value);
-}
-
 function Section({
   children,
   title,
@@ -177,7 +119,7 @@ function Section({
       <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
         {title}
       </h3>
-      <div className="flex flex-col gap-3">{children}</div>
+      <dl className="flex flex-col gap-3">{children}</dl>
     </div>
   );
 }
@@ -260,8 +202,6 @@ function PaymentDrawerSession({
   payment,
 }: PaymentDrawerProps) {
   const router = useRouter();
-  const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
-  const [showMore, setShowMore] = useState(false);
   const paymentId = payment?.id ?? null;
   const lastSyncedAt = payment?.lastSyncedAt ?? null;
   const molliePaymentId = payment?.molliePaymentId ?? null;
@@ -288,454 +228,165 @@ function PaymentDrawerSession({
     if (repairResult?.status === "repaired") router.refresh();
   }, [repairResult, router]);
 
-  const drawerTitle = details?.molliePaymentId ?? payment?.reference ?? "Payment details";
+  if (!payment) return null;
+
+  const status = details?.payment.status ?? payment.status;
+  const amount = details?.payment.amount ?? { value: payment.amount, currency: payment.currency };
+  const description = details?.payment.description || payment.description;
+  const paidAt = details ? details.payment.paidAt : payment.paidAt;
   const mollieDashboardUrl = details?.payment.links.dashboard ?? null;
-  const hasInvoice =
-    details?.invoiceState === "invoice_created" || details?.invoiceState === "invoice_sent";
   const invoiceDownloadUrl = details?.invoice.invoicePdfUrl ?? details?.invoicePdfUrl ?? null;
-
-  const linkEntries = useMemo(
-    () => Object.entries(details?.payment.links ?? {}),
-    [details?.payment.links],
-  );
-
-  if (!payment) {
-    return null;
-  }
+  const invoice = details?.invoice;
+  const notices = getPaymentNotices(details, payment.status);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto px-6 sm:max-w-md">
-        <SheetHeader className="pb-6">
-          <div className="min-w-0">
-            <SheetTitle className="truncate text-2xl">{drawerTitle}</SheetTitle>
-            <SheetDescription className="mt-2">
-              <CustomerLink
-                customerId={details?.customerId ?? payment.customerId}
-                customerName={details?.customerName ?? payment.customerBusinessName}
-                className="text-sm"
-              />
-            </SheetDescription>
-          </div>
+      <SheetContent className="w-full overflow-y-auto px-6 pb-8 sm:max-w-md">
+        <SheetHeader className="pb-6 pr-6 text-left">
+          <SheetTitle className="text-2xl">Payment details</SheetTitle>
+          <SheetDescription>
+            <CustomerLink
+              customerId={details?.customerId ?? payment.customerId}
+              customerName={details?.customerName ?? payment.customerBusinessName}
+              className="break-words"
+            />
+          </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-8">
-          <Section title="Overview">
-            <ValueRow
-              label="Payment ID"
-              value={
-                <div className="flex items-center justify-end gap-1">
-                  <span className="font-mono text-xs">{drawerTitle}</span>
-                  {mollieDashboardUrl ? (
-                    <Button asChild variant="ghost" size="icon-xs">
-                      <a
-                        href={mollieDashboardUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label="Open payment in Mollie"
-                        title="Open payment in Mollie"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                    </Button>
-                  ) : null}
-                </div>
-              }
-            />
-            <ValueRow
-              label="Status"
-              value={<Badge variant="default">{formatLabel(details?.payment.status ?? payment.status)}</Badge>}
-            />
-            <ValueRow
-              label="Amount"
-              value={<AmountValue amount={details?.payment.amount ?? null} />}
-            />
-            <ValueRow
-              label="Invoice"
-              value={
-                hasInvoice ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    className="shrink-0"
-                    onClick={() => setIsInvoiceDialogOpen(true)}
-                    aria-label="Invoice exists"
-                    title="Invoice exists"
-                  >
-                    <FileText />
-                  </Button>
-                ) : (
-                  <span title="Invoice not ready yet">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      className="shrink-0 text-muted-foreground opacity-60 hover:bg-transparent hover:text-muted-foreground"
-                      disabled
-                      aria-label="Invoice not ready yet"
-                    >
-                      <FileXCorner />
-                    </Button>
-                  </span>
-                )
-              }
-            />
-            <ValueRow
-              label="Description"
-              value={details?.payment.description ?? <span className="text-muted-foreground">-</span>}
-            />
-            {details ? (
-              <>
-                <ValueRow
-                  label="Invoice State"
-                  value={formatLabel(details.invoice.state)}
-                />
-                <ValueRow
-                  label="Invoice Stored On"
-                  value={formatInvoiceOwnerType(details.invoice.ownerType)}
-                />
-                <ValueRow
-                  label="Invoice Trigger"
-                  value={formatInvoiceTriggerKind(details.invoice.triggerKind)}
-                />
-                <ValueRow
-                  label="Invoice Number"
-                  value={details.invoice.invoiceNumber ?? "-"}
-                />
-                <ValueRow
-                  label="Attachment Delivery"
-                  value={formatInvoiceAttachmentStatus(details.invoice.documentAttachmentStatus)}
-                />
-              </>
-            ) : null}
-            <ValueRow
-              label="Method"
-              value={details?.payment.method ? formatLabel(details.payment.method) : "-"}
-            />
-            <ValueRow
-              label="Sequence Type"
-              value={details?.payment.sequenceType ? formatLabel(details.payment.sequenceType) : "-"}
-            />
-            <ValueRow
-              label="Created At"
-              value={details?.payment.createdAt ? formatDateTime(details.payment.createdAt) : "-"}
-            />
-            <ValueRow
-              label="Paid At"
-              value={details?.payment.paidAt ? formatDateTime(details.payment.paidAt) : "-"}
-            />
-            <ValueRow
-              label="Last Synced"
-              value={details?.lastSyncedAt ? formatDateTime(details.lastSyncedAt) : "-"}
-            />
-          </Section>
-
-          {isRepairing ? (
-            <div className="flex items-center gap-2 rounded-md border p-4 text-sm text-muted-foreground">
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-              Repairing local payment state from Mollie...
+        <div className="space-y-6">
+          <div className="space-y-2 rounded-lg border bg-muted/30 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-3xl font-semibold tracking-tight">
+                <AmountValue amount={amount} />
+              </p>
+              <Badge variant={status === "paid" ? "default" : ["failed", "expired", "canceled"].includes(status) ? "destructive" : "secondary"}>
+                {formatLabel(status)}
+              </Badge>
             </div>
-          ) : null}
+            {description ? <p className="break-words text-sm text-muted-foreground">{description}</p> : null}
+          </div>
 
-          {repairError ? (
-            <Alert variant="destructive">
-              <AlertTitle>Repair failed</AlertTitle>
-              <AlertDescription>{repairError}</AlertDescription>
-            </Alert>
+          {loading || isRepairing ? (
+            <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+              <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
+              {loading ? "Checking payment and invoice details..." : "Updating payment and invoice status..."}
+            </p>
           ) : null}
-
-          {loading ? (
-            <div className="flex items-center gap-2 rounded-md border p-4 text-sm text-muted-foreground">
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-              Loading live Mollie payment data...
-            </div>
-          ) : null}
-
           {error ? (
             <Alert variant="destructive">
-              <AlertTitle>Could not load payment details</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
+              <AlertTitle>Could not load the latest details</AlertTitle>
+              <AlertDescription>
+                Showing saved payment information. Close and reopen this payment to try again.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {repairError ? (
+            <Alert variant="destructive">
+              <AlertTitle>Could not update this payment</AlertTitle>
+              <AlertDescription>
+                The information shown may be out of date. Check the payment in Mollie or try again later.
+              </AlertDescription>
             </Alert>
           ) : null}
 
-          <Dialog open={isInvoiceDialogOpen} onOpenChange={setIsInvoiceDialogOpen}>
-            <DialogContent className="sm:max-w-sm">
-              <DialogHeader>
-                <DialogTitle>Invoice exists</DialogTitle>
-                <DialogDescription>
-                  This payment already has an invoice.
-                </DialogDescription>
-              </DialogHeader>
-              {details ? (
-                <div className="space-y-3">
-                  <ValueRow
-                    label="Invoice number"
-                    value={details.invoice.invoiceNumber ?? "-"}
-                  />
-                  <ValueRow
-                    label="Stored on"
-                    value={formatInvoiceOwnerType(details.invoice.ownerType)}
-                  />
-                  <ValueRow
-                    label="Trigger"
-                    value={formatInvoiceTriggerKind(details.invoice.triggerKind)}
-                  />
-                  <ValueRow
-                    label="Source"
-                    value={details.invoice.source ? formatLabel(details.invoice.source) : "-"}
-                  />
-                  <ValueRow
-                    label="Created at"
-                    value={details.invoice.createdAt ? formatDateTime(details.invoice.createdAt) : "-"}
-                  />
-                  <ValueRow
-                    label="Sent at"
-                    value={details.invoice.sentAt ? formatDateTime(details.invoice.sentAt) : "-"}
-                  />
-                  <ValueRow
-                    label="Delivery recipient"
-                    value={details.invoice.deliveryRecipient ?? "-"}
-                  />
-                  <ValueRow
-                    label="Intended recipient"
-                    value={details.invoice.intendedRecipient ?? "-"}
-                  />
-                  <ValueRow
-                    label="Recipient overridden"
-                    value={details.invoice.recipientOverridden ? "Yes" : "No"}
-                  />
-                  <ValueRow
-                    label="Email attachment"
-                    value={formatInvoiceAttachmentStatus(details.invoice.documentAttachmentStatus)}
-                  />
-                  <ValueRow
-                    label="Audit actor"
-                    value={
-                      details.invoice.createdByActorEmail ??
-                      (details.invoice.createdByActorKind
-                        ? formatLabel(details.invoice.createdByActorKind)
-                        : "-")
-                    }
-                  />
-                </div>
-              ) : null}
-              <DialogFooter className="justify-center sm:justify-center">
-                {invoiceDownloadUrl ? (
-                  <Button asChild className="!bg-foreground !text-background hover:!bg-foreground/90 hover:!text-background">
-                    <a
-                      href={invoiceDownloadUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="!bg-foreground !text-background hover:!bg-foreground/90 hover:!text-background"
-                    >
-                      Download invoice
-                    </a>
-                  </Button>
-                ) : (
-                  <Button disabled>Download invoice</Button>
-                )}
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          {details ? (
-            <>
-              <button
-                type="button"
-                className="text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
-                onClick={() => setShowMore((current) => !current)}
-              >
-                {showMore ? "hide" : "show more"}
-              </button>
-              {showMore ? (
-                <div className="space-y-8">
-                  <Section title="Timing and status">
-                    <ValueRow
-                      label="Status Reason"
-                      value={
-                        details.payment.statusReason
-                          ? `${details.payment.statusReason.code}: ${details.payment.statusReason.message}`
-                          : "-"
-                      }
-                    />
-                    <ValueRow
-                      label="Authorized At"
-                      value={
-                        details.payment.authorizedAt
-                          ? formatDateTime(details.payment.authorizedAt)
-                          : "-"
-                      }
-                    />
-                    <ValueRow
-                      label="Canceled At"
-                      value={
-                        details.payment.canceledAt
-                          ? formatDateTime(details.payment.canceledAt)
-                          : "-"
-                      }
-                    />
-                    <ValueRow
-                      label="Failed At"
-                      value={details.payment.failedAt ? formatDateTime(details.payment.failedAt) : "-"}
-                    />
-                    <ValueRow
-                      label="Expired At"
-                      value={details.payment.expiresAt ? formatDateTime(details.payment.expiresAt) : "-"}
-                    />
-                    <ValueRow
-                      label="Is Cancelable"
-                      value={
-                        details.payment.isCancelable == null
-                          ? "-"
-                          : details.payment.isCancelable
-                            ? "Yes"
-                            : "No"
-                      }
-                    />
-                  </Section>
-
-                  <Separator />
-
-                  <Section title="Relations">
-                    <ValueRow label="Customer ID" value={details.payment.customerId ?? "-"} />
-                    <ValueRow label="Subscription ID" value={details.payment.subscriptionId ?? "-"} />
-                    <ValueRow label="Mandate ID" value={details.payment.mandateId ?? "-"} />
-                    <ValueRow label="Order ID" value={details.payment.orderId ?? "-"} />
-                    <ValueRow label="Profile ID" value={details.payment.profileId ?? "-"} />
-                  </Section>
-
-                  <Separator />
-
-                  <Section title="Amounts">
-                    <ValueRow label="Settlement Amount" value={<AmountValue amount={details.payment.settlementAmount} />} />
-                    <ValueRow label="Settlement ID" value={details.payment.settlementId ?? "-"} />
-                    <ValueRow label="Amount Refunded" value={<AmountValue amount={details.payment.amountRefunded} />} />
-                    <ValueRow label="Amount Remaining" value={<AmountValue amount={details.payment.amountRemaining} />} />
-                    <ValueRow label="Amount Captured" value={<AmountValue amount={details.payment.amountCaptured} />} />
-                    <ValueRow label="Amount Charged Back" value={<AmountValue amount={details.payment.amountChargedBack} />} />
-                    <ValueRow label="Application Fee" value={renderUnknownValue(details.payment.applicationFee)} />
-                  </Section>
-
-                  <Separator />
-
-                  <Section title="Configuration">
-                    <ValueRow label="Locale" value={details.payment.locale ?? "-"} />
-                    <ValueRow label="Country Code" value={details.payment.countryCode ?? "-"} />
-                    <ValueRow label="Issuer" value={details.payment.issuer ?? "-"} />
-                    <ValueRow
-                      label="Restrict Payment Methods To Country"
-                      value={details.payment.restrictPaymentMethodsToCountry ?? "-"}
-                    />
-                    <ValueRow label="Capture Mode" value={details.payment.captureMode ?? "-"} />
-                    <ValueRow label="Capture Delay" value={details.payment.captureDelay ?? "-"} />
-                    <ValueRow
-                      label="Capture Before"
-                      value={
-                        details.payment.captureBefore
-                          ? formatDateTime(details.payment.captureBefore)
-                          : "-"
-                      }
-                    />
-                  </Section>
-
-                  <Separator />
-
-                  <Section title="URLs">
-                    <ValueRow label="Redirect URL" value={renderUnknownValue(details.payment.redirectUrl)} />
-                    <ValueRow label="Cancel URL" value={renderUnknownValue(details.payment.cancelUrl)} />
-                    <ValueRow
-                      label="Webhook Callback"
-                      value={
-                        details.payment.webhookUrlStatus === "hidden"
-                          ? "Configured in Mollie and hidden in this UI."
-                          : "-"
-                      }
-                    />
-                  </Section>
-
-                  {linkEntries.length > 0 ? (
-                    <>
-                      <Separator />
-                      <Section title="Links">
-                        {linkEntries.map(([key, href]) => (
-                          <ValueRow
-                            key={key}
-                            label={formatLabel(key)}
-                            value={
-                              <a
-                                href={href}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 hover:underline"
-                              >
-                                <span className="break-all">{href}</span>
-                                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                              </a>
-                            }
-                          />
-                        ))}
-                      </Section>
-                    </>
-                  ) : null}
-
-                  {details.payment.details ? (
-                    <>
-                      <Separator />
-                      <Section title="Details">
-                        <div className="text-sm">{renderUnknownValue(details.payment.details)}</div>
-                      </Section>
-                    </>
-                  ) : null}
-
-                  {details.payment.metadata ? (
-                    <>
-                      <Separator />
-                      <Section title="Metadata">
-                        <div className="text-sm">{renderUnknownValue(details.payment.metadata)}</div>
-                      </Section>
-                    </>
-                  ) : null}
-
-                  {details.payment.routing ? (
-                    <>
-                      <Separator />
-                      <Section title="Routing">
-                        <div className="text-sm">{renderUnknownValue(details.payment.routing)}</div>
-                      </Section>
-                    </>
-                  ) : null}
-
-                  {details.payment.lines ? (
-                    <>
-                      <Separator />
-                      <Section title="Lines">
-                        <div className="text-sm">{renderUnknownValue(details.payment.lines)}</div>
-                      </Section>
-                    </>
-                  ) : null}
-
-                  {details.payment.billingAddress ? (
-                    <>
-                      <Separator />
-                      <Section title="Billing Address">
-                        <div className="text-sm">{renderUnknownValue(details.payment.billingAddress)}</div>
-                      </Section>
-                    </>
-                  ) : null}
-
-                  {details.payment.shippingAddress ? (
-                    <>
-                      <Separator />
-                      <Section title="Shipping Address">
-                        <div className="text-sm">{renderUnknownValue(details.payment.shippingAddress)}</div>
-                      </Section>
-                    </>
-                  ) : null}
-                </div>
-              ) : null}
-            </>
+          {notices.length > 0 ? (
+            <div className="space-y-3" aria-label="Payment and invoice updates">
+              {notices.map((notice) => (
+                <Alert key={notice.id} variant={notice.urgent ? "destructive" : "default"} role={notice.urgent ? "alert" : "status"}>
+                  <AlertTitle>{notice.title}</AlertTitle>
+                  <AlertDescription>{notice.message}</AlertDescription>
+                </Alert>
+              ))}
+            </div>
           ) : null}
+
+          <Section title="Payment">
+            {details?.payment.method ? <ValueRow label="Method" value={formatLabel(details.payment.method)} /> : null}
+            <ValueRow label="Type" value={
+              details?.payment.sequenceType === "oneoff" ? "One-off payment" :
+              (details?.payment.sequenceType ?? payment.type) === "recurring" ? "Recurring payment" : "First payment"
+            } />
+            <ValueRow label="Created" value={formatDateTime(details?.payment.createdAt ?? payment.createdAt)} />
+            {paidAt ? <ValueRow label="Paid" value={formatDateTime(paidAt)} /> : null}
+            {details?.payment.failedAt ? <ValueRow label="Failed" value={formatDateTime(details.payment.failedAt)} /> : null}
+            {details?.payment.canceledAt ? <ValueRow label="Canceled" value={formatDateTime(details.payment.canceledAt)} /> : null}
+            {details?.payment.expiredAt ? <ValueRow label="Expired" value={formatDateTime(details.payment.expiredAt)} /> : null}
+          </Section>
+
+          <div className="space-y-4 border-t pt-6">
+            <Section title="Invoice">
+              <ValueRow label="Status" value={invoice ? invoiceStatusLabels[invoice.state] : loading ? "Checking..." : "Unavailable"} />
+              {invoice?.invoiceNumber ? <ValueRow label="Number" value={invoice.invoiceNumber} /> : null}
+              {invoice?.createdAt ? <ValueRow label="Created" value={formatDateTime(invoice.createdAt)} /> : null}
+              {invoice?.sentAt ? <ValueRow label="Sent" value={formatDateTime(invoice.sentAt)} /> : null}
+              {invoice?.deliveryRecipient ? <ValueRow label="Recipient" value={invoice.deliveryRecipient} /> : null}
+            </Section>
+            {invoiceDownloadUrl ? (
+              <Button asChild className="w-full">
+                <a href={invoiceDownloadUrl} target="_blank" rel="noreferrer">
+                  <Download className="h-4 w-4" />
+                  Download invoice
+                </a>
+              </Button>
+            ) : invoice && ["invoice_created", "invoice_sent"].includes(invoice.state) ? (
+              <p className="text-sm text-muted-foreground">The invoice exists, but its PDF is not available here yet.</p>
+            ) : null}
+          </div>
+
+          {mollieDashboardUrl ? (
+            <Button asChild variant="outline" className="w-full">
+              <a href={mollieDashboardUrl} target="_blank" rel="noreferrer">
+                <ExternalLink className="h-4 w-4" />
+                Open payment in Mollie
+              </a>
+            </Button>
+          ) : null}
+
+          <details className="group border-t pt-4">
+            <summary className="flex cursor-pointer list-none items-center justify-between rounded-sm py-2 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+              Technical details
+              <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" aria-hidden="true" />
+            </summary>
+            <div className="space-y-6 pt-4">
+              <Section title="References">
+                <ValueRow label="Payment ID" value={details?.molliePaymentId ?? payment.molliePaymentId ?? payment.reference} />
+                <ValueRow label="Local ID" value={payment.id} />
+                <ValueRow label="Last synced" value={formatDateTime(details?.lastSyncedAt ?? payment.lastSyncedAt)} />
+                {details?.payment.mode ? <ValueRow label="Mode" value={formatLabel(details.payment.mode)} /> : null}
+                {details?.payment.customerId ? <ValueRow label="Customer ID" value={details.payment.customerId} /> : null}
+                {details?.payment.subscriptionId ? <ValueRow label="Subscription ID" value={details.payment.subscriptionId} /> : null}
+                {details?.payment.mandateId ? <ValueRow label="Mandate ID" value={details.payment.mandateId} /> : null}
+                {details?.payment.profileId ? <ValueRow label="Profile ID" value={details.payment.profileId} /> : null}
+                {details?.payment.statusReason ? <ValueRow label="Status reason code" value={details.payment.statusReason.code} /> : null}
+                {error ? <ValueRow label="Loading error" value={error} /> : null}
+                {repairError ? <ValueRow label="Update error" value={repairError} /> : null}
+              </Section>
+              {details ? (
+                <>
+                  <Section title="Invoice processing">
+                    <ValueRow label="Stored on" value={formatInvoiceOwnerType(details.invoice.ownerType)} />
+                    <ValueRow label="Trigger" value={formatInvoiceTriggerKind(details.invoice.triggerKind)} />
+                    {details.invoice.source ? <ValueRow label="Source" value={formatLabel(details.invoice.source)} /> : null}
+                    {details.invoice.documentAttachmentStatus ? <ValueRow label="Attachment Delivery" value={formatInvoiceAttachmentStatus(details.invoice.documentAttachmentStatus)} /> : null}
+                    {details.invoice.intendedRecipient ? <ValueRow label="Intended recipient" value={details.invoice.intendedRecipient} /> : null}
+                    <ValueRow label="Recipient overridden" value={details.invoice.recipientOverridden ? "Yes" : "No"} />
+                    {details.invoice.createdByActorEmail || details.invoice.createdByActorKind ? (
+                      <ValueRow label="Created by" value={details.invoice.createdByActorEmail ?? formatLabel(details.invoice.createdByActorKind)} />
+                    ) : null}
+                  </Section>
+                  <Section title="Processing">
+                    {details.payment.settlementAmount ? <ValueRow label="Settlement amount" value={<AmountValue amount={details.payment.settlementAmount} />} /> : null}
+                    {details.payment.settlementId ? <ValueRow label="Settlement ID" value={details.payment.settlementId} /> : null}
+                    {details.payment.amountCaptured ? <ValueRow label="Captured" value={<AmountValue amount={details.payment.amountCaptured} />} /> : null}
+                    {details.payment.amountRemaining ? <ValueRow label="Remaining" value={<AmountValue amount={details.payment.amountRemaining} />} /> : null}
+                    {details.payment.authorizedAt ? <ValueRow label="Authorized" value={formatDateTime(details.payment.authorizedAt)} /> : null}
+                    {details.payment.expiresAt ? <ValueRow label="Expires" value={formatDateTime(details.payment.expiresAt)} /> : null}
+                    <ValueRow label="Webhook Callback" value={details.payment.webhookUrlStatus === "hidden" ? "Configured in Mollie and hidden in this UI." : "Not configured"} />
+                  </Section>
+                </>
+              ) : null}
+            </div>
+          </details>
         </div>
       </SheetContent>
     </Sheet>
