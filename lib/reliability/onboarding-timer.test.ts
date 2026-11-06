@@ -6,7 +6,7 @@ it("calls only the protected onboarding endpoint and records its scheduled sourc
   const runId = await runRecovery({ RECOVERY_SECRET: "test-secret" }, async (url, options) => {
     assert.equal(url, "https://kify.app/api/cron/onboarding");
     assert.equal(options?.method, "POST");
-    assert.equal(options?.redirect, "error");
+    assert.equal(options?.redirect, "manual");
     const headers = new Headers(options?.headers);
     assert.equal(headers.get("authorization"), "Bearer test-secret");
     assert.equal(headers.get("x-kify-recovery-trigger"), "schedule");
@@ -19,7 +19,7 @@ it("calls only the protected onboarding endpoint and records its scheduled sourc
 it("never calls the app without a credential", async () => {
   await assert.rejects(runRecovery({}, async () => { throw new Error("must not fetch"); }), /credential is missing/);
 });
-for (const status of [401, 503]) it(`fails the cron on HTTP ${status} without exposing the response body`, async () => {
+for (const status of [302, 307, 401, 503]) it(`fails the cron on HTTP ${status} without exposing the response body`, async () => {
   await assert.rejects(runRecovery({ RECOVERY_SECRET: "test-secret" }, async () => new Response("private detail", { status })), new RegExp(`HTTP ${status}$`));
 });
 it("rejects an incomplete recovery even with HTTP 200", async () => {

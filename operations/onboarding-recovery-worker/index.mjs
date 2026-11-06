@@ -3,7 +3,9 @@ export async function runRecovery(env, transport = fetch) {
   if (!env.RECOVERY_SECRET) throw new Error("Onboarding recovery credential is missing");
   const response = await transport("https://kify.app/api/cron/onboarding", {
     method: "POST",
-    redirect: "error",
+    // Workers supports manual/follow, not Node's error mode. Manual prevents
+    // forwarding the credential; the non-2xx check below rejects redirects.
+    redirect: "manual",
     headers: {
       Authorization: `Bearer ${env.RECOVERY_SECRET}`,
       "X-Kify-Recovery-Trigger": "schedule",
