@@ -11,13 +11,13 @@ export const maxDuration = 60;
 // Separate credential and endpoint: the frequent worker cannot run invoice
 // creation or retry arbitrary collections. Production scheduler uses live only.
 export async function POST(request: Request) {
-  const secrets = [process.env.ONBOARDING_RECOVERY_SECRET, process.env.ONBOARDING_TIMER_SECRET].filter((value): value is string => Boolean(value));
+  const secrets = [process.env.ONBOARDING_TIMER_SECRET].filter((value): value is string => Boolean(value));
   if (!isBearerAuthorized(request.headers.get("authorization"), secrets)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
   const runId = crypto.randomUUID();
   const trigger = request.headers.get("x-kify-recovery-trigger") === "schedule" ? "schedule" : "manual_or_external";
-  const scheduler = request.headers.get("x-kify-recovery-scheduler") === "cloudflare" ? "cloudflare" : "github_or_external";
+  const scheduler = request.headers.get("x-kify-recovery-scheduler") === "cloudflare" ? "cloudflare" : "external";
   const results = [];
   for (const tenant of await listTenants()) {
     try {

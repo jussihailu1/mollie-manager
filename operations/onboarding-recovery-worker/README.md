@@ -8,9 +8,8 @@ scheduled invocation rather than reporting success.
 Production worker: `kify-onboarding-recovery` in the configured Ayal Web account.
 The Worker secret `RECOVERY_SECRET` must match Vercel production's
 `ONBOARDING_TIMER_SECRET`. Store secrets outside the repository; never pass values
-as CLI arguments. The separate `ONBOARDING_RECOVERY_SECRET` remains available for
-the GitHub manual recovery workflow. GitHub has no scheduled trigger; Cloudflare
-owns the five-minute clock, independent of repository activity.
+as CLI arguments. Cloudflare owns the five-minute clock, independent of repository
+activity. There is no GitHub recovery workflow or recovery credential.
 
 ```powershell
 wrangler deploy --config operations/onboarding-recovery-worker/wrangler.jsonc --env production --dry-run
