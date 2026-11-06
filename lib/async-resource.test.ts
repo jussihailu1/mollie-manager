@@ -61,3 +61,35 @@ it("failed reads end loading and expose a retryable error instead of stale data"
   await request.promise.catch(() => {});
   assert.deepEqual(resource.getSnapshot(), { data: null, error: "Unavailable", loading: false });
 });
+
+it("keeps loaded data visible during refresh and replaces it when the request completes", async () => {
+  const next = deferred<string>();
+  let calls = 0;
+  const resource = createAsyncResource(() => ++calls === 1 ? Promise.resolve("previous") : next.promise);
+  const stop = resource.start()!;
+  await Promise.resolve();
+  stop();
+  resource.start();
+  assert.deepEqual(resource.getSnapshot(), { data: "previous", error: null, loading: true });
+  next.resolve("updated");
+  await next.promise;
+  assert.deepEqual(resource.getSnapshot(), { data: "updated", error: null, loading: false });
+});
+
+it("retains loaded data on a background failure and clears the error on retry", async () => {
+  let fail = false;
+  const resource = createAsyncResource(async () => {
+    if (fail) throw new Error("Offline");
+    return "loaded";
+  });
+  resource.start();
+  await Promise.resolve();
+  fail = true;
+  resource.start();
+  await Promise.resolve();
+  assert.deepEqual(resource.getSnapshot(), { data: "loaded", error: "Offline", loading: false });
+  fail = false;
+  resource.start();
+  await Promise.resolve();
+  assert.deepEqual(resource.getSnapshot(), { data: "loaded", error: null, loading: false });
+});

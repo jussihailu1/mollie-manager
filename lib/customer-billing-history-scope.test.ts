@@ -17,12 +17,12 @@ describe("customer billing history surface", () => {
     assert.match(source, /subscriptions: detail\.subscriptions/);
   });
 
-  it("loads dense billing history inside the customer drawer", () => {
+  it("keeps subscription, payment and mandate history available in the customer drawer", () => {
     const source = readFileSync(resolve("components/customer-flow-dialogs.tsx"), "utf8");
 
     assert.match(source, /billing-history/);
     assert.match(source, /Billing history/);
-    assert.match(source, /Subscriptions/);
+    assert.match(source, /Subscription history/);
     assert.match(source, /Mandates/);
     assert.match(source, /Payments/);
   });

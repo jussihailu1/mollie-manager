@@ -28,14 +28,15 @@ export function createAsyncResource<T>(
       if (!load) return;
       const request = ++generation;
       const controller = new AbortController();
-      publish({ data: null, error: null, loading: true });
+      // Keep the current value visible during same-resource revalidation.
+      publish({ data: snapshot.data, error: null, loading: true });
       load(controller.signal).then(
         (data) => {
           if (request === generation) publish({ data, error: null, loading: false });
         },
         (error: unknown) => {
           if (request === generation) publish({
-            data: null,
+            data: snapshot.data,
             error: error instanceof Error ? error.message : "Request failed.",
             loading: false,
           });

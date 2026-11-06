@@ -27,8 +27,8 @@ describe("customer activity timeline surface", () => {
     assert.match(source, /CustomerActivityTimeline/);
     assert.match(source, /activityTimeline/);
     assert.match(source, /"\/api\/customers\/" \+ encodeURIComponent\(currentCustomerId\)/);
-    assert.match(source, /useJsonResource<CustomerActivityTimeline>\([\s\S]*?customerUrl && hasBillingHistoryToLoad \? customerUrl \+ "\/activity" : null/);
-    assert.match(source, /"Failed to load customer activity\.", activityTimelineRefreshKey/);
+    assert.match(source, /useJsonResource<CustomerActivityTimeline>\([\s\S]*?customerUrl \? customerUrl \+ "\/activity" : null/);
+    assert.match(source, /"Failed to load customer activity\.",\s*activityRevision/);
     assert.match(source, /Activity timeline/);
     assert.match(source, /TimelineRow/);
     assert.match(source, /Pending subscription requests/);

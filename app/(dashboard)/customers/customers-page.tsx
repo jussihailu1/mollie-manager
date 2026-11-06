@@ -40,10 +40,7 @@ export async function CustomerPageContent({
 
   return (
     <CustomersWorkspace
-      key={[
-        customerId ?? "",
-        getSingleSearchParam(resolvedSearchParams.view) ?? "",
-      ].join(":")}
+      key={`${tenantId}:${selectedMode}`}
       archivedCustomers={archivedCustomers}
       customers={customers}
       hasEboekhoudenConnection={hasEboekhoudenConnection}

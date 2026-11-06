@@ -24,6 +24,7 @@ import {
   type CustomerFlowRecord,
   getCustomerDisplayName,
   getCustomerLifecycleBadge,
+  getCustomerLifecycleState,
   getCustomerStage,
 } from "@/components/customer-flow-dialogs";
 import {
@@ -641,6 +642,10 @@ export function CustomersWorkspace({
             ) : (
               filteredAndSorted.map((customer) => {
                 const stage = getCustomerStage(customer);
+                const lifecycle = getCustomerLifecycleState(customer);
+                const showStageBadge =
+                  ["needs_setup", "onboarding", "payment_issue"].includes(lifecycle.state) &&
+                  stage !== "new";
                 const actionKind = getActionKind(customer);
                 const isArchived = Boolean(customer.archivedAt);
 
@@ -716,7 +721,7 @@ export function CustomersWorkspace({
                         <TableCell>
                           <div className="flex flex-wrap gap-2">
                             {getCustomerLifecycleBadge(customer)}
-                            {getStatusBadge(stage)}
+                            {showStageBadge && getStatusBadge(stage)}
                           </div>
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-muted-foreground">

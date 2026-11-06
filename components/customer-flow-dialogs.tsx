@@ -8,6 +8,7 @@ import {
   Archive,
   Check,
   CheckCircle,
+  ChevronDown,
   Copy,
   ExternalLink,
   FileText,
@@ -80,6 +81,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DASHBOARD_REFRESH_EVENT } from "@/lib/dashboard-refresh";
 import {
   deriveCustomerLifecycleState,
   type CustomerLifecycleStateResult,
@@ -2038,7 +2042,7 @@ export function CustomerDrawer(props: CustomerDrawerProps) {
 }
 
 function CustomerDrawerSession({
-  customer,
+  customer: initialCustomer,
   open,
   onOpenChange,
   onOpenCreatePayment,
@@ -2049,40 +2053,100 @@ function CustomerDrawerSession({
   onOpenArchiveCustomer,
   onOpenRestoreCustomer,
 }: CustomerDrawerProps) {
-  const router = useRouter();
-  const [activityTimelineRefreshKey, setActivityTimelineRefreshKey] = useState(0);
+  const [drawerRefreshKey, setDrawerRefreshKey] = useState(0);
+  const [activeTab, setActiveTab] = useState("overview");
+  const drawerRevision = useMemo(
+    () => [initialCustomer, drawerRefreshKey],
+    [initialCustomer, drawerRefreshKey],
+  );
+  const customerResource = useJsonResource<{ customer: CustomerFlowRecord }>(
+    initialCustomer
+      ? `/api/customers/${encodeURIComponent(initialCustomer.id)}`
+      : null,
+    "Could not refresh customer details.",
+    drawerRevision,
+  );
+  const customer = customerResource.data?.customer ?? initialCustomer;
+  useEffect(() => {
+    const refreshDrawer = (event: Event) => {
+      event.preventDefault();
+      setDrawerRefreshKey((value) => value + 1);
+    };
+    window.addEventListener(DASHBOARD_REFRESH_EVENT, refreshDrawer);
+    return () =>
+      window.removeEventListener(DASHBOARD_REFRESH_EVENT, refreshDrawer);
+  }, []);
+  const [activityTimelineRefreshKey, setActivityTimelineRefreshKey] =
+    useState(0);
   const [noteBody, setNoteBody] = useState("");
   const [noteError, setNoteError] = useState<string | null>(null);
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [isNoteComposerOpen, setIsNoteComposerOpen] = useState(false);
-  const [resendingInvoiceKey, setResendingInvoiceKey] = useState<string | null>(null);
-  const [invoiceResendError, setInvoiceResendError] = useState<string | null>(null);
+  const [resendingInvoiceKey, setResendingInvoiceKey] = useState<string | null>(
+    null,
+  );
+  const [invoiceResendError, setInvoiceResendError] = useState<string | null>(
+    null,
+  );
   const [isInvoiceProfileOpen, setIsInvoiceProfileOpen] = useState(false);
   const [invoiceProfileRefreshKey, setInvoiceProfileRefreshKey] = useState(0);
+  const profileRevision = useMemo(
+    () => [drawerRevision, invoiceProfileRefreshKey],
+    [drawerRevision, invoiceProfileRefreshKey],
+  );
+  const activityRevision = useMemo(
+    () => [drawerRevision, activityTimelineRefreshKey],
+    [drawerRevision, activityTimelineRefreshKey],
+  );
   const currentCustomerId = customer?.id ?? null;
   const hasBillingHistoryToLoad = Boolean(
-    customer?.latestPaymentId || customer?.latestSubscriptionId || customer?.latestFirstPaymentLinkStatus,
+    customer?.latestPaymentId ||
+    customer?.latestSubscriptionId ||
+    customer?.latestFirstPaymentLinkStatus,
   );
 
-  const customerUrl = currentCustomerId ? "/api/customers/" + encodeURIComponent(currentCustomerId) : null;
-  const profileResource = useJsonResource<{ profile?: CustomerInvoiceProfile | null }>(
+  const customerUrl = currentCustomerId
+    ? "/api/customers/" + encodeURIComponent(currentCustomerId)
+    : null;
+  const profileResource = useJsonResource<{
+    profile?: CustomerInvoiceProfile | null;
+  }>(
     customerUrl ? customerUrl + "/invoice-profile" : null,
-    "Could not load the invoice profile.", invoiceProfileRefreshKey,
+    "Could not load the invoice profile.",
+    profileRevision,
   );
   const invoiceProfile = profileResource.data?.profile ?? null;
   const invoiceProfileError = profileResource.error;
-  const isInvoiceProfileLoading = profileResource.loading;
-  const { data: billingHistory, error: billingHistoryError, loading: isBillingHistoryLoading } = useJsonResource<CustomerBillingHistory>(
-    customerUrl && hasBillingHistoryToLoad ? customerUrl + "/billing-history" : null,
+  const isInvoiceProfileLoading =
+    profileResource.loading && !profileResource.data;
+  const {
+    data: billingHistory,
+    error: billingHistoryError,
+    loading: isBillingHistoryLoading,
+  } = useJsonResource<CustomerBillingHistory>(
+    customerUrl && hasBillingHistoryToLoad
+      ? customerUrl + "/billing-history"
+      : null,
     "Failed to load customer billing history.",
+    drawerRevision,
   );
-  const { data: activityTimeline, error: activityTimelineError, loading: isActivityTimelineLoading } = useJsonResource<CustomerActivityTimeline>(
-    customerUrl && hasBillingHistoryToLoad ? customerUrl + "/activity" : null,
-    "Failed to load customer activity.", activityTimelineRefreshKey,
+  const {
+    data: activityTimeline,
+    error: activityTimelineError,
+    loading: isActivityTimelineLoading,
+  } = useJsonResource<CustomerActivityTimeline>(
+    customerUrl ? customerUrl + "/activity" : null,
+    "Failed to load customer activity.",
+    activityRevision,
   );
-  const { data: invoiceLinks, error: invoiceLinksError, loading: isInvoiceLinksLoading } = useJsonResource<CustomerInvoiceLinks>(
+  const {
+    data: invoiceLinks,
+    error: invoiceLinksError,
+    loading: isInvoiceLinksLoading,
+  } = useJsonResource<CustomerInvoiceLinks>(
     customerUrl ? customerUrl + "/invoices" : null,
     "Failed to load customer invoices.",
+    drawerRevision,
   );
 
   if (!customer) {
@@ -2112,9 +2176,9 @@ function CustomerDrawerSession({
           method: "POST",
         },
       );
-      const payload = (await response.json().catch(() => null)) as
-        | { error?: string }
-        | null;
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
 
       if (!response.ok) {
         throw new Error(
@@ -2127,7 +2191,6 @@ function CustomerDrawerSession({
       setNoteBody("");
       setIsNoteComposerOpen(false);
       setActivityTimelineRefreshKey((value) => value + 1);
-      router.refresh();
     } catch (createError) {
       setNoteError(
         createError instanceof Error
@@ -2139,7 +2202,9 @@ function CustomerDrawerSession({
     }
   }
 
-  async function handleResendInvoice(invoice: CustomerInvoiceLinks["invoices"][number]) {
+  async function handleResendInvoice(
+    invoice: CustomerInvoiceLinks["invoices"][number],
+  ) {
     if (!currentCustomerId) {
       return;
     }
@@ -2171,9 +2236,10 @@ function CustomerDrawerSession({
           method: "POST",
         },
       );
-      const payload = (await response.json().catch(() => null)) as
-        | { error?: string; status?: string }
-        | null;
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+        status?: string;
+      } | null;
 
       if (!response.ok) {
         throw new Error(
@@ -2183,11 +2249,12 @@ function CustomerDrawerSession({
         );
       }
 
-      setActivityTimelineRefreshKey((value) => value + 1);
-      router.refresh();
+      setDrawerRefreshKey((value) => value + 1);
     } catch (resendError) {
       setInvoiceResendError(
-        resendError instanceof Error ? resendError.message : "Failed to resend invoice.",
+        resendError instanceof Error
+          ? resendError.message
+          : "Failed to resend invoice.",
       );
     } finally {
       setResendingInvoiceKey(null);
@@ -2200,7 +2267,10 @@ function CustomerDrawerSession({
   const invoiceProfileReady = Boolean(invoiceProfile) && !invoiceProfileError;
   const consentCreated = stage !== "new";
   const canEditConsentLink = consentCreated && !customer.latestConsentAcceptedAt;
-  const firstPaymentCompleted = ["payment_completed", "subscription_active"].includes(stage);
+  const firstPaymentCompleted = [
+    "payment_completed",
+    "subscription_active",
+  ].includes(stage);
   const subscriptionActive = stage === "subscription_active";
   const latestPaymentDateLabel =
     customer.latestPaymentStatus === "paid" && customer.latestPaymentPaidAt
@@ -2210,11 +2280,7 @@ function CustomerDrawerSession({
     customer.latestPaymentStatus === "paid" && customer.latestPaymentPaidAt
       ? customer.latestPaymentPaidAt
       : customer.latestPaymentCreatedAt;
-  const hasSubscriptionDetails = Boolean(
-    customer.latestSubscriptionId ||
-      customer.latestFirstPaymentMode ||
-      customer.latestConsentAcceptedAt,
-  );
+  const hasSubscriptionDetails = Boolean(customer.latestSubscriptionId);
   const workflowSteps = [
     { complete: true, label: "Customer created" },
     {
@@ -2233,13 +2299,18 @@ function CustomerDrawerSession({
           ? () => onOpenShareConsentLink(customer)
           : !isArchived && invoiceProfileReady && stage === "new"
             ? () => onOpenCreatePayment(customer)
-          : undefined,
+            : undefined,
       actionIcon: consentCreated ? "share" : undefined,
-      actionLabel: consentCreated ? "Share consent link" : "Create consent link",
+      actionLabel: consentCreated
+        ? "Share consent link"
+        : "Create consent link",
       complete: consentCreated,
       label: "Consent link",
       locked: !invoiceProfileReady,
-      secondaryAction: !isArchived && canEditConsentLink ? () => onOpenEditConsentLink(customer) : undefined,
+      secondaryAction:
+        !isArchived && canEditConsentLink
+          ? () => onOpenEditConsentLink(customer)
+          : undefined,
       secondaryActionLabel: "Edit consent link",
     },
     {
@@ -2254,12 +2325,18 @@ function CustomerDrawerSession({
     },
     {
       complete: subscriptionActive,
-      label: subscriptionActive ? "Subscription active" : "Subscription activation",
+      label: subscriptionActive
+        ? "Subscription active"
+        : "Subscription activation",
       locked: !firstPaymentCompleted,
     },
   ];
   const workflowStatus = (
-    <section aria-label="Workflow status" aria-busy={isInvoiceProfileLoading} className="space-y-4">
+    <section
+      aria-label="Workflow status"
+      aria-busy={isInvoiceProfileLoading}
+      className="space-y-4"
+    >
       <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
         Workflow status
       </h3>
@@ -2271,7 +2348,9 @@ function CustomerDrawerSession({
               <div key={step.label} className="flex h-14 gap-3">
                 <div className="flex flex-col items-center">
                   <div className="h-6 w-6 shrink-0 rounded-full bg-muted" />
-                  {index < workflowSteps.length - 1 ? <div className="w-0.5 flex-1 bg-muted" /> : null}
+                  {index < workflowSteps.length - 1 ? (
+                    <div className="w-0.5 flex-1 bg-muted" />
+                  ) : null}
                 </div>
                 <div className="mt-1 h-4 w-40 max-w-[70%] rounded bg-muted" />
               </div>
@@ -2281,9 +2360,15 @@ function CustomerDrawerSession({
       ) : invoiceProfileError ? (
         <div className="space-y-2">
           <p role="alert" className="text-sm text-muted-foreground">
-            Workflow status is unavailable because the invoice profile could not be loaded.
+            Workflow status is unavailable because the invoice profile could not
+            be loaded.
           </p>
-          <Button type="button" size="sm" variant="outline" onClick={() => setInvoiceProfileRefreshKey((value) => value + 1)}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setInvoiceProfileRefreshKey((value) => value + 1)}
+          >
             Retry workflow status
           </Button>
         </div>
@@ -2305,13 +2390,27 @@ function CustomerDrawerSession({
                           : "border-muted bg-background"
                     }`}
                   >
-                    {step.complete ? <CheckCircle className="h-3.5 w-3.5 text-primary-foreground" /> : null}
+                    {step.complete ? (
+                      <CheckCircle className="h-3.5 w-3.5 text-primary-foreground" />
+                    ) : null}
                   </div>
-                  {!isLast ? <div className={`min-h-8 w-0.5 flex-1 ${step.complete ? "bg-primary" : "bg-muted"}`} /> : null}
+                  {!isLast ? (
+                    <div
+                      className={`min-h-8 w-0.5 flex-1 ${step.complete ? "bg-primary" : "bg-muted"}`}
+                    />
+                  ) : null}
                 </div>
                 <div className="min-w-0 flex-1 pb-6 pt-0.5">
                   <div className="flex items-center gap-1">
-                    <p className={step.complete ? "text-sm font-medium" : step.locked ? "text-sm text-muted-foreground" : "text-sm font-semibold"}>
+                    <p
+                      className={
+                        step.complete
+                          ? "text-sm font-medium"
+                          : step.locked
+                            ? "text-sm text-muted-foreground"
+                            : "text-sm font-semibold"
+                      }
+                    >
                       {step.label}
                     </p>
                     {step.action && (step.actionIconOnly || step.actionIcon) ? (
@@ -2343,7 +2442,9 @@ function CustomerDrawerSession({
                   </div>
                   {step.locked && !step.complete ? (
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {step.label === "Consent link" ? "Complete the invoice profile first." : "Complete the previous step first."}
+                      {step.label === "Consent link"
+                        ? "Complete the invoice profile first."
+                        : "Complete the previous step first."}
                     </p>
                   ) : null}
                   {step.action && !step.actionIconOnly && !step.actionIcon ? (
@@ -2368,487 +2469,471 @@ function CustomerDrawerSession({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-md overflow-y-auto z-50 px-6">
-        <SheetHeader className="pb-6">
-          <SheetTitle className="text-2xl">{getCustomerDisplayName(customer)}</SheetTitle>
+      <SheetContent className="flex h-dvh w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+        <SheetHeader className="shrink-0 space-y-3 border-b px-5 pb-4 pt-6 text-left sm:px-6">
+          <div className="flex items-start justify-between gap-3 pr-6">
+            <div className="min-w-0 space-y-2">
+              <SheetTitle className="break-words text-xl">
+                {getCustomerDisplayName(customer)}
+              </SheetTitle>
+              <div className="flex flex-wrap items-center gap-2">
+                {getCustomerLifecycleBadge(customer)}
+                {isArchived ? <Badge variant="outline">Archived</Badge> : null}
+              </div>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  Actions <ChevronDown className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onSelect={() => setIsInvoiceProfileOpen(true)}
+                >
+                  Edit invoice profile
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => setDrawerRefreshKey((value) => value + 1)}
+                >
+                  Refresh customer
+                </DropdownMenuItem>
+                {!isArchived && canRecordCancellationRequest(customer) ? (
+                  <DropdownMenuItem
+                    onSelect={() => onOpenRecordCancellationRequest(customer)}
+                  >
+                    Record cancellation request
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuSeparator />
+                {isArchived ? (
+                  <DropdownMenuItem
+                    onSelect={() => onOpenRestoreCustomer(customer)}
+                  >
+                    <RotateCcw /> Restore customer
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={() => onOpenArchiveCustomer(customer)}
+                  >
+                    <Archive /> Archive customer
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
           <SheetDescription>
             {isArchived
               ? `Archived on ${formatDate(customer.archivedAt ?? customer.createdAt)}`
               : `Customer since ${formatDate(customer.createdAt)}`}
           </SheetDescription>
-        </SheetHeader>
-
-        <div className="space-y-8">
-          <section aria-label="Lifecycle" className="space-y-2">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Lifecycle</h3>
-            <p className="text-sm">{lifecycle.summary}</p>
-            <p className="text-sm text-muted-foreground">{formatLabel(lifecycle.reason)}</p>
-          </section>
-          {workflowStatus}
-
-          <Separator />
-          <div className="space-y-3">
-            <div className="space-y-3">
+          {customer.latestSubscriptionId ? (
+            <div className="grid grid-cols-2 gap-4 rounded-lg bg-muted/50 p-3">
               <div className="space-y-1">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                    Invoice profile
-                  </h3>
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    disabled={isInvoiceProfileLoading}
-                    onClick={() => setIsInvoiceProfileOpen(true)}
-                    aria-label={invoiceProfile ? "Edit invoice profile" : "Complete invoice profile"}
-                    title={invoiceProfile ? "Edit invoice profile" : "Complete invoice profile"}
+                <p className="text-xs text-muted-foreground">
+                  Subscription ·{" "}
+                  {formatSubscriptionInterval(
+                    customer.latestSubscriptionInterval,
+                  )}
+                </p>
+                <p className="text-lg font-semibold tabular-nums">
+                  {customer.latestSubscriptionAmountValue &&
+                  customer.latestSubscriptionAmountCurrency
+                    ? formatCurrency(
+                        customer.latestSubscriptionAmountValue,
+                        customer.latestSubscriptionAmountCurrency,
+                      )
+                    : "Not available"}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Next payment</p>
+                <p className="text-lg font-semibold tabular-nums">
+                  {customer.latestSubscriptionStopAfterCurrentPeriod ||
+                  ["cancelled", "ended"].includes(lifecycle.state)
+                    ? "Not scheduled"
+                    : customer.latestSubscriptionNextPaymentDate
+                      ? formatDate(customer.latestSubscriptionNextPaymentDate)
+                      : "Not scheduled"}
+                </p>
+              </div>
+            </div>
+          ) : null}
+          {lifecycle.state === "payment_issue" ||
+          lifecycle.state === "needs_setup" ? (
+            <section
+              aria-label="Customer needs attention"
+              className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm"
+            >
+              <p>{lifecycle.summary}</p>
+              {lifecycle.state === "payment_issue" ? (
+                <Link
+                  className="mt-1 inline-block font-medium underline underline-offset-4"
+                  href={`/payments?customerId=${encodeURIComponent(customer.id)}`}
+                >
+                  Review payments
+                </Link>
+              ) : null}
+            </section>
+          ) : null}
+          {customerResource.error ? (
+            <p role="status" className="text-xs text-destructive">
+              {customerResource.error} Showing the last loaded details.
+            </p>
+          ) : null}
+        </SheetHeader>
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="min-h-0 flex-1 gap-0"
+        >
+          <div className="shrink-0 border-b px-5 sm:px-6">
+            <TabsList
+              variant="line"
+              aria-label="Customer sections"
+              className="h-12 w-full"
+            >
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="billing">Billing</TabsTrigger>
+              <TabsTrigger value="activity">Activity</TabsTrigger>
+              <TabsTrigger value="details">Details</TabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent
+            value="overview"
+            forceMount
+            className="min-h-0 space-y-6 overflow-y-auto overscroll-contain p-5 data-[state=inactive]:hidden sm:p-6"
+          >
+            {lifecycle.state === "needs_setup" ||
+            lifecycle.state === "onboarding" ||
+            (lifecycle.state === "active" &&
+              !isInvoiceProfileLoading &&
+              !invoiceProfileReady)
+              ? workflowStatus
+              : null}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Contact
+              </h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-start gap-3">
+                  <User className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span>{customer.contactName}</span>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Mail className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <a
+                    className="min-w-0 break-all underline-offset-4 hover:underline"
+                    href={`mailto:${customer.email}`}
                   >
-                    <PenLine />
-                  </Button>
+                    {customer.email}
+                  </a>
                 </div>
-                {isInvoiceProfileLoading ? (
-                  <p className="text-sm text-muted-foreground">Loading invoice profile...</p>
-                ) : invoiceProfileError ? (
-                  <p className="text-sm text-destructive">{invoiceProfileError}</p>
-                ) : invoiceProfile ? (
-                  <>
-                    <p className="text-sm font-medium">{invoiceProfile.legalName}</p>
-                    <p className="text-sm text-muted-foreground">{invoiceProfile.email}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {invoiceProfile.street} {invoiceProfile.houseNumber}, {invoiceProfile.postalCode} {invoiceProfile.city}
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Required before Kify issues the customer&apos;s first invoice.
-                  </p>
-                )}
-              </div>
-              {invoiceProfileError ? (
-                <Button type="button" size="sm" variant="ghost" onClick={() => setInvoiceProfileRefreshKey((value) => value + 1)}>
-                  Retry
-                </Button>
-              ) : null}
-            </div>
-          </div>
-
-          <Separator />
-          <div className="space-y-4">
-
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Personal details
-            </h3>
-            <div className="space-y-3 text-sm">
-              <div className="flex items-start gap-3">
-                <User className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                <span>{customer.contactName}</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <Mail className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                <span>{customer.email}</span>
-              </div>
-              {customer.phone ? (
-                <div className="flex items-start gap-3">
-                  <Phone className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span>{customer.phone}</span>
-                </div>
-              ) : null}
-              {customer.address ? (
-                <div className="flex items-start gap-3">
-                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span>{customer.address}</span>
-                </div>
-              ) : null}
-              {customer.notes ? (
-                <div className="flex items-start gap-3">
-                  <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="italic text-muted-foreground">{customer.notes}</span>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Subscription details
-            </h3>
-            {hasSubscriptionDetails ? (
-              <div className="flex flex-col gap-3">
-                {customer.latestFirstPaymentMode ? (
-                  <SubscriptionSummaryRow
-                    label="Started with"
-                    value={formatFirstPaymentMode(customer.latestFirstPaymentMode)}
-                  />
+                {customer.phone ? (
+                  <div className="flex items-start gap-3">
+                    <Phone className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <a
+                      href={`tel:${customer.phone}`}
+                      className="hover:underline"
+                    >
+                      {customer.phone}
+                    </a>
+                  </div>
                 ) : null}
-                {customer.latestConsentAcceptedAt ? (
-                  <SubscriptionSummaryRow
-                    label="Consent accepted"
-                    value={formatDate(customer.latestConsentAcceptedAt)}
-                  />
-                ) : null}
-                {customer.latestSubscriptionId ? (
-                  <>
+              </div>
+            </div>
+            {customer.latestPaymentId ? (
+              <>
+                <Separator />
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                      Latest payment
+                    </h3>
+                    {getPaymentStatusBadge(customer.latestPaymentStatus)}
+                  </div>
+                  <div className="flex flex-col gap-3">
                     <SubscriptionSummaryRow
                       label="Amount"
                       value={
-                        customer.latestSubscriptionAmountValue &&
-                        customer.latestSubscriptionAmountCurrency
+                        customer.latestPaymentAmountValue &&
+                        customer.latestPaymentAmountCurrency
                           ? formatCurrency(
-                              customer.latestSubscriptionAmountValue,
-                              customer.latestSubscriptionAmountCurrency,
+                              customer.latestPaymentAmountValue,
+                              customer.latestPaymentAmountCurrency,
                             )
                           : "Not available"
                       }
                     />
                     <SubscriptionSummaryRow
-                      label="Period"
-                      value={formatSubscriptionInterval(customer.latestSubscriptionInterval)}
+                      label="Type"
+                      value={formatPaymentType(customer.latestPaymentType)}
                     />
                     <SubscriptionSummaryRow
-                      label="Term mode"
-                      value={formatLabel(customer.latestSubscriptionTermMode)}
+                      label={latestPaymentDateLabel}
+                      value={formatDate(latestPaymentDateValue)}
                     />
-                    {customer.latestSubscriptionTermMode === "fixed_term" ? (
-                      <SubscriptionSummaryRow
-                        label="Total payments"
-                        value={customer.latestSubscriptionTotalPayments ?? "Not available"}
-                      />
-                    ) : null}
-                    <SubscriptionSummaryRow
-                      label="Start date"
-                      value={formatDate(customer.latestSubscriptionStartDate)}
-                    />
-                    <SubscriptionSummaryRow
-                      label="Last charge date"
-                      value={formatDate(customer.latestSubscriptionLastChargeDate)}
-                    />
-                    <SubscriptionSummaryRow
-                      label="Service end at"
-                      value={formatDate(customer.latestSubscriptionServiceEndAt)}
-                    />
-                    <SubscriptionSummaryRow
-                      label="Next payment"
-                      value={formatDate(customer.latestSubscriptionNextPaymentDate)}
-                    />
-                    <SubscriptionSummaryRow
-                      label="Cancellation effect"
-                      value={formatLabel(customer.latestSubscriptionCancellationEffect)}
-                    />
-                    <SubscriptionSummaryRow
-                      label="Status"
-                      value={getSubscriptionStatusBadge(customer.latestSubscriptionStatus)}
-                    />
-                    <SubscriptionSummaryRow
-                      label="Last synced"
-                      value={
-                        customer.lastSyncedAt ? formatDateTime(customer.lastSyncedAt) : "Not available"
-                      }
-                    />
-                    <SubscriptionSummaryRow
-                      label="Future charges"
-                      value={
-                        customer.latestSubscriptionStopAfterCurrentPeriod
-                          ? "Stop after current period"
-                          : "Continue"
-                      }
-                    />
-                  </>
-                ) : null}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No subscription details yet.
-              </p>
-            )}
-          </div>
-
-          {customer.latestPaymentId ? (
-            <>
-              <Separator />
-              <div className="space-y-4">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                    Latest payment
-                  </h3>
-                  {getPaymentStatusBadge(customer.latestPaymentStatus)}
-                </div>
-                <div className="flex flex-col gap-3">
-                  <SubscriptionSummaryRow
-                    label="Amount"
-                    value={
-                      customer.latestPaymentAmountValue && customer.latestPaymentAmountCurrency
-                        ? formatCurrency(
-                            customer.latestPaymentAmountValue,
-                            customer.latestPaymentAmountCurrency,
-                          )
-                        : "Not available"
-                    }
-                  />
-                  <SubscriptionSummaryRow
-                    label="Type"
-                    value={formatPaymentType(customer.latestPaymentType)}
-                  />
-                  <SubscriptionSummaryRow
-                    label={latestPaymentDateLabel}
-                    value={formatDate(latestPaymentDateValue)}
-                  />
-                  <Button asChild variant="outline" size="sm" className="mt-1 w-full">
-                    <Link href={`/payments?customerId=${encodeURIComponent(customer.id)}`}>
-                      View all their payments
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-            </>
-          ) : null}
-
-          <Separator />
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Activity timeline
-              </h3>
-              {!isNoteComposerOpen ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setIsNoteComposerOpen(true);
-                    setNoteError(null);
-                  }}
-                >
-                  <PenLine className="mr-2 h-4 w-4" />
-                  Add internal note
-                </Button>
-              ) : null}
-            </div>
-            {isNoteComposerOpen ? (
-              <form className="space-y-2" onSubmit={handleAddCustomerNote}>
-                <Textarea
-                  value={noteBody}
-                  onChange={(event) => setNoteBody(event.target.value)}
-                  maxLength={2000}
-                  placeholder="Add an internal customer note"
-                  rows={3}
-                />
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground">{noteBody.length}/2000</p>
-                  <div className="flex items-center gap-2">
                     <Button
-                      type="button"
+                      asChild
+                      variant="outline"
                       size="sm"
-                      variant="ghost"
-                      disabled={isAddingNote}
-                      onClick={() => {
-                        setIsNoteComposerOpen(false);
-                        setNoteBody("");
-                        setNoteError(null);
-                      }}
+                      className="mt-1 w-full"
                     >
-                      Cancel
-                    </Button>
-                    <Button type="submit" size="sm" disabled={isAddingNote || !noteBody.trim()}>
-                      {isAddingNote ? (
-                        <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <PenLine className="mr-2 h-4 w-4" />
-                      )}
-                      Add note
-                    </Button>
-                  </div>
-                </div>
-                {noteError ? <p className="text-sm text-destructive">{noteError}</p> : null}
-              </form>
-            ) : null}
-            {isActivityTimelineLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <LoaderCircle className="h-4 w-4 animate-spin" />
-                Loading activity...
-              </div>
-            ) : null}
-            {activityTimelineError ? (
-              <p className="text-sm text-destructive">{activityTimelineError}</p>
-            ) : null}
-            {activityTimeline ? (
-              <div className="space-y-2">
-                {activityTimeline.items.length > 0 ? (
-                  activityTimeline.items.slice(0, 10).map((item) => (
-                    <TimelineRow key={item.id} item={item} />
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground">No activity yet.</p>
-                )}
-              </div>
-            ) : null}
-            {activityTimeline?.notifications.length ? (
-              <div className="space-y-2 pt-2">
-                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Customer notification history
-                </p>
-                {activityTimeline.notifications.map((notification) => (
-                  <div className="rounded-md border p-3" key={notification.id}>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-medium">Failed-payment notification</p>
-                      <Badge
-                        variant={notification.status === "failed" ? "destructive" : "outline"}
+                      <Link
+                        href={`/payments?customerId=${encodeURIComponent(customer.id)}`}
                       >
-                        {formatLabel(notification.status)}
-                      </Badge>
-                    </div>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Outcome: {formatLabel(notification.outcomeState)} / {formatLabel(notification.outcomeReason)}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Updated {formatDateTime(notification.occurredAt)} / {notification.attemptCount} attempt{notification.attemptCount === 1 ? "" : "s"} / template v{notification.templateVersion}
-                    </p>
-                    <Button asChild className="mt-2" size="sm" variant="ghost">
-                      <Link href={buildDrawerPath("payments", notification.paymentId)}>
-                        Review payment
+                        View all their payments
                       </Link>
                     </Button>
                   </div>
-                ))}
-              </div>
+                </div>
+              </>
             ) : null}
+
             {activityTimeline?.operationRequests.length ? (
-              <div className="space-y-2 pt-2">
-                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Pending subscription requests
+              <div className="rounded-lg border p-3 text-sm">
+                <p className="font-medium">
+                  Subscription request needs attention
                 </p>
-                {activityTimeline.operationRequests.map((request) => (
-                  <div className="rounded-md border p-3" key={request.id}>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-medium">{request.title}</p>
-                      {getOperationRequestStatusBadge(request.status)}
-                    </div>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {request.summary}
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Effective {formatDate(request.requestedEffectiveAt)} / Service{" "}
-                      {request.cancellationEffect === "immediate"
-                        ? "ends immediately"
-                        : `kept through ${formatDate(request.paidPeriodEndAt)}`}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Recorded {formatDateTime(request.createdAt)} / {request.recommendedAction}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {getOperationRequestTransitionControls(request.status).map((control) => (
-                        <form action={transitionOperationRequestAction} key={control.targetStatus}>
-                          <input type="hidden" name="operationRequestId" value={request.id} />
-                          <input
-                            type="hidden"
-                            name="returnTo"
-                            value={buildDrawerPath("customers", customer.id)}
-                          />
-                          <input
-                            type="hidden"
-                            name="targetStatus"
-                            value={control.targetStatus}
-                          />
-                          <Button size="sm" type="submit" variant="outline">
-                            {control.label}
-                          </Button>
-                        </form>
-                      ))}
-                      <form action={withdrawOperationRequestAction}>
-                        <input type="hidden" name="operationRequestId" value={request.id} />
-                        <input
-                          type="hidden"
-                          name="returnTo"
-                          value={buildDrawerPath("customers", customer.id)}
+                <p className="mt-1 text-muted-foreground">
+                  {activityTimeline.operationRequests[0].summary}
+                </p>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="mt-1 px-0"
+                  onClick={() => setActiveTab("activity")}
+                >
+                  View requests
+                </Button>
+              </div>
+            ) : null}
+            {lifecycle.state === "active" && invoiceProfileReady ? (
+              <details className="rounded-lg border p-4">
+                <summary className="cursor-pointer text-sm font-medium">
+                  Setup complete
+                </summary>
+                <div className="pt-4">{workflowStatus}</div>
+              </details>
+            ) : null}
+          </TabsContent>
+          <TabsContent
+            value="billing"
+            forceMount
+            className="min-h-0 space-y-6 overflow-y-auto overscroll-contain p-5 data-[state=inactive]:hidden sm:p-6"
+          >
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Subscription details
+              </h3>
+              {hasSubscriptionDetails ? (
+                <div className="flex flex-col gap-3">
+                  {customer.latestSubscriptionId ? (
+                    <>
+                      <SubscriptionSummaryRow
+                        label="Subscription term"
+                        value={formatLabel(customer.latestSubscriptionTermMode)}
+                      />
+                      {customer.latestSubscriptionTermMode === "fixed_term" ? (
+                        <SubscriptionSummaryRow
+                          label="Total payments"
+                          value={
+                            customer.latestSubscriptionTotalPayments ??
+                            "Not available"
+                          }
                         />
-                        <Button size="sm" type="submit" variant="outline">
-                          Withdraw request
-                        </Button>
-                      </form>
-                    </div>
+                      ) : null}
+                      <SubscriptionSummaryRow
+                        label="Start date"
+                        value={formatDate(customer.latestSubscriptionStartDate)}
+                      />
+                      {customer.latestSubscriptionLastChargeDate ? (
+                        <SubscriptionSummaryRow
+                          label="Last charge date"
+                          value={formatDate(
+                            customer.latestSubscriptionLastChargeDate,
+                          )}
+                        />
+                      ) : null}
+                      {customer.latestSubscriptionServiceEndAt ? (
+                        <SubscriptionSummaryRow
+                          label="Service ends"
+                          value={formatDate(
+                            customer.latestSubscriptionServiceEndAt,
+                          )}
+                        />
+                      ) : null}
+                      {customer.latestSubscriptionCancellationEffect ? (
+                        <SubscriptionSummaryRow
+                          label="Cancellation effect"
+                          value={formatLabel(
+                            customer.latestSubscriptionCancellationEffect,
+                          )}
+                        />
+                      ) : null}
+                      {lifecycle.state !== "active" ? (
+                        <SubscriptionSummaryRow
+                          label="Status"
+                          value={getSubscriptionStatusBadge(
+                            customer.latestSubscriptionStatus,
+                          )}
+                        />
+                      ) : null}
+                      {customer.latestSubscriptionStopAfterCurrentPeriod ? (
+                        <SubscriptionSummaryRow
+                          label="Future charges"
+                          value={
+                            customer.latestSubscriptionStopAfterCurrentPeriod
+                              ? "Stop after current period"
+                              : "Continue"
+                          }
+                        />
+                      ) : null}
+                    </>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No subscription details yet.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                      Invoice profile
+                    </h3>
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      disabled={isInvoiceProfileLoading}
+                      onClick={() => setIsInvoiceProfileOpen(true)}
+                      aria-label={
+                        invoiceProfile
+                          ? "Edit invoice profile"
+                          : "Complete invoice profile"
+                      }
+                      title={
+                        invoiceProfile
+                          ? "Edit invoice profile"
+                          : "Complete invoice profile"
+                      }
+                    >
+                      <PenLine />
+                    </Button>
                   </div>
-                ))}
+                  {isInvoiceProfileLoading ? (
+                    <p className="text-sm text-muted-foreground">
+                      Loading invoice profile...
+                    </p>
+                  ) : invoiceProfileError ? (
+                    <p className="text-sm text-destructive">
+                      {invoiceProfileError}
+                    </p>
+                  ) : invoiceProfile ? (
+                    <>
+                      <p className="text-sm font-medium">
+                        {invoiceProfile.legalName}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {invoiceProfile.email}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {invoiceProfile.street} {invoiceProfile.houseNumber},{" "}
+                        {invoiceProfile.postalCode} {invoiceProfile.city}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Required before Kify issues the customer&apos;s first
+                      invoice.
+                    </p>
+                  )}
+                </div>
+                {invoiceProfileError ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      setInvoiceProfileRefreshKey((value) => value + 1)
+                    }
+                  >
+                    Retry
+                  </Button>
+                ) : null}
               </div>
-            ) : null}
-          </div>
+            </div>
 
-          <Separator />
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Billing history
-            </h3>
-            {isBillingHistoryLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <LoaderCircle className="h-4 w-4 animate-spin" />
-                Loading history...
-              </div>
-            ) : null}
-            {billingHistoryError ? (
-              <p className="text-sm text-destructive">{billingHistoryError}</p>
-            ) : null}
-            {billingHistory ? (
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Billing history
+              </h3>
+              {isBillingHistoryLoading && !billingHistory ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                  Loading history...
+                </div>
+              ) : null}
+              {billingHistoryError ? (
+                <p className="text-sm text-destructive">
+                  {billingHistoryError}
+                </p>
+              ) : null}
+              {/* Invoice links remain available if billing history fails. */}
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Subscriptions
-                  </p>
-                  {billingHistory.subscriptions.length > 0 ? (
-                    billingHistory.subscriptions.slice(0, 4).map((subscription) => (
-                      <HistoryRow
-                        key={subscription.id}
-                        label={subscription.description}
-                        meta={`${formatCurrency(
-                          subscription.amountValue,
-                          subscription.amountCurrency,
-                        )} · ${formatSubscriptionInterval(subscription.interval)}`}
-                        status={getSubscriptionStatusBadge(subscription.localStatus)}
-                        detail={`Next ${formatDate(subscription.nextPaymentDate)}`}
-                      />
-                    ))
+                <details className="space-y-2">
+                  <summary className="cursor-pointer text-sm font-medium">
+                    Subscription history
+                  </summary>
+                  {billingHistory && billingHistory.subscriptions.length > 0 ? (
+                    billingHistory?.subscriptions
+                      .slice(0, 4)
+                      .map((subscription) => (
+                        <HistoryRow
+                          key={subscription.id}
+                          label={subscription.description}
+                          meta={`${formatCurrency(
+                            subscription.amountValue,
+                            subscription.amountCurrency,
+                          )} · ${formatSubscriptionInterval(subscription.interval)}`}
+                          status={getSubscriptionStatusBadge(
+                            subscription.localStatus,
+                          )}
+                          detail={`Next ${formatDate(subscription.nextPaymentDate)}`}
+                        />
+                      ))
                   ) : (
-                    <p className="text-sm text-muted-foreground">No subscription rows.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No subscription rows.
+                    </p>
                   )}
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Mandates
-                  </p>
-                  {billingHistory.mandates.length > 0 ? (
-                    billingHistory.mandates.slice(0, 4).map((mandate) => (
-                      <HistoryRow
-                        key={mandate.id}
-                        label={mandate.mollieMandateId}
-                        meta={formatLabel(mandate.method)}
-                        status={
-                          <Badge variant={mandate.isValid ? "default" : "outline"}>
-                            {formatLabel(mandate.mollieStatus)}
-                          </Badge>
-                        }
-                        detail={formatDate(mandate.createdAt)}
-                      />
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No mandate rows.</p>
-                  )}
-                </div>
+                </details>
 
                 <div className="space-y-2">
                   <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     Invoices
                   </p>
-                  {isInvoiceLinksLoading ? (
+                  {isInvoiceLinksLoading && !invoiceLinks ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <LoaderCircle className="h-4 w-4 animate-spin" />
                       Loading invoices...
                     </div>
                   ) : null}
                   {invoiceLinksError ? (
-                    <p className="text-sm text-destructive">{invoiceLinksError}</p>
+                    <p className="text-sm text-destructive">
+                      {invoiceLinksError}
+                    </p>
                   ) : null}
                   {invoiceResendError ? (
-                    <p className="text-sm text-destructive">{invoiceResendError}</p>
+                    <p className="text-sm text-destructive">
+                      {invoiceResendError}
+                    </p>
                   ) : null}
                   {invoiceLinks ? (
                     invoiceLinks.invoices.length > 0 ? (
@@ -2861,12 +2946,20 @@ function CustomerDrawerSession({
                               ? `Recurring period ${formatDate(invoice.plannedCollectionDate)}`
                               : "First payment invoice"
                           }
-                          status={<Badge variant="secondary">{formatLabel(invoice.invoiceState)}</Badge>}
+                          status={
+                            <Badge variant="secondary">
+                              {formatLabel(invoice.invoiceState)}
+                            </Badge>
+                          }
                           detail={
                             <div className="flex flex-col items-end gap-2">
                               {invoice.invoicePdfUrl ? (
                                 <Button asChild variant="outline" size="sm">
-                                  <a href={invoice.invoicePdfUrl} target="_blank" rel="noreferrer">
+                                  <a
+                                    href={invoice.invoicePdfUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
                                     <FileText className="mr-2 h-4 w-4" />
                                     Download
                                   </a>
@@ -2897,7 +2990,9 @@ function CustomerDrawerSession({
                         />
                       ))
                     ) : (
-                      <p className="text-sm text-muted-foreground">No invoice rows.</p>
+                      <p className="text-sm text-muted-foreground">
+                        No invoice rows.
+                      </p>
                     )
                   ) : null}
                 </div>
@@ -2906,58 +3001,373 @@ function CustomerDrawerSession({
                   <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     Payments
                   </p>
-                  {billingHistory.payments.length > 0 ? (
-                    billingHistory.payments.slice(0, 6).map((payment) => (
-                      <HistoryRow
-                        key={payment.id}
-                        label={formatHistoryPaymentType(payment.paymentType)}
-                        meta={formatCurrency(payment.amountValue, payment.amountCurrency)}
-                        status={getHistoryPaymentStatusBadge(payment.mollieStatus)}
-                        detail={formatDate(payment.paidAt ?? payment.failedAt ?? payment.createdAt)}
-                      />
-                    ))
+                  {billingHistory && billingHistory.payments.length > 0 ? (
+                    billingHistory?.payments
+                      .slice(0, 6)
+                      .map((payment) => (
+                        <HistoryRow
+                          key={payment.id}
+                          label={formatHistoryPaymentType(payment.paymentType)}
+                          meta={formatCurrency(
+                            payment.amountValue,
+                            payment.amountCurrency,
+                          )}
+                          status={getHistoryPaymentStatusBadge(
+                            payment.mollieStatus,
+                          )}
+                          detail={formatDate(
+                            payment.paidAt ??
+                              payment.failedAt ??
+                              payment.createdAt,
+                          )}
+                        />
+                      ))
                   ) : (
-                    <p className="text-sm text-muted-foreground">No payment rows.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No payment rows.
+                    </p>
                   )}
                 </div>
               </div>
+            </div>
+          </TabsContent>
+          <TabsContent
+            value="activity"
+            forceMount
+            className="min-h-0 space-y-6 overflow-y-auto overscroll-contain p-5 data-[state=inactive]:hidden sm:p-6"
+          >
+            {customer.notes ? (
+              <section className="space-y-2 rounded-lg border p-4">
+                <h3 className="text-sm font-medium">Customer note</h3>
+                <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
+                  {customer.notes}
+                </p>
+              </section>
             ) : null}
-          </div>
-
-          <div className="flex flex-col gap-2 pt-4">
-            {isArchived ? (
-              <Button className="w-full" onClick={() => onOpenRestoreCustomer(customer)}>
-                <RotateCcw className="mr-2 h-4 w-4" />
-                Restore Customer
-              </Button>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Activity timeline
+                </h3>
+                {!isNoteComposerOpen ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setIsNoteComposerOpen(true);
+                      setNoteError(null);
+                    }}
+                  >
+                    <PenLine className="mr-2 h-4 w-4" />
+                    Add internal note
+                  </Button>
+                ) : null}
+              </div>
+              {isNoteComposerOpen ? (
+                <form className="space-y-2" onSubmit={handleAddCustomerNote}>
+                  <Label htmlFor="customer-internal-note">Internal note</Label>
+                  <Textarea
+                    id="customer-internal-note"
+                    value={noteBody}
+                    onChange={(event) => setNoteBody(event.target.value)}
+                    maxLength={2000}
+                    placeholder="Add an internal customer note"
+                    rows={3}
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      {noteBody.length}/2000
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={isAddingNote}
+                        onClick={() => {
+                          setIsNoteComposerOpen(false);
+                          setNoteBody("");
+                          setNoteError(null);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        size="sm"
+                        disabled={isAddingNote || !noteBody.trim()}
+                      >
+                        {isAddingNote ? (
+                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <PenLine className="mr-2 h-4 w-4" />
+                        )}
+                        Add note
+                      </Button>
+                    </div>
+                  </div>
+                  {noteError ? (
+                    <p className="text-sm text-destructive">{noteError}</p>
+                  ) : null}
+                </form>
+              ) : null}
+              {isActivityTimelineLoading && !activityTimeline ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                  Loading activity...
+                </div>
+              ) : null}
+              {activityTimelineError ? (
+                <p className="text-sm text-destructive">
+                  {activityTimelineError}
+                </p>
+              ) : null}
+              {activityTimeline ? (
+                <div className="space-y-2">
+                  {activityTimeline.items.length > 0 ? (
+                    activityTimeline.items
+                      .slice(0, 10)
+                      .map((item) => <TimelineRow key={item.id} item={item} />)
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No activity yet.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+              {activityTimeline?.notifications.length ? (
+                <div className="space-y-2 pt-2">
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Customer notification history
+                  </p>
+                  {activityTimeline.notifications.map((notification) => (
+                    <div
+                      className="rounded-md border p-3"
+                      key={notification.id}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-medium">
+                          Failed-payment notification
+                        </p>
+                        <Badge
+                          variant={
+                            notification.status === "failed"
+                              ? "destructive"
+                              : "outline"
+                          }
+                        >
+                          {formatLabel(notification.status)}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Outcome: {formatLabel(notification.outcomeState)} /{" "}
+                        {formatLabel(notification.outcomeReason)}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Updated {formatDateTime(notification.occurredAt)} /{" "}
+                        {notification.attemptCount} attempt
+                        {notification.attemptCount === 1 ? "" : "s"} / template
+                        v{notification.templateVersion}
+                      </p>
+                      <Button
+                        asChild
+                        className="mt-2"
+                        size="sm"
+                        variant="ghost"
+                      >
+                        <Link
+                          href={buildDrawerPath(
+                            "payments",
+                            notification.paymentId,
+                          )}
+                        >
+                          Review payment
+                        </Link>
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            {activityTimeline?.operationRequests.length ? (
+              <div className="space-y-2 pt-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Pending subscription requests
+                </p>
+                {activityTimeline.operationRequests.map((request) => (
+                  <div className="rounded-md border p-3" key={request.id}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium">{request.title}</p>
+                      {getOperationRequestStatusBadge(request.status)}
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {request.summary}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Effective {formatDate(request.requestedEffectiveAt)} /
+                      Service{" "}
+                      {request.cancellationEffect === "immediate"
+                        ? "ends immediately"
+                        : `kept through ${formatDate(request.paidPeriodEndAt)}`}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Recorded {formatDateTime(request.createdAt)} /{" "}
+                      {request.recommendedAction}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {getOperationRequestTransitionControls(
+                        request.status,
+                      ).map((control) => (
+                        <form
+                          action={transitionOperationRequestAction}
+                          key={control.targetStatus}
+                        >
+                          <input
+                            type="hidden"
+                            name="operationRequestId"
+                            value={request.id}
+                          />
+                          <input
+                            type="hidden"
+                            name="returnTo"
+                            value={buildDrawerPath("customers", customer.id)}
+                          />
+                          <input
+                            type="hidden"
+                            name="targetStatus"
+                            value={control.targetStatus}
+                          />
+                          <Button size="sm" type="submit" variant="outline">
+                            {control.label}
+                          </Button>
+                        </form>
+                      ))}
+                      <form action={withdrawOperationRequestAction}>
+                        <input
+                          type="hidden"
+                          name="operationRequestId"
+                          value={request.id}
+                        />
+                        <input
+                          type="hidden"
+                          name="returnTo"
+                          value={buildDrawerPath("customers", customer.id)}
+                        />
+                        <Button size="sm" type="submit" variant="outline">
+                          Withdraw request
+                        </Button>
+                      </form>
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : null}
-
-            {!isArchived && canRecordCancellationRequest(customer) ? (
-              <Button
-                className="w-full"
-                variant="outline"
-                onClick={() => onOpenRecordCancellationRequest(customer)}
-              >
-                <PenLine className="mr-2 h-4 w-4" aria-hidden="true" />
-                Record cancellation request
-              </Button>
-            ) : null}
-
-            {!isArchived ? (
-              <>
-                <Separator className="my-4" />
-                <Button
-                  className="w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  variant="ghost"
-                  onClick={() => onOpenArchiveCustomer(customer)}
-                >
-                  <Archive className="mr-2 h-4 w-4" />
-                  Archive Customer
-                </Button>
-              </>
-            ) : null}
-          </div>
-        </div>
+          </TabsContent>
+          <TabsContent
+            value="details"
+            forceMount
+            className="min-h-0 space-y-6 overflow-y-auto overscroll-contain p-5 data-[state=inactive]:hidden sm:p-6"
+          >
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold">Customer details</h3>
+              <div className="space-y-3 text-sm">
+                {customer.address ? (
+                  <div className="flex items-start gap-3">
+                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span>{customer.address}</span>
+                  </div>
+                ) : null}
+              </div>
+              <SubscriptionSummaryRow
+                label="Customer since"
+                value={formatDate(customer.createdAt)}
+              />
+            </section>
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold">
+                Consent and payment authorization
+              </h3>
+              {customer.latestFirstPaymentMode ? (
+                <SubscriptionSummaryRow
+                  label="Started with"
+                  value={formatFirstPaymentMode(
+                    customer.latestFirstPaymentMode,
+                  )}
+                />
+              ) : null}
+              {customer.latestConsentAcceptedAt ? (
+                <SubscriptionSummaryRow
+                  label="Consent accepted"
+                  value={formatDate(customer.latestConsentAcceptedAt)}
+                />
+              ) : null}
+              {isBillingHistoryLoading && !billingHistory ? (
+                <p className="text-sm text-muted-foreground">
+                  Loading payment authorization...
+                </p>
+              ) : null}
+              {billingHistoryError ? (
+                <p className="text-sm text-destructive">
+                  {billingHistoryError}
+                </p>
+              ) : null}
+              {billingHistory ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Mandates
+                  </p>
+                  {billingHistory.mandates.length > 0 ? (
+                    billingHistory.mandates
+                      .slice(0, 4)
+                      .map((mandate) => (
+                        <HistoryRow
+                          key={mandate.id}
+                          label={mandate.mollieMandateId}
+                          meta={formatLabel(mandate.method)}
+                          status={
+                            <Badge
+                              variant={mandate.isValid ? "default" : "outline"}
+                            >
+                              {formatLabel(mandate.mollieStatus)}
+                            </Badge>
+                          }
+                          detail={formatDate(mandate.createdAt)}
+                        />
+                      ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No mandate rows.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+            </section>
+            <details className="rounded-lg border p-4">
+              <summary className="cursor-pointer text-sm font-medium">
+                Technical details
+              </summary>
+              <div className="space-y-3 pt-4">
+                <section aria-label="Lifecycle" className="space-y-2">
+                  <p className="text-sm">{lifecycle.summary}</p>
+                  <p className="text-sm text-muted-foreground">{formatLabel(lifecycle.reason)}</p>
+                </section>
+                <SubscriptionSummaryRow
+                  label="Mollie customer ID"
+                  value={customer.mollieCustomerId ?? "Not linked"}
+                />
+                <SubscriptionSummaryRow
+                  label="Last synced"
+                  value={
+                    customer.lastSyncedAt
+                      ? formatDateTime(customer.lastSyncedAt)
+                      : "Not available"
+                  }
+                />
+              </div>
+            </details>
+          </TabsContent>
+        </Tabs>
         <CustomerInvoiceProfileDialog
           customer={customer}
           onOpenChange={setIsInvoiceProfileOpen}

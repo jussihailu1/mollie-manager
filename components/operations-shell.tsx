@@ -47,6 +47,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { getRouteRefreshIntervalMs } from "@/lib/freshness";
+import { refreshDashboardView } from "@/lib/dashboard-refresh";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -235,7 +236,7 @@ export function OperationsShell({
 
       lastRefreshAtRef.current = now;
       startRefreshTransition(() => {
-        router.refresh();
+        refreshDashboardView(() => router.refresh());
       });
     },
     [router, startRefreshTransition],
