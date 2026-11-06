@@ -1,3 +1,4 @@
+import { customerBillingEmailSql } from "@/lib/invoicing/billing-recipient";
 import { sql } from "drizzle-orm";
 
 import { getDb } from "@/lib/db";
@@ -31,7 +32,7 @@ export async function getScheduledInvoiceCandidate(
       rbs.amount_value::text as "amountValue",
       s.customer_id as "customerId",
       s.description as "subscriptionDescription",
-      c.email as "customerEmail",
+      ${customerBillingEmailSql} as "customerEmail",
       case
         when cal.provider_customer_id ~ '^[0-9]+$'
           then cal.provider_customer_id::int

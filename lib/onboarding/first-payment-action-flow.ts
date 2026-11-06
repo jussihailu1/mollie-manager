@@ -1,6 +1,6 @@
 import type { MollieMode } from "@/lib/env";
-import { getTenantActiveInvoiceProvider } from "@/lib/billing-settings";
-import { getKifyInvoiceReadiness } from "@/lib/invoicing/kify-readiness-query";
+import { getOnboardingInvoiceReadiness } from "@/lib/onboarding/invoice-readiness";
+import { requireConsentPaymentWindow } from "@/lib/onboarding/consent-payment-window";
 import { getLocalCustomer } from "@/lib/onboarding/action-helpers";
 import { getCustomerDetail } from "@/lib/onboarding/data";
 import { resolveFirstPaymentCreationBlocker } from "@/lib/onboarding/first-payment-blocker";
@@ -59,19 +59,10 @@ export async function createFirstPaymentActionFlow(input: {
     };
   }
 
-  if (
-    input.planInput.firstPaymentMode === "real_installment" &&
-    (await getTenantActiveInvoiceProvider(input.tenantId)) === "kify"
-  ) {
-    const readiness = await getKifyInvoiceReadiness({
-      customerId: customer.id,
-      tenantId: input.tenantId,
-    });
-
-    if (!readiness.ok) {
-      return { reason: readiness.reason, status: "blocked" };
-    }
-  }
+  try { requireConsentPaymentWindow(input.planInput.subscriptionStartDate.trim()); }
+  catch (error) { return { status: "blocked", reason: error instanceof Error ? error.message : "Choose a valid future start date." }; }
+  const readiness = await getOnboardingInvoiceReadiness({ customerId: customer.id, tenantId: input.tenantId, mode: input.mode });
+  if (!readiness.ok) return { reason: readiness.reason ?? "Complete invoice setup first.", status: "blocked" };
 
   if (input.replacePendingConsent) {
     try {

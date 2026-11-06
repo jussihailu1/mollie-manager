@@ -39,6 +39,7 @@ export async function resendCustomerInvoiceEmailWithDependencies(
   const delivery = await dependencies.deliverCustomerInvoiceEmail({
     actor: input.actor,
     ...target,
+    allowResend: true,
   });
 
   return { status: delivery.status };

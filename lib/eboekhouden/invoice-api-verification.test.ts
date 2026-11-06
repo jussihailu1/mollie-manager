@@ -8,6 +8,7 @@ import * as validation from "@/lib/eboekhouden/invoice-total-validation";
 import * as tax from "@/lib/invoicing/tax-treatment";
 import * as pdf from "@/lib/invoice-pdf";
 import * as retry from "@/lib/invoice-delivery-retry";
+import * as emailAttempt from "@/lib/invoice-email-attempt";
 import type { EboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import type { DeliveryInput } from "@/lib/invoice-delivery-batch";
 
@@ -15,7 +16,7 @@ function loadIsolated<T>(file: string, modules: Record<string, unknown>): T {
   const source = readFileSync(file, "utf8");
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const exports = {};
-  runInNewContext(js, { exports, Error, Date, Buffer, require: (id: string) => {
+  runInNewContext(js, { exports, Error, Date, Buffer, crypto, console, require: (id: string) => {
     assert.ok(id in modules, `Unexpected dependency ${id}`);
     return modules[id];
   } });
@@ -84,6 +85,9 @@ async function deliver(options: { body?: string; apiFailure?: boolean; smtpFailu
   const db = { execute: async (query: string) => { writes.push(query); return { rows: [{ metadata: {} }] }; } };
   const runtime = loadIsolated<typeof import("@/lib/invoice-delivery")>("lib/invoice-delivery.ts", {
     "server-only": {},
+    "@/lib/invoicing/billing-recipient": {},
+    "@/lib/invoice-email-attempt": emailAttempt,
+    "@/lib/invoice-email-attempt-store": { claimInvoiceEmailAttempt: async () => true, recordInvoiceEmailAttempt: async () => {} },
     "drizzle-orm": { sql: (strings: TemplateStringsArray) => strings.join("?") },
     "@/lib/audit": { writeAuditLog: async (entry: typeof audits[number]) => { audits.push(entry); } },
     "@/lib/db": { getDb: () => db, transaction: async (fn: (tx: typeof db) => Promise<unknown>) => fn(db) },
@@ -100,7 +104,7 @@ async function deliver(options: { body?: string; apiFailure?: boolean; smtpFailu
     } }) },
     "@/lib/notifications/email": { sendEmailTo: async (input: typeof sent[number]) => {
       sent.push(input);
-      if (options.smtpFailure) throw new Error("SMTP unavailable");
+      if (options.smtpFailure) throw Object.assign(new Error("SMTP unavailable"), { command: "CONN", code: "ECONNECTION" });
     } },
     "@/lib/reliability/alerts": { openAlert: async () => ({ isNew: false }) },
   });

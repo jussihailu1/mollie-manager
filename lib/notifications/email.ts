@@ -1,6 +1,7 @@
 import "server-only";
 
 import { lookup } from "node:dns/promises";
+import { SMTP_TIMEOUTS, smtpDefinitelyDidNotAccept } from "@/lib/notifications/smtp-outcome";
 
 // Keep app SMTP independent of NextAuth's unused, older optional email-login peer.
 import nodemailer, { type Transporter } from "nodemailer-smtp";
@@ -28,6 +29,7 @@ function getTransport() {
   const config = getNotificationConfig();
 
   transport = nodemailer.createTransport({
+    ...SMTP_TIMEOUTS,
     auth: {
       pass: config.SMTP_PASSWORD,
       user: config.SMTP_USER,
@@ -57,6 +59,7 @@ async function getFallbackIpv6Transport() {
   }
 
   fallbackIpv6Transport = nodemailer.createTransport({
+    ...SMTP_TIMEOUTS,
     auth: {
       pass: config.SMTP_PASSWORD,
       user: config.SMTP_USER,
@@ -106,7 +109,7 @@ export async function sendPlainEmail(input: {
     const errorMessage = error instanceof Error ? error.message : "";
     const isTimeoutError = /timeout|etimedout/i.test(errorMessage);
 
-    if (!isTimeoutError) {
+    if (!isTimeoutError || !smtpDefinitelyDidNotAccept(error)) {
       throw error;
     }
 
@@ -184,7 +187,7 @@ export async function sendEmailTo(input: {
     const errorMessage = error instanceof Error ? error.message : "";
     const isTimeoutError = /timeout|etimedout/i.test(errorMessage);
 
-    if (!isTimeoutError) {
+    if (!isTimeoutError || !smtpDefinitelyDidNotAccept(error)) {
       throw error;
     }
 

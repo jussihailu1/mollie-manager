@@ -7,6 +7,7 @@ export type InvoiceActor = {
 };
 
 export type DeliveryInput = {
+  allowResend?: boolean;
   actor: InvoiceActor;
   customerEmail: string | null;
   customerId: string | null;

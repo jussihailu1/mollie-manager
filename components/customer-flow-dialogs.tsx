@@ -1326,8 +1326,9 @@ function CreatePaymentLinkDialogSession({
   >("monthly");
   const [subscriptionDescription, setSubscriptionDescription] = useState("Premium Plan");
   const [subscriptionStartDate, setSubscriptionStartDate] = useState(
-    new Date().toISOString().slice(0, 10),
+    () => new Date(Date.now() + 8 * 86_400_000).toISOString().slice(0, 10),
   );
+  const [minimumStartDate] = useState(() => new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10));
   const [subscriptionTermMode, setSubscriptionTermMode] = useState<
     "open_ended" | "fixed_term"
   >("open_ended");
@@ -1674,6 +1675,7 @@ function CreatePaymentLinkDialogSession({
               <Input
                 id="subscriptionStartDate"
                 name="subscriptionStartDate"
+                min={minimumStartDate}
                 type="date"
                 value={subscriptionStartDate}
                 onChange={(event) => setSubscriptionStartDate(event.target.value)}

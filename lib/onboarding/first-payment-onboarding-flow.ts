@@ -1,4 +1,5 @@
 import { PaymentMethod, SequenceType } from "@mollie/api-client";
+import { requireConsentPaymentWindow } from "@/lib/onboarding/consent-payment-window";
 
 import type { MollieMode } from "@/lib/env";
 import { getMollieWebhookUrl, getTenantMollieClient, getTenantMollieRequestContext } from "@/lib/mollie/client";
@@ -34,6 +35,7 @@ export async function createFirstPaymentOnboardingFlow(
       termsVersion: tenantPolicy.termsVersion,
     },
   });
+  const expiresAt = requireConsentPaymentWindow(firstPaymentPlan.planSnapshot.startDate, firstPaymentPlan.planSnapshot.recurringBilling.invoiceNoticeDaysBeforeDueDate);
   const mollie = await getTenantMollieClient(
     input.tenantId,
     input.selectedMode,
@@ -52,6 +54,7 @@ export async function createFirstPaymentOnboardingFlow(
       value: firstPaymentPlan.amountValue,
     },
     customerId: input.customer.mollieCustomerId,
+    expiresAt,
     description: firstPaymentPlan.paymentDescription,
     idempotencyKey: crypto.randomUUID(),
     ...(profileId ? { profileId } : {}),

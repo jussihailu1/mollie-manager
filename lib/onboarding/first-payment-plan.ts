@@ -1,3 +1,4 @@
+import { isCalendarDate } from "@/lib/onboarding/consent-payment-window";
 import {
   buildConsentPlanSnapshot,
   type BillingInterval,
@@ -44,7 +45,7 @@ export function normalizeDateInput(value: string, label: string) {
 
   const parsed = new Date(`${normalized}T00:00:00Z`);
 
-  if (Number.isNaN(parsed.getTime())) {
+  if (Number.isNaN(parsed.getTime()) || !isCalendarDate(normalized)) {
     throw new Error(`${label} is not a valid date.`);
   }
 

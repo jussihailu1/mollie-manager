@@ -1,3 +1,6 @@
+import { customerBillingEmailSql } from "@/lib/invoicing/billing-recipient";
+import { runInvoiceEmailAttempt } from "@/lib/invoice-email-attempt";
+import { claimInvoiceEmailAttempt, recordInvoiceEmailAttempt } from "@/lib/invoice-email-attempt-store";
 import "server-only";
 
 import { sql } from "drizzle-orm";
@@ -516,22 +519,28 @@ export async function deliverCustomerInvoiceEmail(input: DeliveryInput) {
         throw new Error(`e-Boekhouden invoice PDF is unavailable or invalid (${attachmentResult.attachmentStatus}); retry delivery without recreating the invoice.`);
       }
     }
-    await sendEmailTo({
+    const attemptToken = crypto.randomUUID();
+    return await runInvoiceEmailAttempt({
+      claim: () => claimInvoiceEmailAttempt(input, attemptToken, finalRecipient),
+      record: (state) => recordInvoiceEmailAttempt(input, attemptToken, state),
+      report: () => console.error("Invoice email acceptance requires persistence recovery", { entityId: input.entityId, tenantId: input.tenantId }),
+      send: () => sendEmailTo({
       attachments: attachmentResult.attachment
         ? [attachmentResult.attachment]
         : undefined,
       subject: content.subject,
       text: content.text,
       to: finalRecipient,
-    });
+      }),
 
-    await storeDeliverySuccess({
+      finish: () => storeDeliverySuccess({
       actor: input.actor,
       deliveryRecipient: finalRecipient,
       entityId: input.entityId,
-      intendedRecipient: input.customerEmail,
+      intendedRecipient: input.customerEmail!,
       invoiceType: input.invoiceType,
       metadata: {
+        invoiceDeliveryAttemptState: "sent",
         invoiceDeliveryAttemptedAt: new Date().toISOString(),
         invoiceDeliveryAttemptCount: 0,
         invoiceDeliveryNextRetryAt: null,
@@ -547,9 +556,8 @@ export async function deliverCustomerInvoiceEmail(input: DeliveryInput) {
       mode: input.mode,
       recipientOverridden: env.INVOICE_EMAIL_OVERRIDE_TO ? true : false,
       tenantId: input.tenantId,
+      }),
     });
-
-    return { status: "sent" as const };
   } catch (error) {
     const errorMessage = serializeErrorMessage(error);
     await storeDeliveryFailure({
@@ -582,7 +590,7 @@ async function listCreatedUnsentFirstPaymentInvoiceDeliveries(
       i.provider_invoice_number as "invoiceNumber",
       i.provider_document_url as "invoiceDocumentUrl",
       p.metadata,
-      c.email as "customerEmail"
+      ${customerBillingEmailSql} as "customerEmail"
     from payments p
     left join customers c on c.id = p.customer_id and c.mode = p.mode and c.tenant_id = p.tenant_id
     inner join invoices i
@@ -654,7 +662,7 @@ async function listCreatedUnsentRecurringInvoiceDeliveries(
       i.provider_document_url as "invoiceDocumentUrl",
       rbs.metadata,
       s.customer_id as "customerId",
-      c.email as "customerEmail"
+      ${customerBillingEmailSql} as "customerEmail"
     from recurring_billing_schedules rbs
     inner join subscriptions s on s.id = rbs.subscription_id and s.tenant_id = rbs.tenant_id
     inner join customers c on c.id = s.customer_id and c.mode = rbs.mode and c.tenant_id = rbs.tenant_id

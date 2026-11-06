@@ -1,3 +1,4 @@
+import { customerBillingEmailSql } from "@/lib/invoicing/billing-recipient";
 import "server-only";
 
 import { sql } from "drizzle-orm";
@@ -50,9 +51,9 @@ export async function loadCustomerInvoiceResendTarget(
         p.tenant_id as "tenantId",
         p.customer_id as "customerId",
         p.subscription_id as "subscriptionId",
-        c.email as "customerEmail",
+        ${customerBillingEmailSql} as "customerEmail",
         i.provider as "invoiceProvider",
-        i.id as "invoiceId",
+        case when i.provider = 'kify' then i.id else i.provider_invoice_id end as "invoiceId",
         coalesce(i.canonical_invoice_number, i.provider_invoice_number, i.provider_invoice_id) as "invoiceNumber",
         coalesce(
           nullif(i.provider_document_url, ''),
@@ -85,9 +86,9 @@ export async function loadCustomerInvoiceResendTarget(
         rbs.tenant_id as "tenantId",
         s.customer_id as "customerId",
         rbs.subscription_id as "subscriptionId",
-        c.email as "customerEmail",
+        ${customerBillingEmailSql} as "customerEmail",
         i.provider as "invoiceProvider",
-        i.id as "invoiceId",
+        case when i.provider = 'kify' then i.id else i.provider_invoice_id end as "invoiceId",
         coalesce(i.canonical_invoice_number, i.provider_invoice_number, i.provider_invoice_id) as "invoiceNumber",
         coalesce(
           nullif(i.provider_document_url, ''),

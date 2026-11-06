@@ -1,3 +1,5 @@
+import { customerBillingEmailSql } from "@/lib/invoicing/billing-recipient";
+import { recoverStaleInvoiceClaims, requeueReconciledStaleInvoice } from "@/lib/eboekhouden/stale-invoice-claims";
 import "server-only";
 
 import { sql } from "drizzle-orm";
@@ -146,7 +148,7 @@ async function listProviderAgnosticDueRecurringInvoiceCandidates(
       rbs.amount_value::text as "amountValue",
       s.customer_id as "customerId",
       s.description as "subscriptionDescription",
-      c.email as "customerEmail",
+      ${customerBillingEmailSql} as "customerEmail",
       null::int as "eboekhoudenRelationId"
     from recurring_billing_schedules rbs
     inner join subscriptions s on s.id = rbs.subscription_id and s.tenant_id = rbs.tenant_id
@@ -772,6 +774,7 @@ export async function recoverFailedRecurringInvoicesBatch(input: {
     };
   }
 
+  await recoverStaleInvoiceClaims({ tenantId: resolvedTenantId, mode: input.mode, ownerType: "recurring_schedule" });
   const candidates = await listFailedRecurringRecoveryCandidates(
     input.mode,
     input.limit ?? DEFAULT_BATCH_SIZE,
@@ -800,6 +803,7 @@ export async function recoverFailedRecurringInvoicesBatch(input: {
     }
 
     if (existing.status !== "found") {
+      await requeueReconciledStaleInvoice({ tenantId: candidate.tenantId, mode: candidate.mode, ownerId: candidate.scheduleId, ownerType: "recurring_schedule" });
       continue;
     }
 
@@ -912,7 +916,7 @@ export async function createDueRecurringInvoicesBatch(input: {
                 rbs.amount_value::text as "amountValue",
                 s.customer_id as "customerId",
                 s.description as "subscriptionDescription",
-                c.email as "customerEmail",
+                ${customerBillingEmailSql} as "customerEmail",
                 case
                   when cal.provider_customer_id ~ '^[0-9]+$'
                     then cal.provider_customer_id::int

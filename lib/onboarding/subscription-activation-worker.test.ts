@@ -50,6 +50,7 @@ for (const scenario of [
 ]) it(`onboarding endpoint authorization: ${scenario.name}`, async () => {
   const calls: string[] = [];
   const worker = load("app/api/cron/onboarding/route.ts", {
+    "@/lib/reliability/invoice-watchdog": { checkInvoiceAutomation: async () => ({ issueCount: 0 }) },
     "drizzle-orm": { sql }, "@/lib/db": { getDb: () => ({ execute: async () => ({ rows: [{ count: 0 }] }) }) },
     "@/lib/cron-auth": { isBearerAuthorized },
     "@/lib/tenants": { listTenants: async () => { calls.push("tenants"); return [{ id: "tenant" }]; } },

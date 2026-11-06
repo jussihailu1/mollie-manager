@@ -5,6 +5,7 @@ import { listTenants } from "@/lib/tenants";
 import { discoverPendingOnboardingPayments, processSubscriptionActivationJobsBatch } from "@/lib/onboarding/subscription-activation-jobs";
 import { deliverSubscriptionActivationNotificationsBatch } from "@/lib/onboarding/subscription-activation-notifications";
 import { writeAuditLog } from "@/lib/audit";
+import { checkInvoiceAutomation } from "@/lib/reliability/invoice-watchdog";
 
 export const maxDuration = 60;
 
@@ -20,6 +21,9 @@ export async function POST(request: Request) {
   const scheduler = request.headers.get("x-kify-recovery-scheduler") === "cloudflare" ? "cloudflare" : "external";
   const results = [];
   for (const tenant of await listTenants()) {
+    let invoiceWatchdogFailed = false;
+    try { invoiceWatchdogFailed = (await checkInvoiceAutomation(tenant)).issueCount > 0; }
+    catch { invoiceWatchdogFailed = true; console.error("Invoice watchdog failed", { runId, tenantId: tenant.id }); }
     try {
       const context = { tenantId: tenant.id, mode: "live" as const, limit: 2 };
       const discovery = await discoverPendingOnboardingPayments(context);
@@ -29,8 +33,8 @@ export async function POST(request: Request) {
         select count(*)::int as count from subscription_activation_jobs
         where tenant_id = ${tenant.id} and mode = 'live' and status = 'exhausted'
       `);
-      const failed = discovery.failedCount > 0 || notifications.failedCount > 0 || overdue.rows[0].count > 0;
-      const details = { runId, trigger, scheduler, discovery, activation, notifications };
+      const failed = invoiceWatchdogFailed || discovery.failedCount > 0 || notifications.failedCount > 0 || overdue.rows[0].count > 0;
+      const details = { runId, trigger, scheduler, discovery, activation, notifications, invoiceWatchdogFailed };
       await writeAuditLog({ action: "onboarding.recovery", entityId: tenant.id, entityType: "tenant_onboarding_recovery", mode: "live", outcome: failed ? "failure" : "success", summary: "Processed automatic onboarding recovery.", details }, undefined, { kind: "system" });
       results.push({ tenantId: tenant.id, failed, ...details });
     } catch {

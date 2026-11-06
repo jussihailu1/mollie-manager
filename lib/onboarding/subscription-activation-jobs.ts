@@ -115,7 +115,7 @@ export async function discoverPendingOnboardingPayments(input: { limit: number; 
     join payment_links pl on pl.id = soc.payment_link_id and pl.tenant_id = soc.tenant_id and pl.mode = soc.mode
     join customers c on c.id = soc.customer_id and c.tenant_id = soc.tenant_id
     where soc.tenant_id = ${input.tenantId} and soc.mode = ${input.mode} and soc.accepted_at is not null and c.archived_at is null
-      and soc.plan_snapshot ->> 'startDate' >= to_char(now() at time zone 'Europe/Amsterdam', 'YYYY-MM-DD')
+      and pl.mollie_status not in ('archived', 'canceled', 'failed')
       and not exists (select 1 from subscriptions s where s.customer_id = soc.customer_id and s.tenant_id = soc.tenant_id and s.mode = soc.mode and s.local_status in ('active', 'mandate_pending', 'draft'))
       and not exists (select 1 from subscriptions s where s.tenant_id = soc.tenant_id and s.mode = soc.mode and s.metadata ->> 'consentId' = soc.id::text)
       and not exists (select 1 from subscription_activation_jobs j where j.consent_id = soc.id and j.tenant_id = soc.tenant_id and j.mode = soc.mode)

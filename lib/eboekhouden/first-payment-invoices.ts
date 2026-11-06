@@ -1,4 +1,5 @@
 import "server-only";
+import { recoverStaleInvoiceClaims, requeueReconciledStaleInvoice } from "@/lib/eboekhouden/stale-invoice-claims";
 
 import { sql } from "drizzle-orm";
 
@@ -913,6 +914,7 @@ export async function recoverFailedFirstPaymentInvoicesBatch(input: {
     };
   }
 
+  await recoverStaleInvoiceClaims({ tenantId: input.tenantId, mode: input.mode, ownerType: "payment" });
   const candidates = await listFailedFirstPaymentRecoveryCandidates(
     input.mode,
     input.limit ?? DEFAULT_BATCH_SIZE,
@@ -949,6 +951,7 @@ export async function recoverFailedFirstPaymentInvoicesBatch(input: {
     }
 
     if (existing.status !== "found") {
+      await requeueReconciledStaleInvoice({ tenantId: candidate.tenantId, mode: candidate.mode, ownerId: candidate.paymentId, ownerType: "payment" });
       continue;
     }
 

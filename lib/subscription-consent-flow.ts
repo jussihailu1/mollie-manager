@@ -6,6 +6,7 @@ import {
 } from "@/lib/subscription-consent-acceptance";
 
 export type AcceptableSubscriptionConsent = {
+  checkoutBlockedReason?: string | null;
   acceptedAt: string | null;
   checkoutUrl: string | null;
   consentId: string;
@@ -31,6 +32,7 @@ export type AcceptSubscriptionConsentFlowResult = {
     | "accepted"
     | "already_accepted"
     | "checkout_missing"
+    | "consent_expired"
     | "consent_form_invalid"
     | "consent_not_found"
     | "consent_required";
@@ -67,6 +69,9 @@ export async function runAcceptSubscriptionConsentFlow(
     };
   }
 
+  if (consent.checkoutBlockedReason) {
+    return { redirectTo: buildSubscriptionConsentPath(parsed.token, { error: "consent_expired" }), status: "consent_expired" };
+  }
   if (!consent.checkoutUrl) {
     return {
       redirectTo: buildSubscriptionConsentPath(parsed.token, {

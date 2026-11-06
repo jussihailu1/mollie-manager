@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { getDb } from "@/lib/db";
 import { env } from "@/lib/env";
+import { consentPaymentWindowIsOpen } from "@/lib/onboarding/consent-payment-window";
 import {
   consentTokenSchema,
 } from "@/lib/subscription-consent-acceptance";
@@ -61,6 +62,7 @@ export const subscriptionConsentPlanSnapshotSchema = z.object({
 });
 
 export type SubscriptionConsentRecord = {
+  checkoutBlockedReason?: string | null;
   acceptedAt: string | null;
   acceptedCheckboxKeys: string[];
   businessName: string | null;
@@ -145,6 +147,9 @@ export async function getSubscriptionConsentByToken(token: string) {
   const result = await getDb().execute<{
     acceptedAt: string | null;
     acceptedCheckboxKeys: unknown;
+    archivedAt: string | null;
+    linkStatus: string | null;
+    expiresAt: string | null;
     businessName: string | null;
     checkoutUrl: string | null;
     consentId: string;
@@ -174,10 +179,11 @@ export async function getSubscriptionConsentByToken(token: string) {
       soc.plan_snapshot as "planSnapshot",
       soc.accepted_at as "acceptedAt",
       pl.checkout_url as "checkoutUrl",
+      pl.mollie_status as "linkStatus", pl.expires_at as "expiresAt", c.archived_at as "archivedAt",
       coalesce(nullif(c.metadata ->> 'businessName', ''), c.full_name) as "businessName"
     from subscription_onboarding_consents soc
-    inner join payment_links pl on pl.id = soc.payment_link_id and pl.mode = soc.mode
-    inner join customers c on c.id = soc.customer_id and c.mode = soc.mode
+    inner join payment_links pl on pl.id = soc.payment_link_id and pl.mode = soc.mode and pl.tenant_id = soc.tenant_id
+    inner join customers c on c.id = soc.customer_id and c.mode = soc.mode and c.tenant_id = soc.tenant_id
     where
       soc.consent_token_hash = ${consentTokenHash}
       or soc.consent_token = ${parsedToken.data}
@@ -208,13 +214,21 @@ export async function getSubscriptionConsentByToken(token: string) {
     return null;
   }
 
+  const checkoutBlockedReason = row.linkStatus === "paid"
+    ? "Your setup payment has already been received. No further setup payment is needed."
+    : row.archivedAt || ["expired", "archived", "canceled", "failed"].includes(row.linkStatus ?? "") ||
+      (row.expiresAt && Date.parse(row.expiresAt) <= Date.now()) ||
+      !consentPaymentWindowIsOpen(parsedSnapshot.data.startDate, parsedSnapshot.data.recurringBilling.invoiceNoticeDaysBeforeDueDate)
+      ? "The payment window for this start date has closed. Please request a new consent link with a later start date."
+      : null;
   return {
     acceptedAt: row.acceptedAt,
     acceptedCheckboxKeys: Array.isArray(row.acceptedCheckboxKeys)
       ? row.acceptedCheckboxKeys.filter((value): value is string => typeof value === "string")
       : [],
     businessName: row.businessName,
-    checkoutUrl: row.checkoutUrl,
+    checkoutBlockedReason,
+    checkoutUrl: checkoutBlockedReason ? null : row.checkoutUrl,
     consentId: row.consentId,
     consentToken: storedConsentToken,
     customerId: row.customerId,

@@ -1,3 +1,4 @@
+import { customerBillingEmailSql } from "@/lib/invoicing/billing-recipient";
 import { sql } from "drizzle-orm";
 
 import { getDb } from "@/lib/db";
@@ -38,7 +39,7 @@ export async function getFirstPaymentInvoiceCandidate(
       p.paid_at as "paidAt",
       p.created_at as "paymentCreatedAt",
       p.amount_value::text as "amountValue",
-      c.email as "customerEmail",
+      ${customerBillingEmailSql} as "customerEmail",
       case
         when cal.provider_customer_id ~ '^[0-9]+$'
           then cal.provider_customer_id::int

@@ -22,12 +22,12 @@ describe("needs attention UI grouping", () => {
     assert.match(presentationSource, /System reliability/);
   });
 
-  it("groups dashboard attention items by priority and shows business impact", () => {
-    assert.match(dashboardSource, /getNeedsAttentionPriorityMeta/);
+  it("shows the dashboard's attention queue with business impact and review actions", () => {
     assert.match(dashboardSource, /getNeedsAttentionImpact/);
-    assert.match(dashboardSource, /groupedAttentionItems/);
-    assert.match(dashboardSource, /priority\.title/);
-    assert.match(dashboardSource, /priority\.description/);
+    assert.match(dashboardSource, /listNeedsAttentionItems/);
+    assert.match(dashboardSource, /attentionItems\.map/);
+    assert.match(dashboardSource, /Review payment/);
+    assert.match(dashboardSource, /Review customer/);
     assert.match(dashboardSource, /impact\.label/);
     assert.match(dashboardSource, /impact\.description/);
   });

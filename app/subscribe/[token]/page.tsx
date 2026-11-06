@@ -11,6 +11,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 const errorMessages: Record<string, string> = {
+  consent_expired: "This payment link is no longer available. If you have already paid, do not pay again. Otherwise, request a new start date.",
   checkout_missing:
     "This consent link is missing a checkout destination. Please ask support for a new link.",
   consent_form_invalid: "The consent form input was invalid. Please try again.",
@@ -157,7 +158,9 @@ export default async function SubscribeConsentPage({
           </details>
         </section>
 
-        {consent.acceptedAt ? (
+        {consent.checkoutBlockedReason ? (
+          <div className="mt-8 rounded-2xl border border-amber-500/25 bg-amber-100 px-5 py-4 text-sm text-amber-900">{consent.checkoutBlockedReason}</div>
+        ) : consent.acceptedAt ? (
           <div className="mt-8 rounded-2xl border border-emerald-500/20 bg-emerald-50 px-5 py-4 text-sm text-emerald-900">
             <p className="font-medium">Consent already recorded</p>
             <p className="mt-2">Accepted on {formatDate(consent.acceptedAt)}.</p>

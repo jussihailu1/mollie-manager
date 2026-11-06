@@ -256,7 +256,7 @@ export async function createCustomerAction(formData: FormData) {
     return await redirectWithMessage(returnTo, {
       notice: result.linkedRelation
         ? "Customer imported from e-Boekhouden. You can now generate the first payment link."
-        : "Customer created as unlinked from e-Boekhouden. You can now generate the first payment link.",
+        : "Customer created. Complete invoice setup and link the e-Boekhouden relation before creating a consent link.",
     });
   } catch (error) {
     unstable_rethrow(error);

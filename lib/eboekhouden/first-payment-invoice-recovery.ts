@@ -1,3 +1,4 @@
+import { customerBillingEmailSql } from "@/lib/invoicing/billing-recipient";
 import { sql } from "drizzle-orm";
 
 import { writeAuditLog } from "@/lib/audit";
@@ -44,7 +45,7 @@ export async function listFailedFirstPaymentRecoveryCandidates(
       p.created_at as "paymentCreatedAt",
       p.amount_value::text as "amountValue",
       p.metadata ->> 'invoiceTaxTreatment' as "taxTreatment",
-      c.email as "customerEmail",
+      ${customerBillingEmailSql} as "customerEmail",
       case
         when cal.provider_customer_id ~ '^[0-9]+$'
           then cal.provider_customer_id::int
@@ -134,7 +135,7 @@ export async function storeRecoveredFailedFirstPaymentSuccess(input: {
     }, tx);
     await tx.execute(sql`
       update alerts set status = 'resolved', resolved_at = now(), updated_at = now()
-      where tenant_id = ${input.candidate.tenantId} and status = 'open'
+      where payload ->> 'tenantId' = ${input.candidate.tenantId} and status = 'open'
         and (
           (payload ->> 'kind' = 'first_payment_invoice_creation_failed' and payload ->> 'paymentId' = ${input.candidate.paymentId})
           or (payload ->> 'kind' = 'eboekhouden_invoice_verification_failed' and payload ->> 'ownerId' = ${input.candidate.paymentId})

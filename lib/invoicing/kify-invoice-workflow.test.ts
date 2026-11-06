@@ -8,13 +8,13 @@ describe("Kify invoice workflow guard", () => {
     assert.match(resolver, /Kify invoice issuance must use the Kify workflow/);
   });
 
-  it("checks Kify profile readiness before creating a real-installment link", () => {
+  it("checks provider readiness before creating either kind of consent link", () => {
     const workflow = readFileSync("lib/onboarding/first-payment-action-flow.ts", "utf8");
-    const readinessIndex = workflow.indexOf("getKifyInvoiceReadiness");
-    const sideEffectIndex = workflow.indexOf("createFirstPaymentOnboardingFlow");
+    const readinessIndex = workflow.indexOf("await getOnboardingInvoiceReadiness");
+    const sideEffectIndex = workflow.indexOf("await createFirstPaymentOnboardingFlow");
     assert.ok(readinessIndex >= 0 && readinessIndex < sideEffectIndex);
-    assert.match(workflow, /firstPaymentMode === "real_installment"/);
-    assert.match(workflow, /getTenantActiveInvoiceProvider\(input\.tenantId\)\) === "kify"/);
+    const readiness = readFileSync("lib/onboarding/invoice-readiness.ts", "utf8");
+    assert.match(readiness, /getKifyInvoiceReadiness\(input\)/);
   });
 
   it("routes first payments and due schedules to Kify before legacy adapter resolution", () => {

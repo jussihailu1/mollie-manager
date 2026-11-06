@@ -1,3 +1,4 @@
+import { customerBillingEmailSql } from "@/lib/invoicing/billing-recipient";
 import { sql } from "drizzle-orm";
 
 import { writeAuditLog } from "@/lib/audit";
@@ -50,7 +51,7 @@ export async function listFailedRecurringRecoveryCandidates(
       rbs.metadata ->> 'invoiceTaxTreatment' as "taxTreatment",
       rbs.subscription_id as "subscriptionId",
       s.customer_id as "customerId",
-      c.email as "customerEmail",
+      ${customerBillingEmailSql} as "customerEmail",
       case
         when cal.provider_customer_id ~ '^[0-9]+$'
           then cal.provider_customer_id::int
@@ -133,7 +134,7 @@ export async function storeRecoveredFailedInvoiceSuccess(input: {
     }, tx);
     await tx.execute(sql`
       update alerts set status = 'resolved', resolved_at = now(), updated_at = now()
-      where tenant_id = ${input.candidate.tenantId} and status = 'open'
+      where payload ->> 'tenantId' = ${input.candidate.tenantId} and status = 'open'
         and (
           (payload ->> 'kind' = 'recurring_invoice_creation_failed' and payload ->> 'scheduleId' = ${input.candidate.scheduleId})
           or (payload ->> 'kind' = 'eboekhouden_invoice_verification_failed' and payload ->> 'ownerId' = ${input.candidate.scheduleId})
