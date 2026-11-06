@@ -3,6 +3,23 @@
 Status: active; sole authority for development order
 Audience: product and engineering
 
+## Next Session: Deferred Operational Follow-Ups
+
+**User deferred this work on 22 October 2026; it remains open.** Before choosing
+new Kify work, surface the
+[resume checklist and evidence](../operations/production-health-and-followups-2026-10-22.md#deferred-by-user--next-kify-session-starts-here):
+genuine webhook processing, independent monitoring, operator email receipt,
+post-release daily recovery/ordinary invoice proof, and the nine development-only
+braces audit entries. Independent monitoring is the recommended first implementation
+when the user resumes this work; Cronitor/Axiom is only a proposal.
+
+Recheck dated evidence read-only. Do not automatically implement, deploy, change
+configuration, run billing, replay webhooks or send email. Keep the intentional
+`info@ayalweb.com` invoice override. No background monitoring/reminder was installed.
+The handoff records local Git state, preserved worktrees, next observation dates,
+acceptance criteria and authorization boundaries. K7/K8 remains the active product
+milestone; these deferred items are not marked complete.
+
 ## How To Use This Roadmap
 
 Read this file before starting product work. It defines the current end goal,
@@ -116,6 +133,29 @@ ownership remain separate backlog items.
 
 These are correctness and readiness follow-ups, not additional product milestones.
 
+- **Read-only operational recheck, 22 October 23:45–23:48.** Production still
+  serves READY `e1f895c`; ten health/access GET checks pass again. Local master
+  remains at documentation-only `a9f68ec`, one commit ahead of GitHub; existing
+  worktrees and their changes are preserved. No new webhook since repair: total
+  30, latest 12 September. Both subscription URLs are still correct, and all
+  seven provider payments match local paid state. Fifteen daily recovery audits
+  succeeded through 22 October, but the latest predates the security release;
+  observe the first scheduled run on this revision on 23 October. No overdue
+  live invoice backlog; next ordinary invoice is 27 October.
+  Operator delivery remains unproven: no notification attempt audits since
+  8 October and no matching messages in bounded connected-mailbox searches.
+  Axiom's Ayal Web organization has no monitors/notifiers or identifiable Kify
+  dataset. Current public health cannot detect database or missed-cron failures.
+  First proposed implementation is independent external uptime/job monitoring
+  (Cronitor candidate), dedicated read-only diagnostics credentials and retained
+  runtime/delivery-failure signals; proposed UTC deadline 04:15 allows Vercel's
+  scheduling window. No implementation or external setup is authorized yet.
+  Detailed thresholds, isolated acceptance tests, evidence limits and subsequent
+  one-message operator proof are in the
+  [current operational handoff](../operations/production-health-and-followups-2026-10-22.md).
+  Fresh production configuration reads confirm cron enabled at `0 3 * * *`,
+  Kify URL values and the preserved `info@ayalweb.com` recipient override.
+  Fresh audits remain zero production / nine development-only braces entries.
 - **Subscription webhook URL repair complete; genuine delivery proof open.**
   On 22 October both active live Ayal Web subscriptions were patched only to
   `https://kify.app/api/webhooks/mollie`, without legacy secret query parameters.

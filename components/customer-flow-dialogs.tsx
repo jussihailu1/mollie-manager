@@ -2253,94 +2253,117 @@ function CustomerDrawerSession({
       locked: !consentCreated,
     },
     {
-      action: undefined,
-      actionLabel: "",
       complete: subscriptionActive,
-      label: "Subscription activation",
+      label: subscriptionActive ? "Subscription active" : "Subscription activation",
       locked: !firstPaymentCompleted,
     },
-    { complete: subscriptionActive, label: "Subscription active", locked: !subscriptionActive },
   ];
   const workflowStatus = (
-    <div className="space-y-4">
+    <section aria-label="Workflow status" aria-busy={isInvoiceProfileLoading} className="space-y-4">
       <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
         Workflow status
       </h3>
-      <div className="space-y-0">
-        {workflowSteps.map((step, index) => {
-          const isLast = index === workflowSteps.length - 1;
-          const isActionable = Boolean(step.action);
+      {isInvoiceProfileLoading ? (
+        <div role="status">
+          <span className="sr-only">Loading workflow status...</span>
+          <div aria-hidden="true" className="motion-safe:animate-pulse">
+            {workflowSteps.map((step, index) => (
+              <div key={step.label} className="flex h-14 gap-3">
+                <div className="flex flex-col items-center">
+                  <div className="h-6 w-6 shrink-0 rounded-full bg-muted" />
+                  {index < workflowSteps.length - 1 ? <div className="w-0.5 flex-1 bg-muted" /> : null}
+                </div>
+                <div className="mt-1 h-4 w-40 max-w-[70%] rounded bg-muted" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : invoiceProfileError ? (
+        <div className="space-y-2">
+          <p role="alert" className="text-sm text-muted-foreground">
+            Workflow status is unavailable because the invoice profile could not be loaded.
+          </p>
+          <Button type="button" size="sm" variant="outline" onClick={() => setInvoiceProfileRefreshKey((value) => value + 1)}>
+            Retry workflow status
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-0">
+          {workflowSteps.map((step, index) => {
+            const isLast = index === workflowSteps.length - 1;
+            const isActionable = Boolean(step.action);
 
-          return (
-            <div key={step.label} className="flex gap-3">
-              <div className="flex flex-col items-center">
-                <div
-                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${
-                    step.complete
-                      ? "border-primary bg-primary"
-                      : isActionable
-                        ? "border-primary bg-background"
-                        : "border-muted bg-background"
-                  }`}
-                >
-                  {step.complete ? <CheckCircle className="h-3.5 w-3.5 text-primary-foreground" /> : null}
-                </div>
-                {!isLast ? <div className={`min-h-8 w-0.5 flex-1 ${step.complete ? "bg-primary" : "bg-muted"}`} /> : null}
-              </div>
-              <div className="min-w-0 flex-1 pb-6 pt-0.5">
-                <div className="flex items-center gap-1">
-                  <p className={step.complete ? "text-sm font-medium" : step.locked ? "text-sm text-muted-foreground" : "text-sm font-semibold"}>
-                    {step.label}
-                  </p>
-                  {step.action && (step.actionIconOnly || step.actionIcon) ? (
-                    <Button
-                      type="button"
-                      size="icon-xs"
-                      variant="ghost"
-                      className="text-muted-foreground hover:text-foreground"
-                      onClick={step.action}
-                      aria-label={step.actionLabel}
-                      title={step.actionLabel}
-                    >
-                      {step.actionIcon === "share" ? <Share2 /> : <PenLine />}
-                    </Button>
-                  ) : null}
-                  {step.secondaryAction ? (
-                    <Button
-                      type="button"
-                      size="icon-xs"
-                      variant="ghost"
-                      className="text-muted-foreground hover:text-foreground"
-                      onClick={step.secondaryAction}
-                      aria-label={step.secondaryActionLabel}
-                      title={step.secondaryActionLabel}
-                    >
-                      <PenLine />
-                    </Button>
-                  ) : null}
-                </div>
-                {step.locked && !step.complete ? (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {step.label === "Consent link" ? "Complete the invoice profile first." : "Complete the previous step first."}
-                  </p>
-                ) : null}
-                {step.action && !step.actionIconOnly && !step.actionIcon ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="default"
-                    className="mt-2"
-                    onClick={step.action}
+            return (
+              <div key={step.label} className="flex gap-3">
+                <div className="flex flex-col items-center">
+                  <div
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${
+                      step.complete
+                        ? "border-primary bg-primary"
+                        : isActionable
+                          ? "border-primary bg-background"
+                          : "border-muted bg-background"
+                    }`}
                   >
-                    {step.actionLabel}
-                  </Button>
-                ) : null}
+                    {step.complete ? <CheckCircle className="h-3.5 w-3.5 text-primary-foreground" /> : null}
+                  </div>
+                  {!isLast ? <div className={`min-h-8 w-0.5 flex-1 ${step.complete ? "bg-primary" : "bg-muted"}`} /> : null}
+                </div>
+                <div className="min-w-0 flex-1 pb-6 pt-0.5">
+                  <div className="flex items-center gap-1">
+                    <p className={step.complete ? "text-sm font-medium" : step.locked ? "text-sm text-muted-foreground" : "text-sm font-semibold"}>
+                      {step.label}
+                    </p>
+                    {step.action && (step.actionIconOnly || step.actionIcon) ? (
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={step.action}
+                        aria-label={step.actionLabel}
+                        title={step.actionLabel}
+                      >
+                        {step.actionIcon === "share" ? <Share2 /> : <PenLine />}
+                      </Button>
+                    ) : null}
+                    {step.secondaryAction ? (
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={step.secondaryAction}
+                        aria-label={step.secondaryActionLabel}
+                        title={step.secondaryActionLabel}
+                      >
+                        <PenLine />
+                      </Button>
+                    ) : null}
+                  </div>
+                  {step.locked && !step.complete ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {step.label === "Consent link" ? "Complete the invoice profile first." : "Complete the previous step first."}
+                    </p>
+                  ) : null}
+                  {step.action && !step.actionIconOnly && !step.actionIcon ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="default"
+                      className="mt-2"
+                      onClick={step.action}
+                    >
+                      {step.actionLabel}
+                    </Button>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 
   return (

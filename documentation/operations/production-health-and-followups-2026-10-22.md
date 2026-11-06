@@ -5,7 +5,166 @@ supersedes older open scheduled-run checkboxes, not the historical release
 evidence. Recheck live state before changes. All dates below use Europe/Amsterdam
 unless explicitly UTC.
 
-## Verified read-only findings
+## Deferred by user — next Kify session starts here
+
+On 22 October 2026, after reviewing the findings below, the user chose to defer
+these operational follow-ups. They remain **open, not resolved**. Documentation
+is the only current task; the monitoring proposal is not an approved implementation
+or service selection. No ongoing monitor, reminder or email test has been set up.
+
+At the next Kify work session, surface this checklist before choosing new work.
+Recheck dated evidence read-only; do not assume an expected event happened or
+automatically execute the proposed fixes.
+
+| Open item | Last verified state | What to check or decide next |
+| --- | --- | --- |
+| Genuine Mollie webhook proof | Both subscription URLs repaired; zero recorded receipts since repair; latest receipt 12 September | Look for a naturally received live event, correct tenant, successful processing and authoritative payment sync. Do not replay or create payments to test. |
+| Independent monitoring — recommended first implementation | No external monitoring established in the inspected setup | Review the proposal below. Detection and notification must survive Kify/SMTP failure; approve scope and service before setup. |
+| Operator email delivery | No recent recorded notification attempt or matching inbox evidence | A separately authorized operator-only test must prove transport, audit and inbox receipt. Preserve the recipient override. |
+| Recovery and ordinary invoice proof after release | READY `e1f895c`, ten health checks passed; latest recovery run predates this release | Check actual runs from 23 October onward and ordinary invoices due 27 October / 5 November. Collections were scheduled for 1 / 10 November. These dates are observation checkpoints, not instructions to run billing. |
+| Development dependency advisory | Zero production findings; nine development-only entries from one unpatched braces advisory | Recheck upstream when maintenance resumes; keep tooling inputs trusted and avoid forced downgrades. |
+
+Preserve `INVOICE_EMAIL_OVERRIDE_TO=info@ayalweb.com`. No push, deployment,
+configuration change, billing, subscription creation, charge, invoice, webhook
+replay or email is authorized by this handoff. The product roadmap still has
+Kify-owned invoicing K7/K8 as its active milestone; this deferral does not close
+its live-proof gates or promote other backlog work.
+
+Git checkpoint at deferral: main HEAD `a9f68ec` is local documentation above
+remote/production `e1f895c`; this session's handoff and roadmap edits are also
+local and uncommitted. Recheck Git before resuming, preserve existing changes and
+other worktrees, and do not push merely to save documentation because that may
+trigger deployment. Detailed evidence, limitations and the proposal follow.
+
+## Operational follow-up — 22 October, 23:45–23:48 Europe/Amsterdam
+
+Current scope is read-only investigation plus these documentation updates.
+No implementation, configuration change, push, deployment, billing, subscription
+creation, charge, invoice, webhook replay or email is authorized in this pass.
+The intentional invoice recipient override remains `info@ayalweb.com`.
+
+### Current evidence
+
+- Main checkout started clean at `a9f68ec`; `git ls-remote` independently reports
+  GitHub master at `e1f895c861f95b374293c44d6b908a5d8997dbc8`. The one local commit
+  is documentation only. The settings/reliability worktree still contains its
+  seven modified and two untracked files; it was read but not edited. The old
+  detached validation worktree remains registered/prunable; no cleanup performed.
+- Vercel domain lookup still resolves `kify.app` to READY deployment
+  `dpl_DukhWo1YHo2DZhhyQzwPabi5L6xa`, exact release SHA `e1f895c`. All ten
+  GET-only health/access checks passed again. Authenticated health reports live
+  mode, database OK and platform readiness passed; request ID
+  `fra1::iad1::hzgr9-1792705651682-f9a1e395b204`.
+- Fresh CLI/API reads at 23:48 confirm the production cron is enabled on this
+  deployment with `0 3 * * *`, both URL environment values are `https://kify.app`,
+  and `ALERT_EMAIL_TO` / `INVOICE_EMAIL_OVERRIDE_TO` both equal `info@ayalweb.com`.
+  Both cron-secret names remain present; no monitoring-related variable names
+  matched the bounded inventory. The connector environment read returned 403,
+  but the same scoped read succeeded through the CLI's existing authentication.
+  This supersedes the earlier session's CLI-access limitation; no config changed.
+- At `2026-10-22T21:45:51.243Z`, a repeatable-read database transaction verified
+  `transaction_read_only=on`: **30 webhook records, zero since the repair cutoff
+  `2026-10-22T20:09:00Z`, latest `2026-09-12T02:26:02.187Z`**. There is no new
+  receipt to correlate with tenant, processing success and payment synchronization.
+  Requests rejected before event persistence cannot be excluded by this query.
+- Fresh Mollie GETs, using the existing tenant-owned live key without an OAuth
+  refresh, verified the Ayal Web profile and both active subscriptions. Both
+  still use `https://kify.app/api/webhooks/mollie` without a query. Next payment
+  dates remain 1 and 10 November. Complete paginated payment lists still contain
+  seven paid payments, all present locally with matching paid status; no newly
+  generated subscription payment was found. No evidence yet proves or disproves
+  delivery of a naturally generated notification after repair.
+- Daily recovery still has 15 successful tenant completion audits on 8–22 October,
+  with all 13 stages and no failed stages on 9–22 October. Latest completion is
+  22 October 05:23:22.935, run `0d712514-a9d0-47d1-9746-698d86af4477`.
+  **That run predates the security release.** The first scheduled run on `e1f895c`
+  is not due until 23 October; it has not been verified on this revision yet.
+- No overdue live invoice owners, failed/creating owners or created-but-unsent
+  owners were found. Two future pending schedules remain: EUR 24.90 invoice
+  27 October / collection 1 November, and EUR 19.99 invoice 5 November /
+  collection 10 November. No new live invoice or alert was recorded since
+  8 October. Tenant settings remain `eboekhouden / kor / GEEN / 0.00 / app_smtp`.
+- No `cron.issue_notification` or other notification/email/delivery audit matched
+  the 8 October–inspection window. Connected Gmail identifies the operator
+  mailbox as `info@ayalweb.com`; two bounded searches including spam/trash found
+  no matching Kify/Mollie Manager notification messages. This is search evidence,
+  not proof of nondelivery or a transport failure; there was no recorded test
+  attempt to verify. No message was sent or changed.
+- Axiom organization `ayal-web-ybgm` (Ayal Web) has **zero monitors and zero
+  notifiers**. Available datasets are `ere-booking-server-v2` and two demos;
+  no identifiable Kify dataset was returned. Source inspection found no external
+  heartbeat/error-monitor integration. The dashboard's existing cron heartbeat
+  is a database audit read and cannot alert independently when Kify is down.
+  These checks do not inventory unconnected third-party monitoring accounts.
+- Vercel's deployment-scoped error/fatal query for 21:15–21:45 UTC returned no
+  records. The wider since-repair query failed with a Hobby retention error;
+  it did not establish an empty historical window. Drain inventory returned 404,
+  so absence of a drain is not established by that API call.
+- Fresh audits still report zero production findings and nine high development
+  entries, all from `GHSA-vfj7-8cjw-p6xm`. The
+  [upstream advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) still
+  lists no patched version. Deeply nested untrusted patterns can terminate
+  tooling through stack exhaustion. Keep tooling inputs trusted; retain the
+  separate dependency review and avoid forced dependency replacements.
+
+Sanitized inspection, configuration, audit and repeated health evidence plus read-only scripts:
+`C:\Users\Jussi\Kify-Recovery\2026-10-22-operational-followup`.
+Earlier evidence files were preserved. Two inspection-harness attempts failed
+before completion (connection startup-option handling, then UNION of different
+invoice-state enums); the corrected run used read-only transactions and explicit
+text casts. These were probe errors, not production health incidents.
+
+### Next-step proposal — not implemented
+
+1. **Prioritize independent monitoring.** Proposed managed service: Cronitor for
+   external HTTP checks and scheduled-job monitoring, with the existing Axiom
+   account for retained runtime/error events. Cronitor documents
+   [start/complete/fail events, grace and duration limits](https://cronitor.io/docs/cron-job-monitoring)
+   and [external HTTP checks with body assertions](https://cronitor.io/docs/uptime-monitoring).
+   Account availability, plan/cost and notification destination verification are
+   setup gates; no account, purchase, monitor or notification was created here.
+2. Prepare a local monitoring-only change for review: a minimal read-only
+   diagnostics endpoint with its own monitoring credential, database readiness,
+   latest successful tenant/live recovery completion, unresolved-work counters
+   and notification-delivery failures. Do not give an outside checker the cron
+   bearer secret, which can authorize billing execution. Public `/api/health`
+   alone is insufficient: it returns `ok` without checking the database, and
+   authenticated unscoped health does not evaluate recovery freshness.
+3. Initial proposed thresholds: external GET every five minutes, alert after two
+   consecutive failures; daily job schedule `0 3 * * *` in **UTC**, 75-minute
+   schedule grace, with today's successful completion required by 04:15 UTC.
+   [Vercel Hobby can invoke anywhere within the scheduled hour](https://vercel.com/docs/cron-jobs/manage-cron-jobs),
+   so alerting at 03:05 would be incorrect. This deadline is 06:15 Amsterdam
+   through 24 October and 05:15 from 25 October. Track start and completion with
+   one run ID; propose a separate ten-minute run timeout, finalized against the
+   actual hosted function limit before activation. Do not conflate schedule
+   grace with permitted execution duration.
+4. Report success only after all expected tenant/live stages and their audits
+   finish successfully; emit failure for partial work or notification failure.
+   Missing completion must alarm even if Kify cannot emit failure. Monitoring
+   calls need bounded timeouts and must never retry billing or mask its outcome.
+   Retain sanitized runtime errors and SMTP/audit failure signals externally;
+   verify ingestion-loss detection as well as error alerts. Deduplicate by
+   environment/tenant/run/issue and send one recovery notice after verified recovery.
+5. Route service-owned alerts to `info@ayalweb.com` independently of Kify SMTP,
+   and verify a second non-email channel for mailbox/provider outages. Validate
+   missed runs, a started-but-hung run, unhealthy HTTP/database, runtime failure,
+   SMTP failure and recovery using an isolated synthetic harness. No live billing
+   invocation or cron replay is a test mechanism. External setup and alert tests
+   require the user's next authorization.
+6. Separately authorize **one operator-only message** through the production
+   notification sender with a unique correlation marker, no attachment/customer
+   recipient or billing action. Verify transport acceptance, audit and actual
+   inbox receipt. Ambiguous acceptance requires inspection, not blind resend.
+   Local loopback tests already passed; they do not close this delivery gate.
+7. Observe the next ordinary event for webhook proof: inherited Kify URL, matching
+   tenant/live resource, `processing_status=processed`, processing timestamp and
+   authoritative payment sync. Next scheduled collections are 1/10 November;
+   ordinary onboarding may supply earlier evidence. Separately inspect the
+   23 October recovery audit and 27 October naturally due invoice/delivery.
+   No continuing monitor or reminder was installed by this investigation.
+
+## Earlier read-only findings — before the security release
 
 Scope: 8 October 00:00 Europe/Amsterdam through the inspection on 22 October.
 Evidence came from Vercel deployment/project/environment reads, authenticated
