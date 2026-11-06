@@ -1,7 +1,7 @@
 name: Onboarding recovery
 on:
   schedule:
-    - cron: '3-58/5 * * * *'
+    - cron: '3,8,13,18,23,28,33,38,43,48,53,58 * * * *'
   workflow_dispatch:
 permissions:
   contents: read
@@ -16,6 +16,7 @@ jobs:
       - name: Run protected onboarding worker
         env:
           RECOVERY_SECRET: ${{ secrets.ONBOARDING_RECOVERY_SECRET }}
+          TRIGGER_EVENT: ${{ github.event_name }}
         run: |
           node --input-type=module <<'JS'
           if (!process.env.RECOVERY_SECRET) throw new Error('Recovery secret is missing');
@@ -28,5 +29,5 @@ jobs:
           if (!response.ok) throw new Error(`Onboarding recovery failed: HTTP ${response.status}`);
           const result = await response.json();
           if (result.status !== 'ok') throw new Error('Onboarding recovery incomplete');
-          console.log(`Onboarding recovery completed: ${result.runId}`);
+          console.log(`Onboarding recovery completed: ${result.runId}; trigger=${process.env.TRIGGER_EVENT}`);
           JS
