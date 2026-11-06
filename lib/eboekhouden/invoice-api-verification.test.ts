@@ -72,9 +72,11 @@ const deliveryInput: DeliveryInput = {
   mode: "live", subscriptionId: "subscription-1", tenantId: "tenant-1",
 };
 
-async function deliver(options: { body?: string; apiFailure?: boolean } = {}) {
+async function deliver(options: { body?: string; apiFailure?: boolean; smtpFailure?: boolean; overrideTo?: string; input?: Partial<DeliveryInput> } = {}) {
   const snapshot = await verifier(async () => invoice).verifiedEboekhoudenInvoice(request);
-  const fetched: string[] = [], sent: unknown[] = [], writes: string[] = [];
+  const fetched: string[] = [], writes: string[] = [];
+  const sent: { to: string; subject: string; text: string; attachments?: { filename: string; content: Buffer }[] }[] = [];
+  const audits: { outcome: string; details: { deliveryRecipient?: string; intendedRecipient?: string; recipientOverridden?: boolean } }[] = [];
   const api = verifier(async () => {
     if (options.apiFailure) throw new Error("Provider API unavailable");
     return invoice;
@@ -83,10 +85,10 @@ async function deliver(options: { body?: string; apiFailure?: boolean } = {}) {
   const runtime = loadIsolated<typeof import("@/lib/invoice-delivery")>("lib/invoice-delivery.ts", {
     "server-only": {},
     "drizzle-orm": { sql: (strings: TemplateStringsArray) => strings.join("?") },
-    "@/lib/audit": { writeAuditLog: async () => {} },
+    "@/lib/audit": { writeAuditLog: async (entry: typeof audits[number]) => { audits.push(entry); } },
     "@/lib/db": { getDb: () => db, transaction: async (fn: (tx: typeof db) => Promise<unknown>) => fn(db) },
     "@/lib/eboekhouden/invoice-total-verification": api,
-    "@/lib/env": { env: { APP_URL: "https://example.test" } },
+    "@/lib/env": { env: { APP_URL: "https://example.test", INVOICE_EMAIL_OVERRIDE_TO: options.overrideTo } },
     "@/lib/invoices": { getStoredInvoiceByOwner: async () => ({ id: "local-1", mode: "live", provider: "eboekhouden", providerInvoiceId: "42", providerInvoiceNumber: "F00054", providerSnapshot: snapshot }) },
     "@/lib/invoice-delivery-retry": retry,
     "@/lib/invoice-delivery-batch": {},
@@ -96,11 +98,53 @@ async function deliver(options: { body?: string; apiFailure?: boolean } = {}) {
       fetched.push(String(url));
       return new Response(options.body ?? "%PDF-1.7\nregenerated metadata and different bytes", { headers: { "content-type": "application/pdf" } });
     } }) },
-    "@/lib/notifications/email": { sendEmailTo: async (input: unknown) => { sent.push(input); } },
+    "@/lib/notifications/email": { sendEmailTo: async (input: typeof sent[number]) => {
+      sent.push(input);
+      if (options.smtpFailure) throw new Error("SMTP unavailable");
+    } },
     "@/lib/reliability/alerts": { openAlert: async () => ({ isNew: false }) },
   });
-  return { result: await runtime.deliverCustomerInvoiceEmail(deliveryInput), fetched, sent, writes };
+  return { result: await runtime.deliverCustomerInvoiceEmail({ ...deliveryInput, ...options.input }), fetched, sent, writes, audits };
 }
+
+describe("invoice customer delivery after removing the mailbox override", () => {
+  for (const invoiceType of ["first_payment", "recurring"] as const) {
+    it(`sends ${invoiceType} to the customer with its PDF and records the actual recipient`, async () => {
+      const result = await deliver({ input: { invoiceType, plannedCollectionDate: "2026-12-01" } });
+      assert.equal(result.result.status, "sent");
+      assert.equal(result.sent.length, 1);
+      assert.equal(result.sent[0].to, deliveryInput.customerEmail);
+      assert.equal(result.sent[0].attachments?.length, 1);
+      assert.match(result.sent[0].attachments![0].filename, /F00054.*\.pdf$/);
+      assert.match(result.sent[0].attachments![0].content.toString(), /^%PDF-/);
+      assert.match(result.sent[0].text, invoiceType === "recurring" ? /2026-12-01/ : /al betaalde eerste termijn/);
+      assert.equal(result.audits[0].outcome, "success");
+      assert.equal(result.audits[0].details.deliveryRecipient, deliveryInput.customerEmail);
+      assert.equal(result.audits[0].details.intendedRecipient, deliveryInput.customerEmail);
+      assert.equal(result.audits[0].details.recipientOverridden, false);
+      assert.ok(result.writes.some(query => query.includes(invoiceType === "first_payment" ? "update payments" : "update recurring_billing_schedules")));
+    });
+  }
+  it("retains explicit test-mailbox routing only when an override is configured", async () => {
+    const result = await deliver({ overrideTo: "test-mailbox@example.test" });
+    assert.equal(result.sent[0].to, "test-mailbox@example.test");
+    assert.equal(result.audits[0].details.intendedRecipient, deliveryInput.customerEmail);
+    assert.equal(result.audits[0].details.recipientOverridden, true);
+  });
+  it("does not send when the customer has no address", async () => {
+    const result = await deliver({ input: { customerEmail: null } });
+    assert.equal(result.result.status, "skipped");
+    assert.equal(result.sent.length, 0);
+    assert.equal(result.writes.length, 0);
+  });
+  it("keeps an SMTP failure retryable without marking the invoice sent or recreating it", async () => {
+    const result = await deliver({ smtpFailure: true });
+    assert.equal(result.result.status, "failed");
+    assert.equal(result.sent.length, 1);
+    assert.equal(result.audits[0].outcome, "failure");
+    assert.ok(result.writes.every(query => !/invoice_state\s*=/.test(query)));
+  });
+});
 
 describe("e-Boekhouden delivery without semantic PDF parsing", () => {
   it("sends the fresh provider attachment without a PDF parser or hash stamp", async () => {

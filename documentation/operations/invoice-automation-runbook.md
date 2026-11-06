@@ -16,6 +16,12 @@ Production ops checklist for automated invoice creation + app-owned customer inv
 - `INVOICE_EMAIL_OVERRIDE_TO` (optional)
   - If set, all customer invoice emails route to this address.
   - Intended customer recipient remains in invoice delivery metadata/audit.
+  - Normal production delivery requires this variable to be absent. The live
+    mailbox override was retired on 6 November 2026; retain overrides only for
+    explicitly controlled testing and redeploy after environment changes.
+  - Removing the override affects future deliveries. Previously delivered
+    override copies must be reconciled against sent mail before forwarding;
+    do not reset their invoice state or recreate invoices for this purpose.
 
 Existing SMTP env remains required for app delivery:
 
