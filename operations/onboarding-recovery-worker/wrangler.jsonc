@@ -1,0 +1,15 @@
+{
+  "name": "kify-onboarding-recovery-dev",
+  "main": "index.mjs",
+  "account_id": "a3e0e94dd804403209cd43e1c8c5e41e",
+  "compatibility_date": "2026-11-06",
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "env": {
+    "production": {
+      "name": "kify-onboarding-recovery",
+      "triggers": { "crons": ["*/5 * * * *"] }
+    }
+  }
+}

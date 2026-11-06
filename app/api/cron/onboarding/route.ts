@@ -11,12 +11,13 @@ export const maxDuration = 60;
 // Separate credential and endpoint: the frequent worker cannot run invoice
 // creation or retry arbitrary collections. Production scheduler uses live only.
 export async function POST(request: Request) {
-  const secret = process.env.ONBOARDING_RECOVERY_SECRET;
-  if (!secret || !isBearerAuthorized(request.headers.get("authorization"), [secret])) {
+  const secrets = [process.env.ONBOARDING_RECOVERY_SECRET, process.env.ONBOARDING_TIMER_SECRET].filter((value): value is string => Boolean(value));
+  if (!isBearerAuthorized(request.headers.get("authorization"), secrets)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
   const runId = crypto.randomUUID();
   const trigger = request.headers.get("x-kify-recovery-trigger") === "schedule" ? "schedule" : "manual_or_external";
+  const scheduler = request.headers.get("x-kify-recovery-scheduler") === "cloudflare" ? "cloudflare" : "github_or_external";
   const results = [];
   for (const tenant of await listTenants()) {
     try {
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
         where tenant_id = ${tenant.id} and mode = 'live' and status = 'exhausted'
       `);
       const failed = discovery.failedCount > 0 || notifications.failedCount > 0 || overdue.rows[0].count > 0;
-      const details = { runId, trigger, discovery, activation, notifications };
+      const details = { runId, trigger, scheduler, discovery, activation, notifications };
       await writeAuditLog({ action: "onboarding.recovery", entityId: tenant.id, entityType: "tenant_onboarding_recovery", mode: "live", outcome: failed ? "failure" : "success", summary: "Processed automatic onboarding recovery.", details }, undefined, { kind: "system" });
       results.push({ tenantId: tenant.id, failed, ...details });
     } catch {
