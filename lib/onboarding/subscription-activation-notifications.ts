@@ -79,7 +79,7 @@ export async function deliverSubscriptionActivationNotificationsBatch(input: { l
   const claimed = await db.execute<(ActivationEmailContext & { claimToken: string; id: string; notificationType: string; recipientEmail: string; subject: string })>(sql`
     with candidates as (
       select id, subscription_id, customer_id from subscription_activation_notifications
-      where tenant_id = ${input.tenantId} and mode = ${input.mode} and status in ('pending', 'failed') and next_attempt_at <= now()
+      where tenant_id = ${input.tenantId} and mode = ${input.mode} and ((status in ('pending', 'failed') and next_attempt_at <= now()) or (status = 'claimed' and claimed_at < now() - interval '10 minutes'))
       order by created_at asc limit ${input.limit} for update skip locked
     ) update subscription_activation_notifications n set status = 'claimed', claim_token = ${crypto.randomUUID()}, claimed_at = now(), attempt_count = n.attempt_count + 1, updated_at = now()
     from candidates c

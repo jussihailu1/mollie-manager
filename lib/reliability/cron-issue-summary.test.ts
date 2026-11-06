@@ -134,6 +134,7 @@ async function exerciseRoute(options: { authorized?: boolean; listFails?: boolea
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText, {
     exports, Response, Error, crypto, console: { error: () => {} }, ...stageDependencies,
+    discoverPendingOnboardingPayments: async () => ({ failedCount: 0 }),
     isAuthorized: () => options.authorized ?? true,
     parseMode: () => "live", parseLimit: () => 25,
     listTenants: async () => {

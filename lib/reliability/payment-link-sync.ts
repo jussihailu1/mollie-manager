@@ -140,7 +140,7 @@ export async function upsertPaymentLinkFromMollie(
           amount_currency = excluded.amount_currency,
           checkout_url = excluded.checkout_url,
           expires_at = excluded.expires_at,
-          metadata = excluded.metadata,
+          metadata = excluded.metadata || case when payment_links.metadata ? 'activationRequestV2' then jsonb_build_object('activationRequestV2', payment_links.metadata -> 'activationRequestV2') else '{}'::jsonb end,
           updated_at = now(),
           last_synced_at = now()
       `);

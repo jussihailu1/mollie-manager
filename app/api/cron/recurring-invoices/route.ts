@@ -14,6 +14,7 @@ import {
 import { getAcceptedCronSecrets, isBearerAuthorized } from "@/lib/cron-auth";
 import { env, type MollieMode } from "@/lib/env";
 import {
+  discoverPendingOnboardingPayments,
   processSubscriptionActivationJobsBatch,
 } from "@/lib/onboarding/subscription-activation-jobs";
 import {
@@ -212,7 +213,12 @@ async function runTenantCronBatch(input: {
     await stage("paymentDiscovery", () => discoverRecurringPaymentsBatch(context));
     await stage("webhookRepairResult", () => repairWebhookEventsBatch({ ...context, limit: webhookRepairLimit, tenantId: input.tenantId }));
     await stage("staleRepairResult", () => repairStaleRecordsBatch({ ...context, limit: staleRepairLimit, tenantId: input.tenantId }));
-    await stage("activationJobs", () => processSubscriptionActivationJobsBatch(context));
+    await stage("activationJobs", async () => {
+      const discovery = await discoverPendingOnboardingPayments({ ...context, limit: 2 });
+      const jobs = await processSubscriptionActivationJobsBatch(context);
+      if (discovery.failedCount > 0) throw new Error("Onboarding payment discovery incomplete");
+      return jobs;
+    });
     await together([
       stage("safeFailedRecurringRetryQueue", () => queueRetryForSafeFailedRecurringInvoicesBatch({ ...context, tenantId: input.tenantId })),
       stage("safeFailedFirstPaymentRetryQueue", () => queueRetryForSafeFailedFirstPaymentInvoicesBatch({ ...context, tenantId: input.tenantId })),

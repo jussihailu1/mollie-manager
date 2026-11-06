@@ -17,7 +17,7 @@ describe("subscription activation tenant scope", () => {
     assert.match(source, /and tenant_id = \$\{tenantId\}/);
     assert.match(
       source,
-      /export async function attemptSubscriptionActivation\(input: \{[\s\S]*tenantId: string;[\s\S]*trigger: ActivationTrigger;/,
+      /type ActivationInput = \{[\s\S]*tenantId: string;[\s\S]*trigger: ActivationTrigger;/,
     );
     assert.doesNotMatch(source, /requireCustomerTenantId/);
   });

@@ -4,11 +4,6 @@ import type { MollieMode } from "@/lib/env";
 import { getDb } from "@/lib/db";
 import { findExistingResourceContext } from "@/lib/reliability/webhook-context";
 import {
-  deliverSubscriptionActivationNotificationsBatch,
-  queueSubscriptionActivationExhaustedNotifications,
-} from "@/lib/onboarding/subscription-activation-notifications";
-import { openAlert } from "@/lib/reliability/alerts";
-import {
   syncPaymentByMollieId,
   syncPaymentLinkByMollieId,
   syncSubscriptionByMollieId,
@@ -70,14 +65,9 @@ async function processWebhookResource(
 }
 
 export async function POST(request: Request) {
-  const webhookResources = new Map<string, { resourceId: string; tenantId: string | null }>();
   const result = await handleMollieWebhookRequest(request, {
     findExistingResourceContext,
     insertWebhookEvent: async (input) => {
-      webhookResources.set(input.id, {
-        resourceId: input.resourceId,
-        tenantId: input.tenantId,
-      });
       await getDb().execute(sql`
       insert into webhook_events (
         id,
@@ -103,11 +93,7 @@ export async function POST(request: Request) {
     `);
     },
     markWebhookEventFailed: async (input) => {
-      const failed = await getDb().execute<{
-        mode: MollieMode;
-        retryCount: number;
-        tenantId: string | null;
-      }>(sql`
+      await getDb().execute(sql`
         update webhook_events
         set
           processing_status = 'failed',
@@ -117,45 +103,6 @@ export async function POST(request: Request) {
         where id = ${input.id}
         returning mode, retry_count as "retryCount", tenant_id as "tenantId"
       `);
-      const resource = webhookResources.get(input.id);
-      const tenantId = failed.rows[0]?.tenantId ?? resource?.tenantId ?? null;
-      if (
-        input.errorMessage.startsWith("Subscription activation is not ready:") &&
-        failed.rows[0]?.retryCount >= 10 &&
-        tenantId &&
-        resource?.resourceId.startsWith("tr_")
-      ) {
-        const payment = await getDb().execute<{ customerId: string; id: string }>(sql`
-          select id, customer_id as "customerId" from payments
-          where mollie_payment_id = ${resource.resourceId} and tenant_id = ${tenantId}
-          limit 1
-        `);
-        const customerId = payment.rows[0]?.customerId;
-        if (customerId) {
-          const alert = await openAlert({
-            customerId,
-            message: "Automatic subscription activation could not be completed after Mollie's webhook retry window. Review the customer and Mollie connection.",
-            paymentId: payment.rows[0].id,
-            payload: { webhookEventId: input.id },
-            severity: "warning",
-            tenantId,
-            title: "Subscription activation requires review",
-          });
-          if (alert.isNew) {
-            await queueSubscriptionActivationExhaustedNotifications({
-              customerId,
-              eventKey: `webhook:${resource.resourceId}`,
-              mode: failed.rows[0].mode,
-              tenantId,
-            });
-            await deliverSubscriptionActivationNotificationsBatch({
-              limit: 100,
-              mode: failed.rows[0].mode,
-              tenantId,
-            });
-          }
-        }
-      }
     },
     markWebhookEventProcessed: async (input) => {
       const resourceResult: WebhookResourceSyncResult = input.result;

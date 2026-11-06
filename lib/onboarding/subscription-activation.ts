@@ -4,7 +4,7 @@ import { MandateStatus, PaymentMethod } from "@mollie/api-client";
 import { sql } from "drizzle-orm";
 
 import { writeAuditLog } from "@/lib/audit";
-import { getDb, transaction } from "@/lib/db";
+import { getDb, getDbPool, transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 import { getMollieWebhookUrl, getTenantMollieClient, getTenantMollieRequestContext } from "@/lib/mollie/client";
 import { upsertRecurringBillingScheduleForSubscription } from "@/lib/recurring-billing-schedule";
@@ -12,6 +12,7 @@ import { queueSubscriptionActivationSuccessNotifications } from "@/lib/onboardin
 import { resolveAlertsForEntity } from "@/lib/reliability/alerts";
 import { subscriptionConsentPlanSnapshotSchema } from "@/lib/subscription-consent";
 import { toMollieInterval } from "@/lib/subscription-policy";
+import { findOrCreateActivationSubscription } from "@/lib/onboarding/subscription-activation-provider";
 import { mapSubscriptionLifecycle } from "@/lib/subscriptions";
 
 type ActivationActor =
@@ -60,6 +61,7 @@ type ActivationSubscription = {
 };
 
 type PendingReason =
+  | "activation_in_progress"
   | "archived"
   | "customer_not_linked"
   | "missing_consent"
@@ -141,7 +143,6 @@ async function getActivationContext(
           and soc.mode = ${mode}
           and soc.accepted_at is not null
         order by soc.accepted_at desc
-        limit 1
       `),
       getDb().execute<ActivationPayment>(sql`
         select
@@ -189,13 +190,30 @@ async function getActivationContext(
   };
 }
 
-export async function attemptSubscriptionActivation(input: {
+type ActivationInput = {
   actor?: ActivationActor;
   customerId: string;
   mode: MollieMode;
   tenantId: string;
   trigger: ActivationTrigger;
-}): Promise<SubscriptionActivationResult> {
+  consentId?: string;
+};
+
+export async function attemptSubscriptionActivation(input: ActivationInput): Promise<SubscriptionActivationResult> {
+  // A transaction-scoped lock works with pooled Neon connections too. It spans
+  // provider creation and local persistence, serializing webhook/worker/manual calls.
+  const lock = await getDbPool().connect();
+  try {
+    await lock.query("BEGIN");
+    const result = await lock.query("select pg_try_advisory_xact_lock(hashtextextended($1, 0)) as locked", [`activation:${input.tenantId}:${input.mode}:${input.customerId}`]);
+    if (!result.rows[0].locked) return { status: "pending_prerequisites", reason: "activation_in_progress", firstPaymentMode: null };
+    return await activateSubscription(input);
+  } finally {
+    try { await lock.query("ROLLBACK"); } finally { lock.release(); }
+  }
+}
+
+async function activateSubscription(input: ActivationInput): Promise<SubscriptionActivationResult> {
   const context = await getActivationContext(
     input.customerId,
     input.mode,
@@ -227,7 +245,7 @@ export async function attemptSubscriptionActivation(input: {
     };
   }
 
-  const acceptedConsent = context.consents[0] ?? null;
+  const acceptedConsent = context.consents.find((consent) => !input.consentId || consent.consentId === input.consentId) ?? null;
 
   if (!acceptedConsent) {
     return {
@@ -252,9 +270,17 @@ export async function attemptSubscriptionActivation(input: {
     };
   }
 
-  const latestPaidFirstPayment = context.payments.find(
-    (payment) => payment.mollieStatus === "paid" && payment.paidAt,
-  );
+  // A payment from a different consent must never authorize this subscription.
+  const linkedPayment = await getDb().execute<ActivationPayment>(sql`
+    select p.id, p.mollie_status as "mollieStatus", p.paid_at as "paidAt"
+    from payments p join payment_links pl on pl.id = ${acceptedConsent.paymentLinkId}
+      and pl.tenant_id = p.tenant_id and pl.mode = p.mode and pl.customer_id = p.customer_id
+    where p.tenant_id = ${input.tenantId} and p.mode = ${input.mode}
+      and p.customer_id = ${customer.id} and p.payment_type = 'first' and p.mollie_status = 'paid'
+      and (pl.metadata -> 'paymentIds' ? p.mollie_payment_id or pl.metadata ->> 'latestPaymentId' = p.mollie_payment_id)
+    limit 1
+  `);
+  const latestPaidFirstPayment = linkedPayment.rows[0];
 
   if (!latestPaidFirstPayment) {
     return {
@@ -316,19 +342,19 @@ export async function attemptSubscriptionActivation(input: {
   }
 
   const plan = parsedPlan.data;
-  const localSubscriptionId = crypto.randomUUID();
+  const localSubscriptionId = acceptedConsent.consentId;
 
   try {
     const mollie = await getTenantMollieClient(tenantId, input.mode);
-    const { testmode } = await getTenantMollieRequestContext(tenantId, input.mode);
-    const subscription = await mollie.customerSubscriptions.create({
+    const { testmode, profileId } = await getTenantMollieRequestContext(tenantId, input.mode);
+    const proposedRequest = {
       amount: {
         currency: "EUR",
         value: plan.subscriptionAmountValue,
       },
       customerId: customer.mollieCustomerId,
       description: plan.description,
-      idempotencyKey: `subscription-onboarding:${input.mode}:${acceptedConsent.consentId}`,
+      idempotencyKey: `subscription-onboarding:v2:${input.mode}:${acceptedConsent.consentId}`,
       interval: toMollieInterval(plan.billingInterval),
       mandateId: preferredMandate.mollieMandateId,
       metadata: {
@@ -336,8 +362,9 @@ export async function attemptSubscriptionActivation(input: {
         customerId: customer.id,
         firstPaymentMode: acceptedConsent.firstPaymentMode,
         localSubscriptionId,
-        trigger: input.trigger,
+        trigger: "onboarding",
       },
+      ...(profileId ? { profileId } : {}),
       startDate: plan.startDate,
       ...(testmode ? { testmode } : {}),
       ...(plan.subscriptionTermMode === "fixed_term" &&
@@ -347,6 +374,28 @@ export async function attemptSubscriptionActivation(input: {
           }
         : {}),
       webhookUrl: getMollieWebhookUrl(),
+    };
+    // Freeze the complete request so config/mandate changes cannot change a retry.
+    const frozen = await getDb().execute<{ request: typeof proposedRequest }>(sql`
+      update payment_links set metadata = jsonb_set(coalesce(metadata, '{}'::jsonb), '{activationRequestV2}',
+        coalesce(metadata -> 'activationRequestV2', ${JSON.stringify(proposedRequest)}::jsonb))
+      where id = ${acceptedConsent.paymentLinkId} and tenant_id = ${tenantId} and mode = ${input.mode}
+      returning metadata -> 'activationRequestV2' as request
+    `);
+    if (!frozen.rows[0]) throw new Error("Activation payment link is missing.");
+    const subscription = await findOrCreateActivationSubscription({
+      consentId: acceptedConsent.consentId,
+      customerId: customer.mollieCustomerId,
+      mode: input.mode,
+      request: frozen.rows[0].request,
+      list: () => mollie.customerSubscriptions.iterate({ customerId: customer.mollieCustomerId!, ...(testmode ? { testmode } : {}) }),
+      create: (request) => {
+        // Adoption of an existing subscription remains safe after its start date;
+        // creating an overdue schedule requires review, never catch-up charges.
+        const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Amsterdam", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+        if (request.startDate < today) throw new Error("The agreed subscription start date has passed; review the schedule before activation.");
+        return mollie.customerSubscriptions.create(request);
+      },
     });
 
     await transaction(async (client) => {

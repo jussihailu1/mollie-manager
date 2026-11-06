@@ -1,0 +1,41 @@
+import { sql } from "drizzle-orm";
+import { getDb } from "@/lib/db";
+import { isBearerAuthorized } from "@/lib/cron-auth";
+import { listTenants } from "@/lib/tenants";
+import { discoverPendingOnboardingPayments, processSubscriptionActivationJobsBatch } from "@/lib/onboarding/subscription-activation-jobs";
+import { deliverSubscriptionActivationNotificationsBatch } from "@/lib/onboarding/subscription-activation-notifications";
+import { writeAuditLog } from "@/lib/audit";
+
+export const maxDuration = 60;
+
+// Separate credential and endpoint: the frequent worker cannot run invoice
+// creation or retry arbitrary collections. Production scheduler uses live only.
+export async function POST(request: Request) {
+  const secret = process.env.ONBOARDING_RECOVERY_SECRET;
+  if (!secret || !isBearerAuthorized(request.headers.get("authorization"), [secret])) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const runId = crypto.randomUUID();
+  const results = [];
+  for (const tenant of await listTenants()) {
+    try {
+      const context = { tenantId: tenant.id, mode: "live" as const, limit: 2 };
+      const discovery = await discoverPendingOnboardingPayments(context);
+      const activation = await processSubscriptionActivationJobsBatch(context);
+      const notifications = await deliverSubscriptionActivationNotificationsBatch({ ...context, limit: 5 });
+      const overdue = await getDb().execute<{ count: number }>(sql`
+        select count(*)::int as count from subscription_activation_jobs
+        where tenant_id = ${tenant.id} and mode = 'live' and status = 'exhausted'
+      `);
+      const failed = discovery.failedCount > 0 || notifications.failedCount > 0 || overdue.rows[0].count > 0;
+      const details = { runId, discovery, activation, notifications };
+      await writeAuditLog({ action: "onboarding.recovery", entityId: tenant.id, entityType: "tenant_onboarding_recovery", mode: "live", outcome: failed ? "failure" : "success", summary: "Processed automatic onboarding recovery.", details }, undefined, { kind: "system" });
+      results.push({ tenantId: tenant.id, failed, ...details });
+    } catch {
+      console.error("Onboarding recovery failed", { runId, tenantId: tenant.id });
+      results.push({ tenantId: tenant.id, failed: true });
+    }
+  }
+  const failed = results.some((result) => result.failed);
+  return Response.json({ runId, status: failed ? "partial" : "ok", results }, { status: failed ? 503 : 200 });
+}

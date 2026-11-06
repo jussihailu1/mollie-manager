@@ -2,8 +2,8 @@ import "server-only";
 
 import { transaction } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
+import { queueSubscriptionActivationForCustomer, completeSubscriptionActivationJob } from "@/lib/onboarding/subscription-activation-jobs";
 import { attemptSubscriptionActivation } from "@/lib/onboarding/subscription-activation";
-import { deliverSubscriptionActivationNotificationsBatch } from "@/lib/onboarding/subscription-activation-notifications";
 import { runFailedPaymentCustomerNotificationForSyncedPayment } from "@/lib/failed-payment-customer-notifications";
 import { runFirstPaymentInvoiceSyncFollowUp } from "@/lib/reliability/first-payment-sync-followup";
 import {
@@ -170,6 +170,10 @@ export async function syncPaymentByMollieId(
     });
   }
 
+  if (resolvedCustomerId && paymentType === "first" && payment.status === "paid") {
+    await queueSubscriptionActivationForCustomer({ customerId: resolvedCustomerId, mode, tenantId: resolvedTenantId });
+  }
+
   if (
     resolvedCustomerId &&
     paymentType === "first" &&
@@ -189,11 +193,8 @@ export async function syncPaymentByMollieId(
       throw new Error(`Subscription activation is not ready: ${reason}`);
     }
 
-    await deliverSubscriptionActivationNotificationsBatch({
-      limit: 100,
-      mode,
-      tenantId: resolvedTenantId,
-    });
+    await completeSubscriptionActivationJob({ customerId: resolvedCustomerId, mode, tenantId: resolvedTenantId, subscriptionId: activation.subscriptionId });
+    // Notification delivery is drained by the independent onboarding worker.
   }
 
   return {
@@ -207,6 +208,7 @@ export async function syncPaymentByMollieId(
 export async function syncPaymentLinkByMollieId(
   molliePaymentLinkId: string,
   options?: {
+    reconciliationMode?: ReconciliationMode;
     actor?: SyncActor;
     preferredMode?: MollieMode;
     requireManagedResource?: boolean;
@@ -269,6 +271,7 @@ export async function syncPaymentLinkByMollieId(
       preferredMode: mode,
       strictMode: true,
       syncPaymentLinks: false,
+      reconciliationMode: options?.reconciliationMode,
       tenantId: resolvedTenantId,
     });
   }

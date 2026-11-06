@@ -4,6 +4,9 @@ export const REPAIR_STALE_AFTER_MS = 10 * 60_000;
 export const REPAIR_RETRY_AFTER_MS = 5 * 60_000;
 
 export function getRouteRefreshIntervalMs(pathname: string) {
+  if (pathname.startsWith("/customers/") || pathname.startsWith("/payments/")) {
+    return ROUTE_REFRESH_FAST_MS;
+  }
   switch (pathname) {
     case "/":
     case "/notifications":
@@ -11,6 +14,7 @@ export function getRouteRefreshIntervalMs(pathname: string) {
       return ROUTE_REFRESH_FAST_MS;
     case "/customers":
     case "/payments":
+    case "/payment-links":
       return ROUTE_REFRESH_MEDIUM_MS;
     default:
       return null;

@@ -89,7 +89,7 @@ describe("multi-tenant pilot release gates", () => {
     );
     assert.match(
       activationSource,
-      /export async function attemptSubscriptionActivation\(input: \{[\s\S]*tenantId: string;[\s\S]*trigger: ActivationTrigger;/,
+      /type ActivationInput = \{[\s\S]*tenantId: string;[\s\S]*trigger: ActivationTrigger;/,
     );
   });
 
