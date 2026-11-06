@@ -50,3 +50,4 @@ scripts/delete-specific-payment.mjs
 /.playwright-mcp
 
 .vercel
+/output
