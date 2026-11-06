@@ -32,6 +32,7 @@ import { listTenants } from "@/lib/tenants";
 import { discoverRecurringPaymentsBatch } from "@/lib/reliability/recurring-payment-recovery";
 import { collectCronIssues, type CronIssue } from "@/lib/reliability/cron-issue-summary";
 import { notifyCronIssues } from "@/lib/reliability/cron-issue-notification";
+import { checkOnboardingRecoveryHeartbeat } from "@/lib/reliability/onboarding-heartbeat-query";
 
 function isAuthorized(request: Request) {
   const secrets = getAcceptedCronSecrets({
@@ -282,6 +283,11 @@ export async function POST(request: Request) {
         });
         tenantResults.push(result);
         issues.push(...collectCronIssues(result));
+        if (mode === "live") {
+          // Scheduler monitoring must never abort otherwise healthy billing.
+          try { issues.push(...await checkOnboardingRecoveryHeartbeat(tenant)); }
+          catch { issues.push({ tenantId: tenant.id, tenantName: tenant.name, stage: "Could not verify the scheduled onboarding recovery heartbeat", count: 1 }); }
+        }
       } catch (error) {
         issues.push({ tenantId: tenant.id, tenantName: tenant.name, stage: "Tenant cron aborted; review its audit history", count: 1 });
         const message = error instanceof Error ? error.message : "Cron failed";

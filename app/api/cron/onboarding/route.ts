@@ -16,6 +16,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
   const runId = crypto.randomUUID();
+  const trigger = request.headers.get("x-kify-recovery-trigger") === "schedule" ? "schedule" : "manual_or_external";
   const results = [];
   for (const tenant of await listTenants()) {
     try {
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
         where tenant_id = ${tenant.id} and mode = 'live' and status = 'exhausted'
       `);
       const failed = discovery.failedCount > 0 || notifications.failedCount > 0 || overdue.rows[0].count > 0;
-      const details = { runId, discovery, activation, notifications };
+      const details = { runId, trigger, discovery, activation, notifications };
       await writeAuditLog({ action: "onboarding.recovery", entityId: tenant.id, entityType: "tenant_onboarding_recovery", mode: "live", outcome: failed ? "failure" : "success", summary: "Processed automatic onboarding recovery.", details }, undefined, { kind: "system" });
       results.push({ tenantId: tenant.id, failed, ...details });
     } catch {

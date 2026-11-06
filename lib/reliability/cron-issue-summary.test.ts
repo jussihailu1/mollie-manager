@@ -99,7 +99,7 @@ it("does not mark an already sent email as unsent if the audit fails", async () 
 });
 
 // Exercise the real route handler, with no database, SMTP or provider imports.
-async function exerciseRoute(options: { authorized?: boolean; listFails?: boolean; tenantFails?: boolean; stageFails?: boolean; empty?: boolean; notifyFails?: boolean; actualStages?: boolean; secondTenant?: boolean; auditFails?: boolean; revalidationFails?: boolean }) {
+async function exerciseRoute(options: { authorized?: boolean; listFails?: boolean; tenantFails?: boolean; stageFails?: boolean; empty?: boolean; notifyFails?: boolean; actualStages?: boolean; secondTenant?: boolean; auditFails?: boolean; revalidationFails?: boolean; heartbeatStale?: boolean; heartbeatFails?: boolean }) {
   const path = "app/api/cron/recurring-invoices/route.ts";
   const source = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
   const names = ["POST", "emptyTenantCronResult", ...(options.actualStages ? ["runTenantCronBatch"] : [])];
@@ -135,6 +135,10 @@ async function exerciseRoute(options: { authorized?: boolean; listFails?: boolea
   }).outputText, {
     exports, Response, Error, crypto, console: { error: () => {} }, ...stageDependencies,
     discoverPendingOnboardingPayments: async () => ({ failedCount: 0 }),
+    checkOnboardingRecoveryHeartbeat: async () => {
+      if (options.heartbeatFails) throw new Error("DB unavailable");
+      return options.heartbeatStale ? [{ tenantId: "tenant-1", tenantName: "Ayal Web", stage: "No successful scheduled onboarding recovery in the last hour", count: 1 }] : [];
+    },
     isAuthorized: () => options.authorized ?? true,
     parseMode: () => "live", parseLimit: () => 25,
     listTenants: async () => {
@@ -204,5 +208,16 @@ for (const extra of [{ notifyFails: true }, { auditFails: true }, { revalidation
     assert.equal(response.status, 200);
     assert.equal((await response.json()).aggregate.recurringCreateResult.createdCount, 4);
     assert.equal(stages.filter((stage) => stage.endsWith(":recurringCreateResult")).length, 2);
+  });
+}
+
+for (const options of [{ heartbeatStale: true }, { heartbeatFails: true }]) {
+  it(`reports scheduler health without failing completed billing: ${Object.keys(options)[0]}`, async () => {
+    const { response, notifications } = await exerciseRoute(options);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.status, "partial");
+    assert.equal(result.tenantResults.length, 1);
+    assert.equal(notifications[0].issues.length, 1);
   });
 }

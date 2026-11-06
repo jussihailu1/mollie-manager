@@ -23,7 +23,7 @@ jobs:
           const response = await fetch('https://kify.app/api/cron/onboarding', {
             method: 'POST',
             redirect: 'error',
-            headers: { Authorization: `Bearer ${process.env.RECOVERY_SECRET}` },
+            headers: { Authorization: `Bearer ${process.env.RECOVERY_SECRET}`, 'X-Kify-Recovery-Trigger': process.env.TRIGGER_EVENT },
             signal: AbortSignal.timeout(90000),
           });
           if (!response.ok) throw new Error(`Onboarding recovery failed: HTTP ${response.status}`);

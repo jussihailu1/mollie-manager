@@ -40,7 +40,8 @@ for (const expired of [false, true]) it(`recovers interrupted jobs, isolates err
   assert.ok(updates.some((query) => query.includes("claim_token =") && query.includes(expired ? "status = 'exhausted'" : "status = 'retrying'")));
 });
 
-for (const authorized of [false, true]) it(`onboarding endpoint authorization: ${authorized}`, async () => {
+for (const trigger of [null, "workflow_dispatch", "schedule"]) it(`onboarding endpoint authorization and trigger: ${trigger}`, async () => {
+  const authorized = trigger !== null;
   const calls: string[] = [];
   const worker = load("app/api/cron/onboarding/route.ts", {
     "drizzle-orm": { sql }, "@/lib/db": { getDb: () => ({ execute: async () => ({ rows: [{ count: 0 }] }) }) },
@@ -48,8 +49,8 @@ for (const authorized of [false, true]) it(`onboarding endpoint authorization: $
     "@/lib/tenants": { listTenants: async () => { calls.push("tenants"); return [{ id: "tenant" }]; } },
     "@/lib/onboarding/subscription-activation-jobs": { discoverPendingOnboardingPayments: async () => ({ failedCount: 0 }), processSubscriptionActivationJobsBatch: async () => ({ activatedCount: 1 }) },
     "@/lib/onboarding/subscription-activation-notifications": { deliverSubscriptionActivationNotificationsBatch: async () => ({ failedCount: 0 }) },
-    "@/lib/audit": { writeAuditLog: async () => { calls.push("audit"); } },
+    "@/lib/audit": { writeAuditLog: async (entry: { details: { trigger: string } }) => { assert.equal(entry.details.trigger, trigger === "schedule" ? "schedule" : "manual_or_external"); calls.push("audit"); } },
   }, { process: { env: { ONBOARDING_RECOVERY_SECRET: "test-secret" } } });
-  const response = await worker.POST(new Request("https://kify.app/api/cron/onboarding", { method: "POST", headers: authorized ? { Authorization: "Bearer test-secret" } : {} }) as never) as Response;
+  const response = await worker.POST(new Request("https://kify.app/api/cron/onboarding", { method: "POST", headers: authorized ? { Authorization: "Bearer test-secret", "X-Kify-Recovery-Trigger": trigger! } : {} }) as never) as Response;
   assert.equal(response.status, authorized ? 200 : 401); assert.equal(calls.length, authorized ? 2 : 0);
 });
