@@ -36,9 +36,10 @@ describe("invoice flow helpers", () => {
       true,
     );
     assert.equal(
-      isEboekhoudenReferenceAlreadyExistsError(new Error("FACT_014 duplicate")),
+      isEboekhoudenReferenceAlreadyExistsError(new Error("MUTA_008 betalingskenmerk bestaat al")),
       true,
     );
+    assert.equal(isEboekhoudenReferenceAlreadyExistsError(new Error("FACT_014 Payment reference is too long")), false);
     assert.equal(
       isEboekhoudenReferenceAlreadyExistsError(new Error("network timeout")),
       false,

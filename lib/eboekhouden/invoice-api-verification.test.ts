@@ -25,6 +25,7 @@ function loadIsolated<T>(file: string, modules: Record<string, unknown>): T {
 
 const invoice: EboekhoudenInvoice = {
   id: 42, invoiceNumber: "F00054", relationId: 10, reference: "RB-1",
+  date: "2026-10-27",
   totalAmount: 19.99, vatAmount: 0,
   urlPdfFile: "https://api.e-boekhouden.nl/current.pdf",
 };
@@ -36,21 +37,29 @@ function verifier(getInvoice: () => Promise<EboekhoudenInvoice>) {
     } },
     "@/lib/eboekhouden/invoice-total-validation": validation,
     "@/lib/invoicing/tax-treatment": tax,
+    "@/lib/eboekhouden/invoice-posting-verification": { verifyInvoiceSalesPosting: async () => ({ mutationId: 91, verifiedAt: "2026-11-08T00:00:00Z" }) },
   });
 }
-const request = { expectedAmount: "19.99", expectedRelationId: 10, expectedReference: "RB-1", invoice: { id: 42 }, taxTreatment: "kor" as const, tenantId: "tenant-1" };
+const request = { expectedAmount: "19.99", expectedDate: "2026-10-27", expectedRelationId: 10, expectedReference: "RB-1", invoice: { id: 42 }, taxTreatment: "kor" as const, tenantId: "tenant-1" };
 
 describe("e-Boekhouden API verification", () => {
+  it("records the separately verified sales posting only when required at issuance", async () => {
+    const result = await verifier(async () => invoice).verifiedEboekhoudenInvoice({ ...request, requireSalesPosting: true });
+    assert.equal(result.apiVerification.salesPosting?.mutationId, 91);
+    const delivery = await verifier(async () => invoice).verifiedEboekhoudenInvoice(request);
+    assert.equal(delivery.apiVerification.salesPosting, undefined);
+  });
   it("verifies the API without fetching or parsing a PDF, even while the PDF is unavailable", async () => {
     const result = await verifier(async () => ({ ...invoice, urlPdfFile: null })).verifiedEboekhoudenInvoice(request);
     assert.equal(result.apiVerification.expectedAmount, "19.99");
+    assert.equal(result.apiVerification.expectedDate, "2026-10-27");
     assert.equal(result.apiVerification.taxTreatment, "kor");
     assert.ok(result.apiVerification.verifiedAt);
     assert.equal("appVerification" in result, false);
     assert.equal("pdfSha256" in result.apiVerification, false);
   });
   it("rejects amount, VAT and expected-identity mismatches", async () => {
-    for (const changed of [{ totalAmount: 24.19 }, { vatAmount: 3.47 }, { id: 43 }, { relationId: 11 }, { reference: "RB-other" }, { invoiceNumber: "" }]) {
+    for (const changed of [{ totalAmount: 24.19 }, { vatAmount: 3.47 }, { id: 43 }, { relationId: 11 }, { reference: "RB-other" }, { invoiceNumber: "" }, { date: "2026-10-01" }, { date: null }]) {
       await assert.rejects(() => verifier(async () => ({ ...invoice, ...changed })).verifiedEboekhoudenInvoice(request));
     }
   });
@@ -59,10 +68,31 @@ describe("e-Boekhouden API verification", () => {
     const deliveryInput = { providerInvoiceId: "42", providerInvoiceNumber: "F00054", providerSnapshot: original, tenantId: "tenant-1" };
     const result = await verifier(async () => ({ ...invoice, urlPdfFile: "https://api.e-boekhouden.nl/regenerated.pdf" })).verifiedEboekhoudenInvoiceForDelivery(deliveryInput);
     assert.equal(result.urlPdfFile, "https://api.e-boekhouden.nl/regenerated.pdf");
-    for (const changed of [{ totalAmount: 24.19 }, { vatAmount: 3.47 }, { invoiceNumber: "F00055" }, { relationId: 11 }, { reference: "other" }]) {
+    for (const changed of [{ totalAmount: 24.19 }, { vatAmount: 3.47 }, { invoiceNumber: "F00055" }, { relationId: 11 }, { reference: "other" }, { date: "2026-10-28" }]) {
       await assert.rejects(() => verifier(async () => ({ ...invoice, ...changed })).verifiedEboekhoudenInvoiceForDelivery(deliveryInput));
     }
     await assert.rejects(() => verifier(async () => invoice).verifiedEboekhoudenInvoiceForDelivery({ ...deliveryInput, providerSnapshot: invoice }), /no verified issuance/);
+  });
+  it("rejects a different date even when the invoice and sales posting agree with each other", async () => {
+    await assert.rejects(() => verifier(async () => ({ ...invoice, date: "2026-10-01" })).verifiedEboekhoudenInvoice({ ...request, requireSalesPosting: true }), /identity changed/);
+    await assert.rejects(() => verifier(async () => invoice).verifiedEboekhoudenInvoice({ ...request, invoice: { ...invoice, date: "2026-10-01" } }), /date differs/);
+  });
+  it("rejects missing, malformed and impossible expected dates before provider reads", async () => {
+    let reads = 0;
+    for (const expectedDate of ["", "2026-2-01", "2026-02-30", "2026-13-01", "2026-10-27T00:00:00Z"]) {
+      await assert.rejects(() => verifier(async () => { reads++; return invoice; }).verifiedEboekhoudenInvoice({ ...request, expectedDate }), /original invoice date/);
+    }
+    assert.equal(reads, 0);
+  });
+  it("preserves a legacy frozen date without requiring a sales entry for delivery-only retries", async () => {
+    const snapshot = { ...invoice, date: "2026-06-01", apiVerification: { expectedAmount: "19.99", taxTreatment: "kor", verifiedAt: "2026-06-01" } };
+    const input = { providerInvoiceId: "42", providerInvoiceNumber: "F00054", providerSnapshot: snapshot, tenantId: "tenant-1" };
+    const result = await verifier(async () => ({ ...invoice, date: "2026-06-01" })).verifiedEboekhoudenInvoiceForDelivery(input);
+    assert.equal(result.date, "2026-06-01");
+    assert.equal(result.apiVerification.salesPosting, undefined);
+    await assert.rejects(() => verifier(async () => invoice).verifiedEboekhoudenInvoiceForDelivery(input));
+    await assert.rejects(() => verifier(async () => invoice).verifiedEboekhoudenInvoiceForDelivery({ ...input, providerSnapshot: { ...snapshot, date: undefined } }), /original invoice date/);
+    await assert.rejects(() => verifier(async () => invoice).verifiedEboekhoudenInvoiceForDelivery({ ...input, providerSnapshot: { ...snapshot, apiVerification: { ...snapshot.apiVerification, expectedDate: "2026-06-05" } } }), /dates disagree/);
   });
 });
 

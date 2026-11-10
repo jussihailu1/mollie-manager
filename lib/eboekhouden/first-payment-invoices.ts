@@ -926,7 +926,7 @@ export async function recoverFailedFirstPaymentInvoicesBatch(input: {
   const taxTreatment = requireTaxTreatment((await getTenantBillingSettings(input.tenantId))?.taxTreatment);
 
   for (const candidate of candidates) {
-    const invoiceDate = resolveFirstPaymentInvoiceDate({
+    const invoiceDate = candidate.expectedInvoiceDate ?? resolveFirstPaymentInvoiceDate({
       paidAt: candidate.paidAt,
       paymentCreatedAt: candidate.paymentCreatedAt,
     });
@@ -934,7 +934,7 @@ export async function recoverFailedFirstPaymentInvoicesBatch(input: {
       continue;
     }
 
-    const reference = buildFirstPaymentInvoiceReference({
+    const reference = candidate.expectedInvoiceReference ?? buildFirstPaymentInvoiceReference({
       invoiceDate,
       paymentId: candidate.paymentId,
     });
@@ -958,6 +958,8 @@ export async function recoverFailedFirstPaymentInvoicesBatch(input: {
     let verifiedInvoice;
     try {
       verifiedInvoice = await verifiedEboekhoudenInvoice({
+        requireSalesPosting: true,
+        expectedDate: invoiceDate,
         expectedAmount: candidate.amountValue,
         expectedRelationId: candidate.eboekhoudenRelationId,
         expectedReference: reference,

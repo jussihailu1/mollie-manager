@@ -48,6 +48,8 @@ export async function claimFirstPaymentInvoiceForCreation(input: {
   paymentId: string;
   tenantId: string;
   taxTreatment?: TaxTreatment;
+  invoiceDate?: string;
+  invoiceReference?: string;
 }) {
   const result = await getDb().execute<{ id: string }>(sql`
     update payments
@@ -59,6 +61,8 @@ export async function claimFirstPaymentInvoiceForCreation(input: {
         buildInvoiceCreationClaimMetadata({
           actorEmail: input.actor.email,
           taxTreatment: input.taxTreatment,
+          invoiceDate: input.invoiceDate,
+          invoiceReference: input.invoiceReference,
         }),
       )}::jsonb
     where id = ${input.paymentId}

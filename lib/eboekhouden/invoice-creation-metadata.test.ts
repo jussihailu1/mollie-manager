@@ -8,6 +8,11 @@ import {
 } from "@/lib/eboekhouden/invoice-creation-metadata";
 
 describe("invoice creation metadata helpers", () => {
+  it("freezes the date and reference at the claim, before any provider write", () => {
+    const result = buildInvoiceCreationClaimMetadata({ invoiceDate: "2026-06-01", invoiceReference: "RB-original" });
+    assert.equal(result.invoiceExpectedDate, "2026-06-01");
+    assert.equal(result.invoiceExpectedReference, "RB-original");
+  });
   it("builds claim metadata with actor evidence", () => {
     assert.deepEqual(
       buildInvoiceCreationClaimMetadata({

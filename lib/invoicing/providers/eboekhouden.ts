@@ -48,7 +48,7 @@ export const eboekhoudenInvoiceProvider: InvoiceProviderAdapter = {
       },
       input.tenantId,
     );
-    const invoice = await verifiedEboekhoudenInvoice({ expectedAmount: input.amountValue, expectedRelationId: relationId, expectedReference: input.reference, invoice: createdInvoice, taxTreatment, tenantId: input.tenantId });
+    const invoice = await verifiedEboekhoudenInvoice({ requireSalesPosting: true, expectedDate: input.invoiceDate, expectedAmount: input.amountValue, expectedRelationId: relationId, expectedReference: input.reference, invoice: createdInvoice, taxTreatment, tenantId: input.tenantId });
 
     return {
       provider: "eboekhouden",

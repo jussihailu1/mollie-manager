@@ -21,6 +21,8 @@ export type RecurringInvoiceRecoveryCandidate = {
   customerId: string;
   eboekhoudenRelationId: number;
   invoiceSendDueDate: string;
+  expectedInvoiceDate?: string | null;
+  expectedInvoiceReference?: string | null;
   mode: "live" | "test";
   plannedCollectionDate: string;
   scheduleId: string;
@@ -46,6 +48,8 @@ export async function listFailedRecurringRecoveryCandidates(
       rbs.mode,
       rbs.tenant_id as "tenantId",
       rbs.invoice_send_due_date::text as "invoiceSendDueDate",
+      rbs.metadata ->> 'invoiceExpectedDate' as "expectedInvoiceDate",
+      rbs.metadata ->> 'invoiceExpectedReference' as "expectedInvoiceReference",
       rbs.planned_collection_date::text as "plannedCollectionDate",
       rbs.amount_value::text as "amountValue",
       rbs.metadata ->> 'invoiceTaxTreatment' as "taxTreatment",

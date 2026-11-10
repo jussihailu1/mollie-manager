@@ -6,6 +6,7 @@ import {
 import { createEboekhoudenInvoice, type EboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import { verifiedEboekhoudenInvoice } from "@/lib/eboekhouden/invoice-total-verification";
 import {
+  InvoicePreflightError,
   isEboekhoudenReferenceAlreadyExistsError,
   toInvoiceAmountNumber,
 } from "@/lib/eboekhouden/invoice-flow-helpers";
@@ -45,7 +46,7 @@ type CreateFirstPaymentInvoiceResult =
 
 function buildReference(candidate: FirstPaymentInvoiceCandidate) {
   return buildFirstPaymentInvoiceReference({
-    invoiceDate: resolveFirstPaymentInvoiceDate({
+    invoiceDate: candidate.expectedInvoiceDate ?? resolveFirstPaymentInvoiceDate({
       paidAt: candidate.paidAt,
       paymentCreatedAt: candidate.paymentCreatedAt,
     }),
@@ -97,12 +98,19 @@ export async function createEboekhoudenInvoiceForFirstPayment(
   const eligibleCandidate = eligibility.candidate;
 
   const taxTreatment = requireTaxTreatment(settings!.taxTreatment);
+  const invoiceDate = candidate.expectedInvoiceDate ?? resolveFirstPaymentInvoiceDate({
+    paidAt: candidate.paidAt,
+    paymentCreatedAt: candidate.paymentCreatedAt,
+  });
+  const reference = candidate.expectedInvoiceReference ?? buildReference(candidate);
   const claimedPaymentId = await claimFirstPaymentInvoiceForCreation({
     actor,
     mode: candidate.mode,
     paymentId,
     tenantId: options.tenantId,
     taxTreatment,
+    invoiceDate: invoiceDate ?? undefined,
+    invoiceReference: reference,
   });
 
   if (!claimedPaymentId) {
@@ -113,10 +121,6 @@ export async function createEboekhoudenInvoiceForFirstPayment(
     };
   }
 
-  const invoiceDate = resolveFirstPaymentInvoiceDate({
-    paidAt: candidate.paidAt,
-    paymentCreatedAt: candidate.paymentCreatedAt,
-  });
   if (!invoiceDate) {
     const failure = await storeFirstPaymentInvoiceCreationFailure({
       actor,
@@ -130,7 +134,6 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       status: "failed",
     };
   }
-  const reference = buildReference(candidate);
   let externalInvoice: EboekhoudenInvoice | null = null;
   let postAttempted = false;
 
@@ -150,7 +153,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
 
     if (existing.status === "found") {
       externalInvoice = existing.invoice;
-      const verifiedInvoice = await verifiedEboekhoudenInvoice({ expectedAmount: candidate.amountValue, expectedRelationId: eligibleCandidate.eboekhoudenRelationId, expectedReference: reference, invoice: existing.invoice, taxTreatment, tenantId: candidate.tenantId });
+      const verifiedInvoice = await verifiedEboekhoudenInvoice({ requireSalesPosting: true, expectedDate: invoiceDate, expectedAmount: candidate.amountValue, expectedRelationId: eligibleCandidate.eboekhoudenRelationId, expectedReference: reference, invoice: existing.invoice, taxTreatment, tenantId: candidate.tenantId });
       const storedRecoveredInvoice = await storeFirstPaymentInvoiceCreationSuccess({
         actor,
         candidate,
@@ -214,7 +217,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       candidate.tenantId,
     );
     externalInvoice = invoice;
-    const verifiedInvoice = await verifiedEboekhoudenInvoice({ expectedAmount: candidate.amountValue, expectedRelationId: eligibleCandidate.eboekhoudenRelationId, expectedReference: reference, invoice, taxTreatment, tenantId: candidate.tenantId });
+    const verifiedInvoice = await verifiedEboekhoudenInvoice({ requireSalesPosting: true, expectedDate: invoiceDate, expectedAmount: candidate.amountValue, expectedRelationId: eligibleCandidate.eboekhoudenRelationId, expectedReference: reference, invoice, taxTreatment, tenantId: candidate.tenantId });
     const storedInvoice = await storeFirstPaymentInvoiceCreationSuccess({
       actor,
       candidate,
@@ -242,6 +245,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
       status: "created",
     };
   } catch (error) {
+    if (error instanceof InvoicePreflightError) postAttempted = false;
     let failureError = error;
     if (isEboekhoudenReferenceAlreadyExistsError(error)) {
       try {
@@ -254,7 +258,7 @@ export async function createEboekhoudenInvoiceForFirstPayment(
 
       if (existing.status === "found") {
         externalInvoice = existing.invoice;
-        const verifiedInvoice = await verifiedEboekhoudenInvoice({ expectedAmount: candidate.amountValue, expectedRelationId: eligibleCandidate.eboekhoudenRelationId, expectedReference: reference, invoice: existing.invoice, taxTreatment, tenantId: candidate.tenantId });
+        const verifiedInvoice = await verifiedEboekhoudenInvoice({ requireSalesPosting: true, expectedDate: invoiceDate, expectedAmount: candidate.amountValue, expectedRelationId: eligibleCandidate.eboekhoudenRelationId, expectedReference: reference, invoice: existing.invoice, taxTreatment, tenantId: candidate.tenantId });
         const storedRecoveredInvoice = await storeFirstPaymentInvoiceCreationSuccess({
           actor,
           candidate,

@@ -11,6 +11,8 @@ import type { TaxTreatment } from "@/lib/invoicing/tax-treatment";
 
 export type FirstPaymentInvoiceRecoveryCandidate = {
   amountValue: string;
+  expectedInvoiceDate?: string | null;
+  expectedInvoiceReference?: string | null;
   customerEmail: string | null;
   customerId: string | null;
   eboekhoudenRelationId: number;
@@ -44,6 +46,8 @@ export async function listFailedFirstPaymentRecoveryCandidates(
       p.paid_at as "paidAt",
       p.created_at as "paymentCreatedAt",
       p.amount_value::text as "amountValue",
+      p.metadata ->> 'invoiceExpectedDate' as "expectedInvoiceDate",
+      p.metadata ->> 'invoiceExpectedReference' as "expectedInvoiceReference",
       p.metadata ->> 'invoiceTaxTreatment' as "taxTreatment",
       ${customerBillingEmailSql} as "customerEmail",
       case

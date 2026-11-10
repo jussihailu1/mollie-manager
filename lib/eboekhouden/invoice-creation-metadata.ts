@@ -5,11 +5,15 @@ export function buildInvoiceCreationClaimMetadata(input: {
   actorEmail?: string | null;
   claimedAt?: string;
   taxTreatment?: TaxTreatment;
+  invoiceDate?: string;
+  invoiceReference?: string;
 }) {
   return {
     invoiceCreationClaimedAt: input.claimedAt ?? new Date().toISOString(),
     invoiceCreationClaimedBy: input.actorEmail ?? null,
     ...(input.taxTreatment ? { invoiceTaxTreatment: input.taxTreatment } : {}),
+    ...(input.invoiceDate ? { invoiceExpectedDate: input.invoiceDate } : {}),
+    ...(input.invoiceReference ? { invoiceExpectedReference: input.invoiceReference } : {}),
   };
 }
 

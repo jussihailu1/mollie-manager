@@ -6,6 +6,7 @@ import {
 import { createEboekhoudenInvoice, type EboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import { verifiedEboekhoudenInvoice } from "@/lib/eboekhouden/invoice-total-verification";
 import {
+  InvoicePreflightError,
   isEboekhoudenReferenceAlreadyExistsError,
   toInvoiceAmountNumber,
 } from "@/lib/eboekhouden/invoice-flow-helpers";
@@ -88,12 +89,16 @@ export async function createEboekhoudenInvoiceForSchedule(
   }
 
   const taxTreatment = requireTaxTreatment(settings!.taxTreatment);
+  const invoiceDate = candidate.expectedInvoiceDate ?? candidate.invoiceSendDueDate;
+  const reference = candidate.expectedInvoiceReference ?? buildReference(candidate);
   const claimedScheduleId = await claimScheduleForInvoice({
     actor,
     mode: candidate.mode,
     scheduleId,
     tenantId: options.tenantId,
     taxTreatment,
+    invoiceDate,
+    invoiceReference: reference,
   });
 
   if (!claimedScheduleId) {
@@ -104,13 +109,12 @@ export async function createEboekhoudenInvoiceForSchedule(
     };
   }
 
-  const reference = buildReference(candidate);
   let externalInvoice: EboekhoudenInvoice | null = null;
   let postAttempted = false;
 
   try {
     const existing = await findExistingEboekhoudenInvoiceByReference({
-      date: candidate.invoiceSendDueDate,
+      date: invoiceDate,
       reference,
       relationId: candidate.eboekhoudenRelationId,
       tenantId: candidate.tenantId,
@@ -124,7 +128,7 @@ export async function createEboekhoudenInvoiceForSchedule(
 
     if (existing.status === "found") {
       externalInvoice = existing.invoice;
-      const verifiedInvoice = await verifiedEboekhoudenInvoice({ expectedAmount: candidate.amountValue, expectedRelationId: candidate.eboekhoudenRelationId, expectedReference: reference, invoice: existing.invoice, taxTreatment, tenantId: candidate.tenantId });
+      const verifiedInvoice = await verifiedEboekhoudenInvoice({ requireSalesPosting: true, expectedDate: invoiceDate, expectedAmount: candidate.amountValue, expectedRelationId: candidate.eboekhoudenRelationId, expectedReference: reference, invoice: existing.invoice, taxTreatment, tenantId: candidate.tenantId });
       const storedRecoveredInvoice = await storeRecurringInvoiceCreationSuccess({
         actor,
         candidate,
@@ -157,7 +161,7 @@ export async function createEboekhoudenInvoiceForSchedule(
 
     const tax = eboekhoudenTaxFields(taxTreatment);
     const invoiceInput: Parameters<typeof createEboekhoudenInvoice>[0] = {
-      date: candidate.invoiceSendDueDate,
+      date: invoiceDate,
       inExVat: tax.inExVat,
       items: [
         {
@@ -174,7 +178,7 @@ export async function createEboekhoudenInvoiceForSchedule(
       templateId: settings!.invoiceTemplateId!,
       text: tax.text,
       termOfPayment: daysBetween(
-        candidate.invoiceSendDueDate,
+        invoiceDate,
         candidate.plannedCollectionDate,
       ),
     };
@@ -184,7 +188,7 @@ export async function createEboekhoudenInvoiceForSchedule(
       candidate.tenantId,
     );
     externalInvoice = invoice;
-    const verifiedInvoice = await verifiedEboekhoudenInvoice({ expectedAmount: candidate.amountValue, expectedRelationId: candidate.eboekhoudenRelationId, expectedReference: reference, invoice, taxTreatment, tenantId: candidate.tenantId });
+    const verifiedInvoice = await verifiedEboekhoudenInvoice({ requireSalesPosting: true, expectedDate: invoiceDate, expectedAmount: candidate.amountValue, expectedRelationId: candidate.eboekhoudenRelationId, expectedReference: reference, invoice, taxTreatment, tenantId: candidate.tenantId });
     const storedInvoice = await storeRecurringInvoiceCreationSuccess({
       actor,
       candidate,
@@ -213,11 +217,12 @@ export async function createEboekhoudenInvoiceForSchedule(
       status: "created",
     };
   } catch (error) {
+    if (error instanceof InvoicePreflightError) postAttempted = false;
     let failureError = error;
     if (isEboekhoudenReferenceAlreadyExistsError(error)) {
       try {
       const existing = await findExistingEboekhoudenInvoiceByReference({
-        date: candidate.invoiceSendDueDate,
+        date: invoiceDate,
         reference,
         relationId: candidate.eboekhoudenRelationId,
         tenantId: candidate.tenantId,
@@ -225,7 +230,7 @@ export async function createEboekhoudenInvoiceForSchedule(
 
       if (existing.status === "found") {
         externalInvoice = existing.invoice;
-        const verifiedInvoice = await verifiedEboekhoudenInvoice({ expectedAmount: candidate.amountValue, expectedRelationId: candidate.eboekhoudenRelationId, expectedReference: reference, invoice: existing.invoice, taxTreatment, tenantId: candidate.tenantId });
+        const verifiedInvoice = await verifiedEboekhoudenInvoice({ requireSalesPosting: true, expectedDate: invoiceDate, expectedAmount: candidate.amountValue, expectedRelationId: candidate.eboekhoudenRelationId, expectedReference: reference, invoice: existing.invoice, taxTreatment, tenantId: candidate.tenantId });
         const storedRecoveredInvoice = await storeRecurringInvoiceCreationSuccess({
           actor,
           candidate,

@@ -85,6 +85,7 @@ export async function getInvoiceAutomationSnapshot(
           and (
             coalesce(invoice_error, '') like '%FACT_014%'
             or coalesce(invoice_error, '') like '%FACT_VERWERK_004%'
+            or coalesce(invoice_error, '') like '%KIFY_INVOICE_PREFLIGHT_RETRY%'
           )
       ) as "failedFirstPaymentRecoverableCount",
       (select count(*) from recurring_rows where invoice_state = 'invoice_failed') as "failedRecurringCount",
@@ -95,6 +96,7 @@ export async function getInvoiceAutomationSnapshot(
           and (
             coalesce(invoice_error, '') like '%FACT_014%'
             or coalesce(invoice_error, '') like '%FACT_VERWERK_004%'
+            or coalesce(invoice_error, '') like '%KIFY_INVOICE_PREFLIGHT_RETRY%'
           )
       ) as "failedRecurringRecoverableCount"
   `);

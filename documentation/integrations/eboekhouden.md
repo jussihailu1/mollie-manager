@@ -5,6 +5,24 @@ Audience: developers
 
 ## Role
 
+**8 November 2026 local correction, not deployed:** every new invoice request now
+includes `mutation` with a unique payment reference and the administration's sole
+`DEB` ledger. The invoice's original revenue/VAT lines remain authoritative.
+Issuance/recovery verifies exactly one matching sales entry before success.
+It never repairs an existing document by creating another invoice or by silently
+posting a separate mutation. The historical command is preview-only, with no
+apply option. See [the preview and remaining gates](../operations/eboekhouden-sales-posting-preview-2026-11-08.md).
+
+This corrects the e-Boekhouden issuance path only; Kify-native accounting sync,
+customer receipts, fee invoices and payout posting remain separate work.
+
+**7 November 2026 verification:** the current integration creates invoice
+documents but does not automatically post the corresponding sales mutations,
+record customer payments, or reconcile Mollie fees/payouts. Ten existing
+Kify-linked invoices were absent from the 2026 bookkeeping entries and the
+selected revenue ledger was zero. Do not treat invoice creation as completed
+bookkeeping. See [the findings and correction gates](../operations/connect-and-bookkeeping-review-2026-11-07.md).
+
 e-Boekhouden is one supported invoice provider plus the bookkeeping integration
 for tenants that use it.
 
@@ -33,6 +51,10 @@ app-wide e-Boekhouden token.
 Main implementation:
 
 - `lib/eboekhouden/client.ts`
+- `lib/eboekhouden/invoice-posting.ts`
+- `lib/eboekhouden/invoice-posting-verification.ts`
+- `lib/eboekhouden/sales-posting-preview.ts`
+- `scripts/preview-eboekhouden-sales-posting.ts`
 
 ## Customer Relation Linking
 

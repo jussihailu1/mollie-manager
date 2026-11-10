@@ -36,6 +36,7 @@ try {
         and (
           coalesce(rbs.metadata ->> 'invoiceCreationError', '') like '%FACT_014%'
           or coalesce(rbs.metadata ->> 'invoiceCreationError', '') like '%FACT_VERWERK_004%'
+          or coalesce(rbs.metadata ->> 'invoiceCreationError', '') like '%KIFY_INVOICE_PREFLIGHT_RETRY%'
         )
       order by rbs.updated_at asc, rbs.created_at asc
       limit $2
@@ -55,6 +56,7 @@ try {
         and (
           coalesce(p.metadata ->> 'invoiceCreationError', '') like '%FACT_014%'
           or coalesce(p.metadata ->> 'invoiceCreationError', '') like '%FACT_VERWERK_004%'
+          or coalesce(p.metadata ->> 'invoiceCreationError', '') like '%KIFY_INVOICE_PREFLIGHT_RETRY%'
         )
       order by p.updated_at asc, p.created_at asc
       limit $2
@@ -116,7 +118,7 @@ try {
             invoiceRetryQueuedAt: new Date().toISOString(),
             invoiceRetryQueuedBy: "ops:invoice-requeue-safe-failed",
             invoiceRetryReason:
-              "Safe known validation failure code (FACT_014 / FACT_VERWERK_004).",
+              "Safe known validation or transient preflight failure; no uncertain financial write.",
           }),
         ],
       );
@@ -147,7 +149,7 @@ try {
             invoiceRetryQueuedAt: new Date().toISOString(),
             invoiceRetryQueuedBy: "ops:invoice-requeue-safe-failed",
             invoiceRetryReason:
-              "Safe known validation failure code (FACT_014 / FACT_VERWERK_004).",
+              "Safe known validation or transient preflight failure; no uncertain financial write.",
           }),
         ],
       );

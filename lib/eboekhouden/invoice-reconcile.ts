@@ -39,9 +39,12 @@ export async function findExistingEboekhoudenInvoiceByReference(
       relationId: input.relationId,
       tenantId: input.tenantId,
     });
-    const items = response.items ?? [];
+    if (!Array.isArray(response.items)) {
+      throw new Error("e-Boekhouden invoice search returned no item list; manual review required.");
+    }
+    const items = response.items;
     matches.push(...filterMatchingInvoicesByReference(items, input));
-    if (items.length < pageSize || (typeof response.count === "number" && (page + 1) * pageSize >= response.count)) {
+    if (items.length < pageSize) {
       complete = true;
       break;
     }

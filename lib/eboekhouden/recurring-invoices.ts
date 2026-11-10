@@ -786,12 +786,13 @@ export async function recoverFailedRecurringInvoicesBatch(input: {
   const taxTreatment = requireTaxTreatment((await getTenantBillingSettings(resolvedTenantId))?.taxTreatment);
 
   for (const candidate of candidates) {
-    const reference = buildRecurringInvoiceReference({
+    const invoiceDate = candidate.expectedInvoiceDate ?? candidate.invoiceSendDueDate;
+    const reference = candidate.expectedInvoiceReference ?? buildRecurringInvoiceReference({
       plannedCollectionDate: candidate.plannedCollectionDate,
       scheduleId: candidate.scheduleId,
     });
     const existing = await findExistingEboekhoudenInvoiceByReference({
-      date: candidate.invoiceSendDueDate,
+      date: invoiceDate,
       reference,
       relationId: candidate.eboekhoudenRelationId,
       tenantId: candidate.tenantId,
@@ -810,6 +811,8 @@ export async function recoverFailedRecurringInvoicesBatch(input: {
     let verifiedInvoice;
     try {
       verifiedInvoice = await verifiedEboekhoudenInvoice({
+        requireSalesPosting: true,
+        expectedDate: invoiceDate,
         expectedAmount: candidate.amountValue,
         expectedRelationId: candidate.eboekhoudenRelationId,
         expectedReference: reference,

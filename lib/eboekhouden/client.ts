@@ -7,6 +7,9 @@ import {
   TenantEboekhoudenCredentialError,
 } from "@/lib/eboekhouden/tenant-credentials";
 import type { EboekhoudenRelation } from "@/lib/eboekhouden/relation-mapping";
+import { buildPostedInvoicePayload, type SalesMutation } from "@/lib/eboekhouden/invoice-posting";
+import { readAllEboekhoudenPages } from "@/lib/eboekhouden/pagination";
+import { InvoicePreflightError } from "@/lib/eboekhouden/invoice-flow-helpers";
 
 const EBOEKHOUDEN_API_BASE_URL = "https://api.e-boekhouden.nl";
 
@@ -69,7 +72,15 @@ export type EboekhoudenInvoice = {
   relationId?: number | null;
   number?: string | null;
   totalAmount?: number;
+  totalExcl?: number;
   vatAmount?: number;
+  inExVat?: "IN" | "EX";
+  termOfPayment?: number;
+  items?: (EboekhoudenInvoiceItemInput & {
+    costCenterId?: number | null;
+    discountAmount?: number | null;
+    discountPercentage?: number | null;
+  })[];
   urlPdfFile?: string | null;
 };
 
@@ -230,8 +241,10 @@ async function requestEboekhouden<T>(
   path: string,
   options: RequestInit = {},
   tenantId: string,
+  beforeRequest?: () => void,
 ): Promise<T> {
   const token = await getSessionToken(tenantId);
+  beforeRequest?.();
   const response = await fetch(`${EBOEKHOUDEN_API_BASE_URL}${path}`, {
     ...options,
     cache: "no-store",
@@ -399,10 +412,39 @@ export async function createEboekhoudenInvoice(
   payload: EboekhoudenCreateInvoiceInput,
   tenantId: string,
 ) {
-  return requestEboekhouden<EboekhoudenInvoice>("/v1/invoice", {
-    body: JSON.stringify(payload),
-    method: "POST",
-  }, tenantId);
+  let postAttempted = false;
+  try {
+    const ledgers = await readAllEboekhoudenPages((limit, offset) =>
+      listEboekhoudenLedgers({ limit, offset, tenantId }),
+    );
+    const postedPayload = buildPostedInvoicePayload(payload, ledgers);
+    return await requestEboekhouden<EboekhoudenInvoice>("/v1/invoice", {
+      body: JSON.stringify(postedPayload),
+      method: "POST",
+    }, tenantId, () => { postAttempted = true; });
+  } catch (error) {
+    if (!postAttempted) throw new InvoicePreflightError(error);
+    throw error;
+  }
+}
+
+export async function listEboekhoudenSalesMutations(options: {
+  invoiceNumber: string;
+  limit: number;
+  offset: number;
+  tenantId: string;
+}) {
+  const params = new URLSearchParams({
+    type: "2", invoiceNumber: options.invoiceNumber,
+    limit: String(options.limit), offset: String(options.offset),
+  });
+  return requestEboekhouden<EboekhoudenListResponse<SalesMutation>>(
+    `/v1/mutation?${params}`, {}, options.tenantId,
+  );
+}
+
+export async function getEboekhoudenMutation(id: number, tenantId: string) {
+  return requestEboekhouden<SalesMutation>(`/v1/mutation/${id}`, {}, tenantId);
 }
 
 export async function getEboekhoudenInvoice(id: number, tenantId: string) {

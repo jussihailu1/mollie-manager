@@ -9,6 +9,8 @@ export type ScheduledInvoiceCandidate = {
   customerId: string;
   eboekhoudenRelationId: number | null;
   invoiceSendDueDate: string;
+  expectedInvoiceDate?: string | null;
+  expectedInvoiceReference?: string | null;
   mode: "live" | "test";
   plannedCollectionDate: string;
   scheduleId: string;
@@ -28,6 +30,8 @@ export async function getScheduledInvoiceCandidate(
       rbs.mode,
       rbs.tenant_id as "tenantId",
       rbs.invoice_send_due_date::text as "invoiceSendDueDate",
+      rbs.metadata ->> 'invoiceExpectedDate' as "expectedInvoiceDate",
+      rbs.metadata ->> 'invoiceExpectedReference' as "expectedInvoiceReference",
       rbs.planned_collection_date::text as "plannedCollectionDate",
       rbs.amount_value::text as "amountValue",
       s.customer_id as "customerId",

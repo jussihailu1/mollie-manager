@@ -6,7 +6,7 @@ import { getTenantBillingSettings } from "@/lib/billing-settings";
 import { getDb } from "@/lib/db";
 import { getEboekhoudenInvoice } from "@/lib/eboekhouden/client";
 import { listFailedFirstPaymentRecoveryCandidates, storeRecoveredFailedFirstPaymentSuccess } from "@/lib/eboekhouden/first-payment-invoice-recovery";
-import { verifiedEboekhoudenInvoice } from "@/lib/eboekhouden/invoice-total-verification";
+import { requireInvoiceDate, verifiedEboekhoudenInvoice } from "@/lib/eboekhouden/invoice-total-verification";
 import { listFailedRecurringRecoveryCandidates, storeRecoveredFailedInvoiceSuccess } from "@/lib/eboekhouden/recurring-invoice-recovery";
 import { deliverCustomerInvoiceEmail } from "@/lib/invoice-delivery";
 import { requireTaxTreatment } from "@/lib/invoicing/tax-treatment";
@@ -49,6 +49,9 @@ export async function recoverCreditedEboekhoudenInvoice(input: ManualRecoveryInp
   if (replacement.id !== input.replacementInvoiceId) {
     throw new Error("e-Boekhouden returned a different replacement invoice ID.");
   }
+  // The operator explicitly selected this replacement document. Preserve its
+  // original date and reject changes between the selection and verification GETs.
+  const replacementDate = requireInvoiceDate(replacement.date);
 
   const actor = { kind: "user" as const, email: input.operatorEmail };
   const originalCreditNumber = input.creditNoteNumber.trim();
@@ -58,6 +61,8 @@ export async function recoverCreditedEboekhoudenInvoice(input: ManualRecoveryInp
       throw new Error("Replacement invoice does not belong to the failed payment's e-Boekhouden relation.");
     }
     const verified = await verifiedEboekhoudenInvoice({
+      requireSalesPosting: true,
+      expectedDate: replacementDate,
       expectedAmount: candidate.amountValue,
       expectedRelationId: candidate.eboekhoudenRelationId,
       invoice: replacement,
@@ -82,6 +87,8 @@ export async function recoverCreditedEboekhoudenInvoice(input: ManualRecoveryInp
     throw new Error("Replacement invoice does not belong to the failed schedule's e-Boekhouden relation.");
   }
   const verified = await verifiedEboekhoudenInvoice({
+    requireSalesPosting: true,
+    expectedDate: replacementDate,
     expectedAmount: candidate.amountValue,
       expectedRelationId: candidate.eboekhoudenRelationId,
     invoice: replacement,

@@ -18,11 +18,23 @@ The concrete PDF-specific risk is a template omitting the KOR notice or displayi
 
 Kify snapshots the tenant tax treatment when it claims the invoice row, so later recovery uses the treatment that applied to that issuance attempt. Older failed rows without a snapshot use the tenant's current setting and need operator review if the treatment changed meanwhile.
 
+The [10 November local correction](eboekhouden-posting-review-fixes-2026-11-10.md)
+also freezes the intended invoice date and reference before issuance. Recovery
+uses that evidence, and delivery checks the frozen original document date.
+Historical dates must not be inferred from changed schedules. Missing date
+evidence needs review; no date is rewritten automatically. These changes are
+not deployed yet.
+
 Before the POST, Kify can validate the tenant's KOR choice, template, ledger, relation, exact two-decimal subscription amount, deterministic reference, and whether a matching invoice already exists. e-Boekhouden's calculated total, VAT and assigned identity are checked after creation. The template's visual review is a separate setup/change procedure.
 
 ## If verification fails after the POST
 
-The invoice already exists in e-Boekhouden. Kify leaves the owner in `invoice_failed`, with no Kify invoice record and no customer invoice email. The owner metadata records `invoiceCreationManualReview`, the upstream invoice ID/number/reference, and the error. A warning or critical alert is opened. Neither the normal create job nor the safe retry queue creates a second invoice from this state. The failed-invoice recovery job searches by reference and rechecks API identity, total and VAT before linking the invoice. An ambiguous search or failed API check keeps the row failed and customer delivery blocked. PDF availability is handled later as a delivery issue.
+The invoice already exists in e-Boekhouden. Kify leaves the owner in `invoice_failed`, with no Kify invoice record and no customer invoice email. The owner metadata records `invoiceCreationManualReview`, the upstream invoice ID/number/reference, and the error. A warning or critical alert is opened. Neither the normal create job nor the safe retry queue creates a second invoice from this state. The failed-invoice recovery job searches by reference and rechecks API identity, total and VAT before linking the invoice. The 10 November local fix additionally requires the expected date and exactly one matching sales posting in both scheduled recovery and explicit replacement recovery. An ambiguous search or failed API check keeps the row failed and customer delivery blocked. PDF availability is handled later as a delivery issue.
+
+With that local fix, transient authentication/ledger-read failures before any
+invoice POST carry `KIFY_INVOICE_PREFLIGHT_RETRY` and can use the existing safe
+retry queue. Permanent configuration errors do not qualify. A timeout or server
+error after the financial request may have been sent remains on manual hold.
 
 The creation claim itself also rejects `invoiceCreationManualReview`, even if another path has changed the row to `pending_invoice`. Generic provider retries and the standalone safe-requeue script preserve this hold. The standalone script checks the canonical `invoices` table rather than removed legacy invoice columns; it rechecks the hold and stored-invoice guards during its update.
 

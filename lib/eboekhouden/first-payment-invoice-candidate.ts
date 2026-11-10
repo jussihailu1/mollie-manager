@@ -6,6 +6,8 @@ import { buildDeterministicMatchCte } from "@/lib/eboekhouden/first-payment-invo
 
 export type FirstPaymentInvoiceCandidate = {
   amountValue: string;
+  expectedInvoiceDate?: string | null;
+  expectedInvoiceReference?: string | null;
   consentAcceptedAt: string | null;
   consentId: string;
   customerEmail: string | null;
@@ -39,6 +41,8 @@ export async function getFirstPaymentInvoiceCandidate(
       p.paid_at as "paidAt",
       p.created_at as "paymentCreatedAt",
       p.amount_value::text as "amountValue",
+      p.metadata ->> 'invoiceExpectedDate' as "expectedInvoiceDate",
+      p.metadata ->> 'invoiceExpectedReference' as "expectedInvoiceReference",
       ${customerBillingEmailSql} as "customerEmail",
       case
         when cal.provider_customer_id ~ '^[0-9]+$'

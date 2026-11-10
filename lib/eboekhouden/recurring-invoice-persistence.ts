@@ -45,6 +45,8 @@ export async function claimScheduleForInvoice(input: {
   scheduleId: string;
   tenantId: string;
   taxTreatment?: TaxTreatment;
+  invoiceDate?: string;
+  invoiceReference?: string;
 }) {
   const result = await getDb().execute<{ id: string }>(sql`
     update recurring_billing_schedules
@@ -56,6 +58,8 @@ export async function claimScheduleForInvoice(input: {
         buildInvoiceCreationClaimMetadata({
           actorEmail: input.actor.email,
           taxTreatment: input.taxTreatment,
+          invoiceDate: input.invoiceDate,
+          invoiceReference: input.invoiceReference,
         }),
       )}::jsonb
     where id = ${input.scheduleId}
