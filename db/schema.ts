@@ -1006,6 +1006,7 @@ export const invoices = pgTable(
       name: "invoices_tenant_id_fkey",
     }).onDelete("cascade"),
     unique("invoices_owner_key").on(table.tenantId, table.ownerType, table.ownerId),
+    unique("invoices_receipt_owner_key").on(table.tenantId, table.mode, table.id),
     uniqueIndex("invoices_provider_invoice_id_key").on(
       table.tenantId,
       table.mode,
@@ -1231,6 +1232,7 @@ export const payments = pgTable(
       table.mode,
       table.molliePaymentId,
     ),
+    unique("payments_receipt_owner_key").on(table.tenantId, table.mode, table.id, table.molliePaymentId),
     check("payments_amount_value_check", sql`${table.amountValue} >= 0`),
     index("payments_tenant_subscription_idx").on(
       table.tenantId,
@@ -1248,6 +1250,71 @@ export const payments = pgTable(
       table.paymentType,
       table.invoiceState,
     ),
+  ],
+);
+
+export const tenantEboekhoudenReceiptSettings = pgTable(
+  "tenant_eboekhouden_receipt_settings",
+  {
+    tenantId: text("tenant_id").primaryKey(),
+    mode: mollieModeEnum("mode").notNull().default("live"),
+    enabled: boolean("enabled").notNull().default(false),
+    profileId: text("profile_id").notNull(),
+    clearingLedgerId: integer("clearing_ledger_id").notNull(),
+    paymentsFrom: timestamp("payments_from", { mode: "string", withTimezone: true }).notNull(),
+    credentialVersion: timestamp("credential_version", { mode: "string", withTimezone: true }).notNull(),
+    cursorPaymentId: text("cursor_payment_id"),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({ columns: [table.tenantId], foreignColumns: [tenants.id], name: "receipt_settings_tenant_fkey" }).onDelete("cascade"),
+    unique("receipt_settings_tenant_mode_key").on(table.tenantId, table.mode),
+    check("receipt_settings_live_check", sql`${table.mode} = 'live'`),
+    check("receipt_settings_ledger_check", sql`${table.clearingLedgerId} > 0`),
+    check("receipt_settings_profile_check", sql`${table.profileId} ~ '^pfl_[A-Za-z0-9]+$'`),
+  ],
+);
+
+export const eboekhoudenPaymentReceipts = pgTable(
+  "eboekhouden_payment_receipts",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    mode: mollieModeEnum("mode").notNull(),
+    paymentId: text("payment_id").notNull(),
+    invoiceId: text("invoice_id").notNull(),
+    molliePaymentId: text("mollie_payment_id").notNull(),
+    profileId: text("profile_id").notNull(),
+    clearingLedgerId: integer("clearing_ledger_id").notNull(),
+    credentialVersion: timestamp("credential_version", { mode: "string", withTimezone: true }).notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    invoiceSnapshot: jsonb("invoice_snapshot").$type<Record<string, unknown>>().notNull(),
+    status: text("status").notNull().default("prepared"),
+    attemptedAt: timestamp("attempted_at", { mode: "string", withTimezone: true }),
+    mutationId: integer("mutation_id"),
+    claimToken: text("claim_token"),
+    claimedAt: timestamp("claimed_at", { mode: "string", withTimezone: true }),
+    errorCode: text("error_code"),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({ columns: [table.tenantId, table.mode], foreignColumns: [tenantEboekhoudenReceiptSettings.tenantId, tenantEboekhoudenReceiptSettings.mode], name: "receipts_settings_fkey" }).onDelete("restrict"),
+    foreignKey({ columns: [table.tenantId, table.mode, table.paymentId, table.molliePaymentId], foreignColumns: [payments.tenantId, payments.mode, payments.id, payments.molliePaymentId], name: "receipts_payment_owner_fkey" }).onDelete("restrict"),
+    foreignKey({ columns: [table.tenantId, table.mode, table.invoiceId], foreignColumns: [invoices.tenantId, invoices.mode, invoices.id], name: "receipts_invoice_owner_fkey" }).onDelete("restrict"),
+    unique("receipts_payment_key").on(table.tenantId, table.mode, table.paymentId),
+    unique("receipts_invoice_key").on(table.tenantId, table.mode, table.invoiceId),
+    unique("receipts_mollie_payment_key").on(table.tenantId, table.mode, table.molliePaymentId),
+    unique("receipts_mutation_key").on(table.tenantId, table.mode, table.mutationId),
+    check("receipts_live_check", sql`${table.mode} = 'live'`),
+    check("receipts_state_check", sql`${table.status} in ('prepared', 'posting', 'verified', 'review_required')`),
+    check("receipts_attempt_check", sql`(${table.status} <> 'prepared' or ${table.attemptedAt} is null) and (${table.status} <> 'posting' or ${table.attemptedAt} is not null)`),
+    check("receipts_verified_check", sql`(${table.status} = 'verified') = (${table.mutationId} is not null)`),
+    check("receipts_positive_ids_check", sql`${table.clearingLedgerId} > 0 and (${table.mutationId} is null or ${table.mutationId} > 0)`),
+    check("receipts_evidence_check", sql`jsonb_typeof(${table.payload}) = 'object' and jsonb_typeof(${table.invoiceSnapshot}) = 'object'`),
+    check("receipts_error_code_check", sql`${table.errorCode} is null or ${table.errorCode} ~ '^[A-Za-z][A-Za-z0-9_]{0,79}$'`),
+    index("receipts_claim_idx").on(table.tenantId, table.mode, table.status, table.claimedAt),
   ],
 );
 

@@ -10,6 +10,7 @@ import type { EboekhoudenRelation } from "@/lib/eboekhouden/relation-mapping";
 import { buildPostedInvoicePayload, type SalesMutation } from "@/lib/eboekhouden/invoice-posting";
 import { readAllEboekhoudenPages } from "@/lib/eboekhouden/pagination";
 import { InvoicePreflightError } from "@/lib/eboekhouden/invoice-flow-helpers";
+import type { ReceiptMutationInput, ReceiptOutstanding } from "./payment-receipt-preview";
 
 const EBOEKHOUDEN_API_BASE_URL = "https://api.e-boekhouden.nl";
 
@@ -202,6 +203,8 @@ async function startSession(tenantId?: string) {
       "Content-Type": "application/json",
     },
     method: "POST",
+    redirect: "error",
+    signal: AbortSignal.timeout(30000),
   });
 
   if (!response.ok) {
@@ -212,6 +215,10 @@ async function startSession(tenantId?: string) {
     expiresIn: number;
     token: string;
   };
+  if (typeof session?.token !== "string" || !session.token.trim() ||
+      !Number.isFinite(session.expiresIn) || session.expiresIn <= 0) {
+    throw new EboekhoudenApiError("e-Boekhouden returned an invalid authentication session.", { status: 502 });
+  }
 
   const cacheEntry = {
     expiresAt: Date.now() + Math.max(session.expiresIn - 30, 1) * 1000,
@@ -235,6 +242,10 @@ async function getSessionToken(tenantId?: string) {
   }
 
   return startSession(tenantId);
+}
+
+export async function refreshEboekhoudenSession(tenantId: string): Promise<void> {
+  await startSession(tenantId);
 }
 
 async function requestEboekhouden<T>(
@@ -445,6 +456,40 @@ export async function listEboekhoudenSalesMutations(options: {
 
 export async function getEboekhoudenMutation(id: number, tenantId: string) {
   return requestEboekhouden<SalesMutation>(`/v1/mutation/${id}`, {}, tenantId);
+}
+
+export async function listEboekhoudenMutations(options: {
+  tenantId: string; limit: number; offset: number; invoiceNumber?: string; date?: string; description?: string;
+}) {
+  const params = new URLSearchParams({ limit: String(options.limit), offset: String(options.offset) });
+  appendFilter(params, "invoiceNumber", options.invoiceNumber);
+  appendFilter(params, "date", options.date);
+  appendFilter(params, "description[like]", options.description);
+  return requestEboekhouden<EboekhoudenListResponse<SalesMutation>>(`/v1/mutation?${params}`, {}, options.tenantId);
+}
+
+export async function listEboekhoudenOutstanding(options: { tenantId: string; invoiceNumber: string; limit: number; offset: number }) {
+  const params = new URLSearchParams({ credDeb: "D", invoiceNumber: options.invoiceNumber,
+    limit: String(options.limit), offset: String(options.offset) });
+  const page = await requestEboekhouden<EboekhoudenListResponse<ReceiptOutstanding>>(`/v1/mutation/invoice/outstanding?${params}`, {}, options.tenantId);
+  return { ...page, items: page.items?.map(item => ({ ...item, id: item.mutationId })) };
+}
+
+export async function createEboekhoudenPaymentReceipt(
+  payload: ReceiptMutationInput, tenantId: string, beforeWrite: () => Promise<void>,
+) {
+  if (!tenantId || payload.type !== 3 || payload.checkPaymentReference !== true) throw new Error("Invalid receipt request");
+  // Fresh authentication avoids reusing an old administration's cached session
+  // after credentials change. Financial requests never follow redirects/retry.
+  const token = await startSession(tenantId);
+  const body = JSON.stringify(payload);
+  await beforeWrite();
+  const response = await fetch(`${EBOEKHOUDEN_API_BASE_URL}/v1/mutation`, {
+    method: "POST", body, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(30000),
+    headers: { Authorization: token, "Content-Type": "application/json" },
+  });
+  if (!response.ok) throw await parseError(response);
+  return response.json() as Promise<{ id: number }>;
 }
 
 export async function getEboekhoudenInvoice(id: number, tenantId: string) {

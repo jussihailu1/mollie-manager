@@ -211,6 +211,13 @@
       "when": 1791374400000,
       "tag": "0029_tenant_tax_treatment",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794430709646,
+      "tag": "0031_eboekhouden_payment_receipts",
+      "breakpoints": true
     }
   ]
 }

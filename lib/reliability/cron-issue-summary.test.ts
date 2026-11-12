@@ -16,6 +16,8 @@ function cleanResult() {
     staleRepairResult: { failedCount: 0, repairedCount: 2, skippedCount: 1, totalChecked: 3, customersChecked: 1, paymentsChecked: 2, subscriptionsChecked: 0 },
     activationJobs: { exhaustedCount: 0, retriedCount: 0 },
     activationNotifications: { failedCount: 0 },
+    paymentReceiptResult: { checkedCount: 0, postedCount: 0, reconciledCount: 0, reviewRequiredCount: 0,
+      failedCount: 0, busyCount: 0, remainingCount: 0, disabled: true },
     firstPaymentCreateResult: { ...creation }, recurringCreateResult: { ...creation },
     firstPaymentDeliveryRetry: { ...delivery }, recurringDeliveryRetry: { ...delivery },
     failedFirstPaymentRecoveryResult: { ...recovery }, failedRecurringRecoveryResult: { ...recovery },
@@ -40,8 +42,11 @@ it("covers each failing cron stage, even when other targets succeeded", () => {
   result.failedFirstPaymentRecoveryResult.verificationFailedCount = 1;
   result.failedRecurringRecoveryResult.ambiguousCount = 1;
   result.failedRecurringRecoveryResult.verificationFailedCount = 1;
+  result.paymentReceiptResult.failedCount = 1;
+  result.paymentReceiptResult.reviewRequiredCount = 1;
+  result.paymentReceiptResult.remainingCount = 1;
   const issues = collectCronIssues(result);
-  assert.equal(issues.length, 14);
+  assert.equal(issues.length, 17);
   assert.ok(issues.every((issue) => issue.tenantId === "tenant-1" && issue.count === 1));
 });
 
@@ -99,7 +104,8 @@ it("does not mark an already sent email as unsent if the audit fails", async () 
 });
 
 // Exercise the real route handler, with no database, SMTP or provider imports.
-async function exerciseRoute(options: { authorized?: boolean; listFails?: boolean; tenantFails?: boolean; stageFails?: boolean; empty?: boolean; notifyFails?: boolean; actualStages?: boolean; secondTenant?: boolean; auditFails?: boolean; revalidationFails?: boolean; heartbeatStale?: boolean; heartbeatFails?: boolean }) {
+async function exerciseRoute(options: { authorized?: boolean; listFails?: boolean; tenantFails?: boolean; stageFails?: boolean; empty?: boolean; notifyFails?: boolean; actualStages?: boolean; secondTenant?: boolean; auditFails?: boolean; revalidationFails?: boolean; heartbeatStale?: boolean; heartbeatFails?: boolean;
+  creationSucceeds?: boolean; receiptThrows?: boolean; receiptResult?: Partial<ReturnType<typeof cleanResult>["paymentReceiptResult"]> }) {
   const path = "app/api/cron/recurring-invoices/route.ts";
   const source = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
   const names = ["POST", "emptyTenantCronResult", ...(options.actualStages ? ["runTenantCronBatch"] : [])];
@@ -118,12 +124,17 @@ async function exerciseRoute(options: { authorized?: boolean; listFails?: boolea
     createDueRecurringInvoicesBatch: "recurringCreateResult", createDueFirstPaymentInvoicesBatch: "firstPaymentCreateResult",
     retryUnsentRecurringInvoiceEmailsBatch: "recurringDeliveryRetry", retryUnsentFirstPaymentInvoiceEmailsBatch: "firstPaymentDeliveryRetry",
     deliverSubscriptionActivationNotificationsBatch: "activationNotifications",
+    processPaymentReceiptsBatch: "paymentReceiptResult",
   } as const;
   const stageDependencies = Object.fromEntries(Object.entries(stageNames).map(([fn, key]) => [fn, async (context: { tenantId: string; mode: string }) => {
     assert.ok(["tenant-1", "tenant-2"].includes(context.tenantId));
     assert.equal(context.mode, "live");
     stages.push(`${context.tenantId}:${key}`);
-    if (context.tenantId === "tenant-1" && key === "firstPaymentCreateResult") throw new Error("private provider failure");
+    if (!options.creationSucceeds && context.tenantId === "tenant-1" && key === "firstPaymentCreateResult") throw new Error("private provider failure");
+    if (key === "paymentReceiptResult") {
+      if (options.receiptThrows) throw new Error("private accounting failure");
+      return { ...cleanResult()[key], ...options.receiptResult };
+    }
     if (key === "recurringCreateResult") {
       await new Promise((resolve) => setTimeout(resolve, 10));
       return { ...cleanResult()[key], createdCount: 2 };
@@ -134,6 +145,7 @@ async function exerciseRoute(options: { authorized?: boolean; listFails?: boolea
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText, {
     exports, Response, Error, crypto, console: { error: () => {} }, ...stageDependencies,
+    emptyReceiptBatch: () => cleanResult().paymentReceiptResult,
     discoverPendingOnboardingPayments: async () => ({ failedCount: 0 }),
     checkOnboardingRecoveryHeartbeat: async () => {
       if (options.heartbeatFails) throw new Error("DB unavailable");
@@ -163,9 +175,51 @@ async function exerciseRoute(options: { authorized?: boolean; listFails?: boolea
 }
 
 it("does not allow unauthenticated requests to generate emails", async () => {
-  const { response, notifications } = await exerciseRoute({ authorized: false });
+  const { response, notifications, stages, audits } = await exerciseRoute({ authorized: false, actualStages: true, creationSucceeds: true });
   assert.equal(response.status, 401);
   assert.equal(notifications.length, 0);
+  assert.deepEqual(stages, []);
+  assert.deepEqual(audits, []);
+});
+
+it("runs receipts after invoice creation and delivery, retaining posted/review/backlog counters", async () => {
+  const { response, stages, audits, notifications } = await exerciseRoute({ actualStages: true, creationSucceeds: true,
+    receiptResult: { checkedCount: 4, postedCount: 1, reconciledCount: 1, reviewRequiredCount: 1, failedCount: 1, remainingCount: 2, disabled: false } });
+  const body = await response.json();
+  assert.equal(body.status, "partial");
+  assert.equal(stages.at(-1), "tenant-1:paymentReceiptResult");
+  for (const stage of ["recurringCreateResult", "firstPaymentCreateResult", "recurringDeliveryRetry", "firstPaymentDeliveryRetry", "activationNotifications"]) {
+    assert.ok(stages.indexOf(`tenant-1:${stage}`) < stages.indexOf("tenant-1:paymentReceiptResult"));
+  }
+  assert.ok(body.tenantResults[0].completedStages.includes("paymentReceiptResult"));
+  assert.deepEqual(body.aggregate.paymentReceiptResult, { checkedCount: 4, postedCount: 1, reconciledCount: 1,
+    reviewRequiredCount: 1, failedCount: 1, busyCount: 0, remainingCount: 2 });
+  assert.equal(body.aggregate.recurringCreateResult.createdCount, 2);
+  assert.equal(audits[0].outcome, "failure");
+  assert.equal(notifications[0].issues.length, 3);
+});
+
+it("a receipt-stage exception preserves earlier billing and marks its counters unconfirmed", async () => {
+  const { response, stages, audits } = await exerciseRoute({ actualStages: true, creationSucceeds: true, receiptThrows: true });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.status, "partial");
+  assert.equal(body.aggregate.recurringCreateResult.createdCount, 2);
+  assert.ok(stages.includes("tenant-1:firstPaymentDeliveryRetry"));
+  assert.deepEqual(body.tenantResults[0].failedStages, ["paymentReceiptResult"]);
+  assert.ok(!body.tenantResults[0].completedStages.includes("paymentReceiptResult"));
+  assert.equal(audits[0].outcome, "failure");
+  assert.doesNotMatch(JSON.stringify(body), /private accounting failure/);
+});
+
+it("disabled receipt processing completes quietly after ordinary billing", async () => {
+  const { response, audits, notifications } = await exerciseRoute({ actualStages: true, creationSucceeds: true });
+  const body = await response.json();
+  assert.equal(body.status, "ok");
+  assert.equal(body.tenantResults[0].paymentReceiptResult.disabled, true);
+  assert.ok(body.tenantResults[0].completedStages.includes("paymentReceiptResult"));
+  assert.equal(audits[0].outcome, "success");
+  assert.equal(notifications[0].issues.length, 0);
 });
 
 for (const options of [{ listFails: true }, { tenantFails: true }, { stageFails: true }]) {

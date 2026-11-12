@@ -33,6 +33,7 @@ import { discoverRecurringPaymentsBatch } from "@/lib/reliability/recurring-paym
 import { collectCronIssues, type CronIssue } from "@/lib/reliability/cron-issue-summary";
 import { notifyCronIssues } from "@/lib/reliability/cron-issue-notification";
 import { checkOnboardingRecoveryHeartbeat } from "@/lib/reliability/onboarding-heartbeat-query";
+import { emptyReceiptBatch, processPaymentReceiptsBatch } from "@/lib/eboekhouden/payment-receipt-batch";
 
 function isAuthorized(request: Request) {
   const secrets = getAcceptedCronSecrets({
@@ -71,6 +72,7 @@ type TenantCronResult = {
   paymentDiscovery: Awaited<ReturnType<typeof discoverRecurringPaymentsBatch>>;
   activationJobs: Awaited<ReturnType<typeof processSubscriptionActivationJobsBatch>>;
   activationNotifications: Awaited<ReturnType<typeof deliverSubscriptionActivationNotificationsBatch>>;
+  paymentReceiptResult: Awaited<ReturnType<typeof processPaymentReceiptsBatch>>;
   failedFirstPaymentRecoveryResult: Awaited<
     ReturnType<typeof recoverFailedFirstPaymentInvoicesBatch>
   >;
@@ -108,6 +110,7 @@ function emptyTenantCronResult(input: { tenantId: string; tenantName: string; te
     paymentDiscovery: { repairedCount: 0, failedCount: 0, totalChecked: 0, assignedWebhookCount: 0, resolvedWebhookCount: 0 },
     activationJobs: { activatedCount: 0, attemptedCount: 0, exhaustedCount: 0, retriedCount: 0 },
     activationNotifications: { attemptedCount: 0, failedCount: 0, sentCount: 0 },
+    paymentReceiptResult: emptyReceiptBatch(),
     failedFirstPaymentRecoveryResult: {
       ambiguousCount: 0,
       recoveredCount: 0,
@@ -237,6 +240,9 @@ async function runTenantCronBatch(input: {
       stage("firstPaymentDeliveryRetry", () => retryUnsentFirstPaymentInvoiceEmailsBatch({ ...context, tenantId: input.tenantId })),
     ]);
     await stage("activationNotifications", () => deliverSubscriptionActivationNotificationsBatch(context));
+    // Receipt review/failure must not prevent invoices or their emails from
+    // completing. The receipt batch is separately gated and never runs in test mode.
+    await stage("paymentReceiptResult", () => processPaymentReceiptsBatch(context));
   } catch {
     // Stop dependent phases. Completed sibling/earlier results remain available;
     // the failed stage may have side effects and must be inspected before retry.
@@ -332,8 +338,11 @@ export async function POST(request: Request) {
         result.firstPaymentDeliveryRetry.sentCount > 0 ||
         result.activationNotifications.sentCount > 0,
     );
+    const reconciledReceipts = tenantResults.some(
+      (result) => result.paymentReceiptResult.postedCount > 0 || result.paymentReceiptResult.reconciledCount > 0,
+    );
 
-    if (tenantResults.some((result) => result.paymentDiscovery.repairedCount > 0) || webhookRepaired || staleRepaired || createdInvoices || deliveredEmails) {
+    if (tenantResults.some((result) => result.paymentDiscovery.repairedCount > 0) || webhookRepaired || staleRepaired || createdInvoices || deliveredEmails || reconciledReceipts) {
       try {
         revalidatePath("/");
         revalidatePath("/customers");
@@ -347,6 +356,15 @@ export async function POST(request: Request) {
 
     const aggregate = tenantResults.reduce(
       (accumulator, result) => ({
+        paymentReceiptResult: {
+          checkedCount: accumulator.paymentReceiptResult.checkedCount + result.paymentReceiptResult.checkedCount,
+          postedCount: accumulator.paymentReceiptResult.postedCount + result.paymentReceiptResult.postedCount,
+          reconciledCount: accumulator.paymentReceiptResult.reconciledCount + result.paymentReceiptResult.reconciledCount,
+          reviewRequiredCount: accumulator.paymentReceiptResult.reviewRequiredCount + result.paymentReceiptResult.reviewRequiredCount,
+          failedCount: accumulator.paymentReceiptResult.failedCount + result.paymentReceiptResult.failedCount,
+          busyCount: accumulator.paymentReceiptResult.busyCount + result.paymentReceiptResult.busyCount,
+          remainingCount: accumulator.paymentReceiptResult.remainingCount + result.paymentReceiptResult.remainingCount,
+        },
         failedFirstPaymentRecoveryResult: {
           ambiguousCount:
             accumulator.failedFirstPaymentRecoveryResult.ambiguousCount +
@@ -492,6 +510,10 @@ export async function POST(request: Request) {
         },
       }),
       {
+        paymentReceiptResult: {
+          checkedCount: 0, postedCount: 0, reconciledCount: 0, reviewRequiredCount: 0,
+          failedCount: 0, busyCount: 0, remainingCount: 0,
+        },
         failedFirstPaymentRecoveryResult: {
           ambiguousCount: 0,
           recoveredCount: 0,

@@ -19,6 +19,15 @@ const allowedFiles = new Set(
     "scripts/db-check-raw.mjs",
     "scripts/db-smoke.mjs",
     "scripts/backfill-consent-token-storage.ts",
+    // Read-only operator preview and explicitly invoked temporary-table checks.
+    "scripts/preview-eboekhouden-sales-posting.ts",
+    "scripts/verify-invoice-reliability-sql.mjs",
+    "scripts/verify-recurring-payment-recovery.ts",
+    // Ephemeral PGlite databases and a mocked pg client; no production connection.
+    "lib/eboekhouden/payment-receipt-persistence.test.ts",
+    "lib/eboekhouden/payment-receipt-runtime.test.ts",
+    "lib/eboekhouden/payment-receipt-settings.test.ts",
+    "lib/eboekhouden/sales-posting-date-review.test.ts",
   ].map((filePath) => path.normalize(filePath)),
 );
 
@@ -74,6 +83,16 @@ for (const filePath of stdout.split(/\r?\n/).filter(Boolean)) {
   const lines = content.split(/\r?\n/);
 
   for (const [lineIndex, line] of lines.entries()) {
+    // This session-bound advisory lock must stay on one checked-out connection.
+    // Permit only the existing lock statements, not arbitrary raw business SQL.
+    if (path.normalize(filePath) === path.normalize("lib/onboarding/subscription-activation.ts") &&
+        [
+          'await lock.query("BEGIN");',
+          'const result = await lock.query("select pg_try_advisory_xact_lock(hashtextextended($1, 0)) as locked", [`activation:${input.tenantId}:${input.mode}:${input.customerId}`]);',
+          'try { await lock.query("ROLLBACK"); } finally { lock.release(); }',
+        ].includes(line.trim())) {
+      continue;
+    }
     for (const bannedPattern of bannedPatterns) {
       if (bannedPattern.pattern.test(line)) {
         violations.push({

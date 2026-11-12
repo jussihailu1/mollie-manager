@@ -21,7 +21,7 @@ const local: LocalPostingInvoice = { localInvoiceId: "local-1", providerInvoiceI
 function load<T>(file: string, modules: Record<string, unknown>, globals: Record<string, unknown> = {}): T {
   const js = ts.transpileModule(readFileSync(file, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const exports = {};
-  runInNewContext(js, { exports, Error, Date, URLSearchParams, ...globals, require: (id: string) => {
+  runInNewContext(js, { exports, Error, Date, URLSearchParams, AbortSignal, ...globals, require: (id: string) => {
     assert.ok(id in modules, `Unexpected dependency: ${id}`);
     return modules[id];
   } });

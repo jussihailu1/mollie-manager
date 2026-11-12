@@ -14,6 +14,7 @@ type CronStageResults = {
   staleRepairResult: { failedCount: number };
   activationJobs: { exhaustedCount: number; retriedCount: number };
   activationNotifications: { failedCount: number };
+  paymentReceiptResult: { failedCount: number; reviewRequiredCount: number; remainingCount: number };
   firstPaymentCreateResult: { failedCount: number };
   recurringCreateResult: { failedCount: number };
   firstPaymentDeliveryRetry: { failedCount: number };
@@ -30,6 +31,9 @@ export function collectCronIssues(result: CronStageResults): CronIssue[] {
     ["Subscription activation needs another retry", result.activationJobs.retriedCount],
     ["Subscription activation exhausted retries", result.activationJobs.exhaustedCount],
     ["Activation notification delivery failed", result.activationNotifications.failedCount],
+    ["Payment receipt processing failed", result.paymentReceiptResult.failedCount],
+    ["Payment receipts require review; do not retry financial writes", result.paymentReceiptResult.reviewRequiredCount],
+    ["Payment receipt backlog remains", result.paymentReceiptResult.remainingCount],
     ["First-payment invoice creation failed", result.firstPaymentCreateResult.failedCount],
     ["Recurring invoice creation failed", result.recurringCreateResult.failedCount],
     ["First-payment invoice delivery failed", result.firstPaymentDeliveryRetry.failedCount],

@@ -20,8 +20,11 @@ describe("Drizzle migration journal", () => {
 
     assert.deepEqual(journalTags, sqlTags);
     journal.entries.forEach((entry, index) => {
-      assert.equal(entry.idx, index);
+      // Drizzle applies the ordered journal; reserved/deferred numbers may be
+      // absent. Every entry must still match its file and increase monotonically.
+      assert.equal(entry.idx, Number(entry.tag.slice(0, 4)));
       if (index > 0) {
+        assert.ok(entry.idx > journal.entries[index - 1]!.idx);
         assert.ok(entry.when > journal.entries[index - 1]!.when);
       }
     });
