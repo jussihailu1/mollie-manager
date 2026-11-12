@@ -2,7 +2,6 @@ import "server-only";
 
 import { sql } from "drizzle-orm";
 
-import { requireViewerSession } from "@/lib/auth/session";
 import { getDb, type DbClient } from "@/lib/db";
 import type { MollieMode } from "@/lib/env";
 
@@ -35,6 +34,9 @@ export async function writeAuditLog(
   let actorKind: AuditActor["kind"] = actor?.kind ?? "user";
 
   if (!actor) {
+    // System jobs and operator CLIs have an explicit actor and no Next request.
+    // Load request/session code only when a user actor must be resolved.
+    const { requireViewerSession } = await import("@/lib/auth/session");
     const session = await requireViewerSession();
     actorEmail = session.user.email ?? null;
     actorKind = "user";
