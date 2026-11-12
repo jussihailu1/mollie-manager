@@ -1,9 +1,13 @@
 # Multi-Tenant Pilot Readiness Review
 
-Status: active working note
+Status: active readiness summary; reviewed 12 November 2026
 Audience: product and engineering
 
-## Good Enough For The Pilot
+The [roadmap](implementation-roadmap.md#planned-k7-release-gate-tenant-readiness)
+defines the planned complete gate. Kify is an incasso product with an assisted
+tenant setup today. This summary does not approve a new tenant for live use.
+
+## Implemented Foundation
 
 - tenant membership and platform-operator access gating are in place for normal
   dashboard entry and tenant selection
@@ -12,12 +16,9 @@ Audience: product and engineering
   credentials instead of app-wide fallback
 - webhook and cron follow-up require resolved tenant context on the verified
   pilot seams
-- focused tenant-isolation release-gate tests exist, and current repo
-  verification passes:
-  - `npm run test:node`
-  - `npm run typecheck`
-  - `npm run lint`
-  - `npm run build`
+- focused tenant-isolation release-gate tests exist; the receipt implementation's
+  recorded validation is 796 Node tests, TypeScript, ESLint and build passing
+  (synthetic providers, no production financial calls)
 
 ## Solve Before Live Use If This Applies To Your Tenants
 
@@ -39,32 +40,38 @@ Audience: product and engineering
   - tenant row exists
   - one active invoice provider is selected for new invoices
   - only the active provider is treated as required
+  - `Kify`, the new-tenant default, checks business invoice profile and tax choice
   - `Mollie` readiness includes a read-only Sales Invoices API probe, so it
     fails clearly until Mollie Invoicing is activated in the Mollie Dashboard
   - `e-Boekhouden` readiness still requires tenant credentials plus invoice
     template and revenue ledger
   - billing/accounting settings are complete for the active provider
   - tenant subscription-policy defaults exist
+- the command does not establish the full incasso/delivery/accounting readiness
+  gate; payment capability checks for e-Boekhouden issuers, policy correctness,
+  mail routing/identity and receipt activation require separate review
 - `/api/health` now keeps platform diagnostics separate from tenant diagnostics
-  - plain `/api/health` remains a platform/runtime view
-  - `/api/health?tenantId=<tenant-id>` adds tenant-scoped live readiness and
-    reliability diagnostics
+  - unauthenticated `/api/health` exposes minimal liveness only
+  - authorized advanced/cron diagnostics expose platform details;
+    `?tenantId=<tenant-id>` adds tenant readiness and reliability details
 
-## Fine For The Pilot, But Operationally Rough
+## Pending Tenant Readiness
 
-- tenant provider credentials are managed through `npm run tenant:provision`
-  instead of a normal UI
-- tenant billing/accounting settings have a UI, but tenant credential rotation
-  and tenant subscription-policy default edits do not
-- there is no dedicated tenant-specific readiness command that checks:
-  - first-customer smoke readiness
+- tenant/membership provisioning is manual; Settings already provides Mollie
+  OAuth/profile controls, e-Boekhouden credential updates and invoice profiles
+- tenant policy edits still need a normal UI and explicit value review
+- the shared SMTP sender identifies Ayal Web in the 11 November production
+  project snapshot; independent tenants need suitable sender identity
+- receipt mapping remains CLI-only and activation is pending; the five-candidate
+  daily limit needs a tenant-volume check, with clear backlog/review visibility
+- Kify-issued invoice synchronization is missing; connecting e-Boekhouden must
+  not imply the receipt writer supports that path
+- full independent-tenant incasso, Kify invoice/delivery and applicable accounting
+  proof remains open under K7/M6; production success for Ayal Web is not that proof
 
 ## Likely Later Risk
 
 - `legacy-default` bootstrap baggage still exists in schema/runtime helpers as
   migration compatibility
-- some setup and integration docs were written during the env-backed phase and
-  need continued cleanup when pilot work settles
-- cron currently fans out across all tenants in one run, which is acceptable for
-  a small pilot but may need tighter tenant targeting and failure isolation
-  later
+- cron fans out over tenants with isolated failures; aggregate execution time and
+  receipt throughput still need checking for larger tenant volumes

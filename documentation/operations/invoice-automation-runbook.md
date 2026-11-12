@@ -9,10 +9,10 @@ Production ops checklist for automated invoice creation + app-owned customer inv
 
 ## Required Env
 
-- `INVOICE_CRON_SHARED_SECRET`
-  - Required for protected cron route auth.
+- `CRON_SECRET` or supported legacy `INVOICE_CRON_SHARED_SECRET`
+  - At least one accepted secret is required for protected cron route auth.
   - Use strong random token.
-  - If deployed on Vercel Cron, `CRON_SECRET` is also accepted.
+  - Vercel's scheduled invocation uses `CRON_SECRET`.
 - `INVOICE_EMAIL_OVERRIDE_TO` (optional)
   - If set, all customer invoice emails route to this address.
   - Intended customer recipient remains in invoice delivery metadata/audit.
@@ -118,12 +118,21 @@ development/test defaults remain test to prevent accidental live billing.
 5. Retries unsent recurring invoice emails where invoice already exists upstream.
 6. Retries unsent first-payment invoice emails where invoice already exists upstream.
 7. Sends invoice document in app email:
+   - Kify invoices use their frozen private PDF artifact and server-side attachment path.
    - PDF attachment when a trusted `https://*.e-boekhouden.nl` document URL can be downloaded within the attachment limits.
-   - fallback safe link when attachment download is unavailable, oversized, times out, or the upstream URL is not trusted.
+   - legacy provider documents retain their supported safe-link fallback when attachment fetch fails; do not treat this as a public URL path for Kify private artifacts.
+8. On the receipt branch, processes at most five gross receipt candidates per
+   live tenant after invoice/delivery/activation work. Migration 0031, global
+   flag and tenant settings are required; activation remains pending. See the
+   [receipt runbook](eboekhouden-receipt-automation.md). Review holds, failures and
+   remaining backlog appear in cron results/audits and issue summaries. Neither
+   onboarding recovery nor `sync_only` runs this financial stage.
 
-Invoice creation truth remains upstream:
+Invoice ownership remains with the original issuer:
 
-- If email send fails, upstream invoice remains created.
+- If email send fails, the existing invoice remains created; do not recreate it.
+- For Kify invoices, frozen local identity/data and private artifacts are authoritative.
+- For legacy e-Boekhouden/Mollie invoices, the original provider remains authoritative.
 - Local send success tracked via `invoice_sent_at` and `invoice_state = invoice_sent`.
 - Email retries use backoff windows with max attempts; after max attempts, delivery is marked permanent failure and a critical operator alert is opened.
 

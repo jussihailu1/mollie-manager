@@ -3,121 +3,34 @@
 Status: active; sole authority for development order
 Audience: product and engineering
 
-## Current Focus: Invoice Sales Posting Release Preparation — 10 November 2026
+**Product purpose, confirmed 12 November 2026:** Kify makes automatic direct debit
+(incasso) as easy as possible for businesses. Invoicing and integrations with
+bookkeeping software support that collection workflow. Kify is not a bookkeeping
+product; the product boundary below governs feature selection.
 
-The user authorized fixing the three posting-review findings locally, regression
-testing and this roadmap update, preserving prior work and original invoice dates.
-No deployment, migration or financial entries are authorized.
-The shared e-Boekhouden invoice client now includes the sales mutation in future
-invoice creation, with debtor-ledger resolution and provider reference-uniqueness
-checking. Both scheduled recovery batches and explicit replacement recovery now
-require the sales entry before storing success or sending. Transient failures
-before any financial request are eligible for safe retry; uncertain POST outcomes
-remain held. Issuance freezes the expected date/reference, and verification rejects
-changed dates. Delivery uses frozen original date evidence, without initiating
-accounting repair. See [the fixes and validation](../operations/eboekhouden-posting-review-fixes-2026-11-10.md).
-Local validation now passes 708 Node tests and TypeScript; the isolated posting
-release passes 677 tests and TypeScript without the deferred Mollie changes.
-Its production build passes with a dummy build-only secret and no production
-credentials; changed-file ESLint and documentation checks also pass.
-The production combined invoice/posting flow remains unproven; no live gate is
-closed by mocked financial-write tests.
+## Current Delivery Order — 12 November 2026
 
-The 8 November preview scanned all available administration history: 276 mutations,
-56 invoice documents, 44 ledgers and 14 outstanding debtor entries. None of the
-ten Kify-linked invoices has a matching sales entry. Eight invoices (EUR 164.83)
-have proposed missing-sale payloads; F00037 and F00038 (EUR 44.89) are held because
-their document dates differ from the current schedules. The 10 November read-only
-review explained both: they were issued early, with original payment terms and
-emails already pointing to the correct collection dates. Preserve their original
-**1 June 2026** dates; do not substitute 5 June or 26 September. Their snapshots
-lack issuance dates, so the preview compared against planned send dates.
-The original 8 November preview remains eight proposals plus two holds. A fresh
-full read-only scan at 22:41 UTC on 10 November uses two explicit evidence-backed
-date reviews and now proposes **ten missing sales entries, EUR 209.72**. The eight
-earlier payloads are unchanged. Reviews are bound to tenant/mode, invoice identity,
-amount, original date and payment terms; mismatch evidence and all duplicate/
-correction checks remain visible. No document was changed, recreated or resent.
-See [the refreshed preview and isolated release plan](../operations/eboekhouden-release-preparation-2026-11-10.md).
+The invoice-date and sales-posting safeguards are live. The previously authorized
+historical repairs are complete; never rerun them or change original invoice dates.
+Detailed customer and financial evidence stays outside public Git history.
 
-The connector evaluation is complete: PSPbetalingen handles matching, but excludes
-fees/payouts and cannot reliably match Kify's current payment references. It remains
-inactive. The recommended accounting split is Kify-owned sales and gross receipts,
-with monthly fees, bank transfers and reviewed exceptions in e-Boekhouden initially.
-Customer-payment posting is not implemented by this slice. Optional Mollie
-bookkeeping permissions are not needed for this limited setup; preserve their local
-implementation and defer migration 0030, deployment and merchant reauthorization.
+| Order | Work | Completion gate |
+| --- | --- | --- |
+| 1 | Existing-tenant receipt rollout | Verify a clean release from production, apply migration 0031, verify the tenant's own account/profile and open periods, configure a future cutoff, deploy and activate. Observe the first genuine automatic receipt separately. |
+| 2 | Tenant readiness | Complete the assisted setup, tenant policies, mail identity, explicit accounting support and receipt-capacity acceptance below. Preparation can proceed while a genuine transaction is pending. |
+| 3 | Independent-tenant incasso proof | Prove consent, mandate, subscription activation, collection status and failure handling alongside K7 invoice/delivery/recovery/isolation criteria and applicable M6 proof. Complete K8 only after K7 passes. |
+| 4 | Bookkeeping integration supporting collections | Synchronize Kify-issued invoices and their receipts to e-Boekhouden. Assess fees/payouts separately against actual collection-administration needs. |
+| 5 | Broader self-service product | Tenant signup/invites, broader roles, platform billing and later subscription features follow the assisted pilot. |
 
-The release has been isolated from the deferred OAuth/schema changes in a separate
-local checkout; the shared workspace and all earlier work are preserved. The
-reviewed-date manifest and refreshed report remain private outside Git.
+See the [receipt release record](../operations/automatic-receipt-release-2026-11-12.md) and
+[receipt runbook](../operations/eboekhouden-receipt-automation.md) for verified
+status. Local tests and existing-tenant provider reads do not close genuine-payment
+or independent-tenant proof. Never create a financial entry solely to obtain proof.
 
-Next: review the isolated release and agree its controlled first-invoice/PDF/delivery
-proof. Deployment enables financial writes from existing creation jobs, so the
-release and that effect need explicit later authorization. Historical correction
-is a separate ten-sale proposal, still subject to accounting-period/manual-correction
-review and fresh duplicate checks. No historical apply tool exists or has run.
-Merchant onboarding safeguards/M6, legacy-key retirement, JHS deferral and K7/K8
-remain open as described below. The payment-link key configured in e-Boekhouden is
-an external dependency to identify before old-key retirement.
-
-### Preserved Connect Review Context — 7 November 2026
-
-Continuation decision: the user deferred JHS cleanup and authorized the optional
-bookkeeping connection upgrade. Its local implementation and focused checks are
-complete; migration application, deployment and live merchant reauthorization
-remain deferred under the 8 November decision above. See the [connection contract](../integrations/mollie-connect-contract.md).
-Duplicate-organization prevention, payout readiness, independent-merchant proof
-and accounting writes remain separate work. Do not interpret JHS deferral as
-provider-side disconnection or completed cleanup.
-
-The user prioritized bookkeeping integration, then asked to settle and document
-Connect ownership before fixes. The accepted
-[account ownership model](../integrations/mollie-account-ownership.md) keeps one
-platform OAuth app and tenant-specific merchant authorizations. Ayal Web uses
-OAuth against the same organization that owns Kify's app; its retained API key
-is not the normal runtime path. No second organization is required just to
-separate these roles under the same legal business.
-
-Continue with the [review findings and gates](../operations/connect-and-bookkeeping-review-2026-11-07.md):
-
-1. JHS partnership/authorization review is deferred at the user's request.
-   The completed local cleanup did not change Mollie.
-2. Design merchant onboarding checks, duplicate-organization handling and
-   bookkeeping consent/readiness without breaking payment-only connections.
-3. Review the locally implemented invoice-posting correction and completed
-   historical preview, resolve held items, then design gross-payment, fee and
-   payout reconciliation with a single writer per entry.
-4. Review legacy-key retirement against actual consumers and M6 proof.
-
-This is the current user-directed review order, ahead of the dated operational
-queue below. Documentation and review do not themselves authorize external
-changes, financial backfills, deployment or live transactions. K7/K8 remains
-the active product milestone; no live gate is closed by these read-only checks.
-The invoice-posting/preview slice above has explicit local implementation approval;
-additional slices and production writes remain outside that approval.
-
-## Historical Deferred Operational Follow-Ups — 22 October 2026
-
-The following is the October handoff, not a current production snapshot. Use
-the current focus above first. Later changes include the Cloudflare recovery
-timer and invoice watchdog documented in [invoice reliability](../../operations/invoice-reliability.md).
-Do not infer that the watchdog proves monitoring survives Kify/SMTP failure.
-
-**User deferred this work on 22 October 2026.** Its unclosed gates remain visible in the
-[resume checklist and evidence](../operations/production-health-and-followups-2026-10-22.md#deferred-by-user--next-kify-session-starts-here):
-genuine webhook processing, independent monitoring, operator email receipt,
-post-release daily recovery/ordinary invoice proof, and the nine development-only
-braces audit entries. Independent monitoring is the recommended first implementation
-in that historical proposal; Cronitor/Axiom is not an accepted service selection.
-
-Recheck dated evidence read-only. Do not automatically implement, deploy, change
-configuration, run billing, replay webhooks or send email. Keep the intentional
-`info@ayalweb.com` invoice override unless superseded by a later explicit decision.
-No background monitoring/reminder was installed by that October investigation.
-The handoff records local Git state, preserved worktrees, next observation dates,
-acceptance criteria and authorization boundaries. K7/K8 remains the active product
-milestone; these deferred items are not marked complete.
+The existing-tenant future-only rollout is authorized after its release checks pass.
+Optional bookkeeping consent and its old migration 0030 remain excluded; regenerate
+that work as 0032 or later when resumed. Unrelated repairs, fees/payouts, provider-side
+relationship cleanup and legacy-key revocation are outside this release.
 
 ## How To Use This Roadmap
 
@@ -140,16 +53,45 @@ roadmap wins. Update the conflicting document before continuing.
 
 ## Product End Goal
 
-Each tenant can issue and deliver compliant invoices through Kify without
-depending on Mollie Invoicing or e-Boekhouden activation. Kify owns invoice
-identity, immutable data, rendered documents, delivery, resend, download, and
-history. Mollie remains authoritative for payment collection, mandates,
-subscriptions, and payment state; e-Boekhouden is optional accounting sync.
+Kify makes automatic direct debit (incasso) easy for businesses: connect the
+business's payment account, onboard a customer and obtain consent/a valid mandate,
+set up recurring collections, and see what was collected or needs attention.
+Reliable activation, collection status, customer communication and clear exception
+handling are the core product outcomes. Invoicing and bookkeeping integrations
+reduce the administration around that workflow.
+
+Responsibilities:
+
+- **Kify:** the business/customer collection workflow, consent evidence,
+  subscription setup and lifecycle, automation, status and follow-up, plus the
+  invoices and communications needed for those collections.
+- **Mollie:** payment execution and authoritative mandate, subscription and payment
+  state. Kify acts on verified provider state and must not invent collection success.
+- **Bookkeeping software such as e-Boekhouden:** the accounting administration,
+  general ledger, financial statements and tax-return workflows. Kify synchronizes
+  the relevant invoice/payment records through tenant-owned integrations and shows
+  their synchronization status. It does not replace that accounting product.
+
+Each tenant can issue and deliver invoices supporting its collections without
+depending on Mollie Invoicing or e-Boekhouden activation. Kify owns the identity,
+immutable data, rendered documents, delivery and history of Kify-issued invoices;
+historical provider-owned invoices keep their original ownership. An accounting
+connection is optional for a tenant, while reliable bookkeeping integration is an
+important supporting product capability.
 
 Tenant business flows remain explicitly tenant-scoped and use each tenant's
 Mollie organization without API-key sharing, credential mixing, or implicit
 fallback. Normal operators see invoice readiness separately from Mollie payment
 readiness.
+
+Prioritize features by whether they make incasso easier to set up, more reliable,
+clearer to manage, or less work to administer. Account mappings belong in integration
+setup; normal product use should focus on customers, collections and exceptions.
+General journal entry, account-plan management, tax returns and general financial
+reporting are outside Kify's product scope. Fee/payout integration is considered
+only for a concrete collection-administration need, with the bookkeeping provider
+remaining the accounting authority. The completed historical repairs were bounded
+integration cleanup, not a new ongoing ledger-management feature.
 
 ## Verified Baseline
 
@@ -184,6 +126,9 @@ a real connected tenant.
 
 This is the only active product milestone.
 
+This milestone supplies the invoice/document part of the incasso workflow; it
+does not redefine Kify as a standalone invoicing or bookkeeping product.
+
 Goal: implement and prove Kify-native automated invoicing using the detailed
 contract in
 [`kify-owned-invoicing-implementation-plan.md`](./kify-owned-invoicing-implementation-plan.md).
@@ -198,124 +143,72 @@ verification and controlled rollout is the current implementation milestone.
 The active program is complete only after controlled live-tenant proof and K8
 archives the implementation plan and promotes the next roadmap milestone.
 
-### Active Correctness Slice: Automatic Subscription Activation
+### Planned K7 Release Gate: Tenant Readiness
 
-A user-reported paid-first-installment activation failure is being corrected as
-a bounded money-flow reliability slice alongside K7. Paid real-installment and
-mandate-only onboarding use server-owned activation; Mollie's webhook retry
-window provides recovery without a higher-frequency platform scheduler, and
-tenant/customer notifications remain tenant-scoped. Controlled test and live
-proof remain required.
+Status: planned; next implementation slice after the existing-tenant receipt
+release preparation/activation. A pending genuine transaction can be observed
+when due while this preparation proceeds. No additional tenant is live-approved
+by the code-level readiness checks alone.
 
-### Active Correctness Slice: Cron Reliability
+Goal: an independent tenant can complete an assisted setup using its own business
+details, payment account and optional accounting connection, with explicit blockers
+before live use. Manual workspace/membership provisioning remains acceptable for
+this pilot. Self-service signup and broad SaaS administration are later work.
 
-The bounded cron correctness slice under K7 is tracked in
-[`TEMP-billing-recovery-roadmap.md`, step 4](../operations/TEMP-billing-recovery-roadmap.md).
-It corrects Kify first-payment routing and empty/partial failure reporting, and
-adds consolidated operator notifications without replaying billing on alert
-failure. Local validation and release evidence are recorded in the
-[cron release procedure](../operations/cron-reliability-release-2026-10-08.md).
-Commit `1179c82` is deployed and release health/configuration checks passed on
-8 October 2026. The 22 October read-only check verified daily completion through
-22 October; operator notification inbox receipt remains unproven. Both existing
-live Mollie subscription webhook URLs were corrected on 22 October and verified
-with provider GETs; genuine webhook receipt/processing remains unproven. See
-[current health findings and decision log](../operations/production-health-and-followups-2026-10-22.md).
-Additional Cloudflare sync-only recovery is optional: first verify the webhook
-flow and scheduled daily cron. If daily fallback latency is unacceptable, start
-a separate bounded job every two hours and measure usage before increasing its
-frequency. See step 5 of the temporary roadmap for the decision and estimate.
-The full billing cron stays daily. Independent monitoring and Mollie Connect
-ownership remain separate backlog items.
+Acceptance:
 
-### Immediate Maintenance And Operational Follow-Up — 22 October 2026
+1. **One end-to-end setup/readiness view.** Cover membership, the intended Mollie
+   organization/profile and payment capabilities, invoice issuer, business/customer
+   billing details, tax choice, delivery and optional accounting separately. Payment
+   readiness must apply even when e-Boekhouden issues invoices. Missing or revoked
+   credentials and conflicting organization/profile ownership have actionable,
+   tenant-scoped outcomes; the current provider-aware check is not the whole gate.
+2. **Tenant-owned policies and customer communication.** Let the tenant review and
+   edit terms/privacy URLs, terms version and cancellation contact without silently
+   accepting another business's provisioning defaults. Use a suitable Kify platform
+   sender or verified tenant identity for customer mail, and show effective delivery
+   routing. On 11 November the production project had no recipient override, but
+   its shared SMTP sender still identified Ayal Web. Tenant-specific SMTP is optional;
+   Ayal Web branding must not be the implicit sender for independent tenants.
+3. **Explicit invoice/accounting support.** Kify is the default invoice issuer.
+   Its invoices are not currently synchronized to e-Boekhouden by the receipt writer.
+   Connecting e-Boekhouden must not imply that unsupported synchronization works.
+   Show whether accounting is unconfigured, supported/configured or unavailable for
+   the chosen path. An assisted Kify-only pilot does not require accounting sync;
+   offering automated bookkeeping for Kify invoices does require that later feature.
+4. **Tenant receipt setup and operating limits.** Provide a settings flow for the
+   tenant's verified Mollie profile, existing financial clearing account and future
+   activation date. Preserve disabled-by-default behavior, credential binding,
+   historical exclusion and durable duplicate prevention. Never assume ledger code
+   1030 or create financial entries as a readiness probe. Include the accounting-period
+   review and single-writer prerequisite. Assess the five-candidate daily batch against
+   expected tenant volume, with visible backlog/review states and an adequate capacity
+   plan before promising timely automatic accounting. Gross receipts, fees, payouts,
+   refunds and partial payments must have clear supported/manual boundaries.
+5. **Independent-tenant verification and truthful documentation.** Cover setup,
+   failure/reconnect paths and isolation with appropriate automated tests. Before
+   independent-tenant go-live, record the controlled real payment, invoice, recipient
+   delivery, webhook/recovery and applicable accounting evidence under the K7/M6
+   contracts; preserve existing tenants and original documents. Update the tenant
+   setup guide to reflect the existing provider connection forms and the new setup
+   flow. Neither local tests nor Ayal Web's successful provider reads close this gate.
 
-These are correctness and readiness follow-ups, not additional product milestones.
+The K7 implementation contract links to this acceptance scope. The current
+provider-aware readiness foundation and implemented receipt safeguards remain
+useful; this planned work completes the operator/product setup around them.
 
-- **Read-only operational recheck, 22 October 23:45–23:48.** Production still
-  serves READY `e1f895c`; ten health/access GET checks pass again. Local master
-  remains at documentation-only `a9f68ec`, one commit ahead of GitHub; existing
-  worktrees and their changes are preserved. No new webhook since repair: total
-  30, latest 12 September. Both subscription URLs are still correct, and all
-  seven provider payments match local paid state. Fifteen daily recovery audits
-  succeeded through 22 October, but the latest predates the security release;
-  observe the first scheduled run on this revision on 23 October. No overdue
-  live invoice backlog; next ordinary invoice is 27 October.
-  Operator delivery remains unproven: no notification attempt audits since
-  8 October and no matching messages in bounded connected-mailbox searches.
-  Axiom's Ayal Web organization has no monitors/notifiers or identifiable Kify
-  dataset. Current public health cannot detect database or missed-cron failures.
-  First proposed implementation is independent external uptime/job monitoring
-  (Cronitor candidate), dedicated read-only diagnostics credentials and retained
-  runtime/delivery-failure signals; proposed UTC deadline 04:15 allows Vercel's
-  scheduling window. No implementation or external setup is authorized yet.
-  Detailed thresholds, isolated acceptance tests, evidence limits and subsequent
-  one-message operator proof are in the
-  [current operational handoff](../operations/production-health-and-followups-2026-10-22.md).
-  Fresh production configuration reads confirm cron enabled at `0 3 * * *`,
-  Kify URL values and the preserved `info@ayalweb.com` recipient override.
-  Fresh audits remain zero production / nine development-only braces entries.
-- **Subscription webhook URL repair complete; genuine delivery proof open.**
-  On 22 October both active live Ayal Web subscriptions were patched only to
-  `https://kify.app/api/webhooks/mollie`, without legacy secret query parameters.
-  Provider GETs verified all other fields unchanged; all 33 database tables and
-  seven historical provider payments were unchanged. Encrypted rollback is
-  retained outside Git. Observe the next genuine tenant-scoped webhook and
-  successful processing; no replay, billing, email, or deployment test.
-  Three managed live payment links also retain legacy destinations (one Vercel,
-  two ngrok). Follow-up provider inspection confirmed all three were already paid
-  in April and are single-use; retain these historical records unchanged. Their
-  new-payment repair follow-up is closed; payment-link webhook URL updates are
-  not documented by Mollie. New onboarding links already use the configured URL.
-  Exact IDs and evidence are in the current health handoff. The user subsequently
-  authorized local documentation checkpoints and the issue 4 review below;
-  push and deployment remain unauthorized.
-- **Dependency-security fixes released and production checks passed.**
-  Authorized push deployed `e1f895c` to Kify; Vercel READY, exact SHA/alias
-  verified. Ten production GET checks pass, including database/platform health.
-  See the [release checkpoint](../operations/security-release-2026-10-22.md)
-  for current release status; earlier no-deploy statements are historical.
-  User authorized implementation and separate local dependency/UI commits.
-  `3c263b9` updates Next.js/eslint-config-next to 16.4.2 and ip-address to 10.7.4.
-  The separate UI/test changes resolve effect/state lint errors and restore
-  lifecycle explanations, with cancellation and repair-throttle coverage.
-  Clean install, build, typecheck, loopback SMTP and eight local auth/access
-  checks pass. The subsequent development-tooling review adds a tested scoped
-  core-utils/esbuild 0.25.12 override, clearing four moderate entries without
-  changing Drizzle/shadcn/Next versions. Full suite: 523/523; lint: zero
-  errors/warnings; production audit: zero findings. Full audit retains nine
-  development-only high entries, all derived from unpatched braces. Original implementation
-  `4cb19ed` and these follow-ups are included in the verified production release.
-  The app mailer uses an npm alias to keep it independent from NextAuth v5's
-  unused optional email-login peer; Google OAuth stays on v5. Full development
-  dependency findings remain separately documented. See the
-  [22 October fixes and validation](../operations/security-dependency-fixes-2026-10-22.md)
-  for validation, limitations and the remaining production release gate. Do not
-  use `npm audit fix --force` or downgrade authentication to silence audit output.
-- **Migration snapshot debt repaired and included in the release.** Added linked 0027–0029 snapshots
-  and declared the tax-treatment check already present in SQL. Existing SQL,
-  journal and snapshots are byte-for-byte unchanged. Two offline generations
-  produce no SQL; the new `db:check-snapshots` guard rejects deliberate drift.
-  Full suite 528/528, lint/typecheck/build pass. No migration was applied.
-  See [repair evidence](../operations/migration-snapshot-repair-2026-10-22.md).
-  The [development dependency review](../operations/dev-dependency-review-2026-10-22.md)
-  retains override compatibility evidence and the separate remaining braces risk.
-- **Scheduled cron execution verified through 22 October.** All 15 daily
-  completion audits succeeded; all 14 post-deployment runs completed all 13 stages.
-  No overdue live invoice backlog. No issue emails were attempted, as no issues
-  were recorded after deployment. A separately approved operator-only delivery
-  check and inbox confirmation remain open; never invoke billing to test email.
-- **Invoice email routing is intentional and correct.** On 8 October the user
-  confirmed that `INVOICE_EMAIL_OVERRIDE_TO=info@ayalweb.com` must remain active.
-  Successful delivery records refer to operator delivery under that override;
-  this is the accepted workflow, not an outstanding defect or configuration TODO.
-  Do not remove the override or resend invoices to customers without a later
-  explicit change request.
+### Existing Reliability Work And Deferred Follow-Ups
 
-Independent missed-run monitoring remains an important reliability follow-up.
-K7 controlled Kify-native invoice proof remains a gate before broader rollout;
-it is separate from the waived e-Boekhouden KOR test. Faster Cloudflare recovery
-and Connect ownership design remain later work.
+Automatic subscription activation and cron reliability safeguards are implemented.
+Their remaining genuine webhook, delivery and controlled invoice proof stays open.
+Use the [invoice runbook](../operations/invoice-automation-runbook.md) and
+[invoice reliability reference](../../operations/invoice-reliability.md) for current
+procedures. Do not invoke billing merely to test notification delivery.
+
+Independent monitoring, provider-side relationship cleanup, optional bookkeeping
+consent and legacy-key retirement remain separately scoped. Preserve the dependency
+review and the **17 November 2026** SDK-review checkpoint below. Historical recipient
+overrides are not current configuration; check effective routing before tenant use.
 
 ## Externally Blocked Milestone: Mollie Connect M6
 
@@ -428,8 +321,9 @@ POS, Marketplace flows, broad role systems, or unrelated operator polish.
 ## Later Backlog
 
 After Kify-owned invoicing is complete and its plan is retired, reassess this
-queue in order of customer and money-flow value while keeping the blocked M6
-live proof visible:
+queue under the current delivery order above while keeping the blocked M6 live
+proof visible. Basic tenant policy editing has moved into the planned K7 tenant
+readiness gate; do not leave it behind a later general settings project.
 
 - **Ownership clarification completed, 7 November 2026.** The user accepted
   the [platform/merchant model](../integrations/mollie-account-ownership.md).
@@ -468,16 +362,15 @@ live proof visible:
 4. balances and settlements reconciliation for payout/accounting visibility
 5. optional e-Boekhouden synchronization for Kify-owned invoices
 6. profile and payment-method health improvements beyond the Connect completion gate
-7. tenant subscription-policy settings UI
-8. plan catalog, invoice-line templates, VAT, and revenue-ledger mapping
-9. discounts, trials, setup fees, and proration after catalog policy exists
-10. customer self-service cancellation and richer entitlement rules
-11. per-subscription policy overrides
-12. global button contrast and accessibility audit through shared design-system
+7. plan catalog, invoice-line templates, VAT, and revenue-ledger mapping
+8. discounts, trials, setup fees, and proration after catalog policy exists
+9. customer self-service cancellation and richer entitlement rules
+10. per-subscription policy overrides
+11. global button contrast and accessibility audit through shared design-system
     tokens; do not apply one-off route-level color fixes
-13. broader roles, self-serve tenant administration, invites, and platform billing
-14. Application Fees or Resell Pricing after commercial and tax policy is approved
-15. low-priority Dutch address lookup for invoice-profile forms; use PDOK as an
+12. broader roles, self-serve tenant administration, invites, and platform billing
+13. Application Fees or Resell Pricing after commercial and tax policy is approved
+14. low-priority Dutch address lookup for invoice-profile forms; use PDOK as an
     optional assist, keep manual entry available, and do not let lookup failure
     block invoice issuance
 

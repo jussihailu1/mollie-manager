@@ -8,6 +8,10 @@ Authority: [`implementation-roadmap.md`](./implementation-roadmap.md) remains th
 
 ## Purpose And Completion Definition
 
+This is a supporting milestone for Kify's automatic-incasso workflow. Product
+purpose and feature boundaries are defined by the roadmap, not by this invoice
+implementation contract.
+
 Implement tenant-owned invoice issuance that works independently of Mollie
 Invoicing or e-Boekhouden. Kify must own the legal invoice identity, immutable
 invoice data, rendered PDF, delivery evidence, resend, download, and history.
@@ -25,7 +29,10 @@ This program is complete only when:
 Code completion without the live pilot and documentation retirement is not
 program completion.
 
-## Current State
+## Starting State — 21 July 2026
+
+The following describes the pre-implementation baseline. K1–K6 are now implemented;
+the progress table and roadmap retain the open K7/K8 live and completion gates.
 
 The current `InvoiceProviderAdapter` combines upstream invoice creation,
 provider readiness, existing-invoice lookup, display metadata, and remote
@@ -54,9 +61,10 @@ path extends the system; it does not rewrite or backfill historical invoices.
   document retrieval during and after migration.
 - Renderer identity is stored as text, not a PostgreSQL enum, so a renderer can
   be added without changing invoice ownership or migrating the invoice schema.
-- Active issuer migration and renderer selection are platform-controlled.
-  Normal tenant operators see Kify invoicing and readiness, not a provider or
-  renderer selector.
+- Renderer selection remains an implementation concern. Normal tenant Settings
+  defaults to Kify issuance and permits explicit e-Boekhouden selection after
+  tenant setup; the legacy Mollie option is retained for existing setups.
+  Provider changes affect future invoices only and preserve existing ownership.
 
 ### Native Rendering
 
@@ -524,6 +532,13 @@ git diff --check
 ### K7: Migration Verification And Controlled Rollout
 
 Status: active
+
+The 11 November roadmap adds a planned
+[tenant-readiness release gate](./implementation-roadmap.md#planned-k7-release-gate-tenant-readiness)
+after the existing-tenant receipt release and before an independent live-tenant
+pilot. Its setup, policy, delivery identity, accounting-support and capacity criteria
+supplement the rollout acceptance below. This planning update does not mark that
+work implemented or close the K7/M6 live-proof gates.
 
 Run full verification, render and inspect final fixtures, prove private storage,
 exercise test mode, and then complete one controlled live tenant flow without

@@ -13,8 +13,10 @@ tenant-isolation baseline.
 ## System Roles
 
 - Mollie: payment collection and mandate source of truth
+- Kify: incasso workflow, customer consent, automation and status; the default
+  issuer of new tenants' invoices, with frozen data and private PDF artifacts
 - Invoice provider truth: each stored invoice belongs to the provider that
-  created it (`eboekhouden` or `mollie`)
+  created it (`kify`, `eboekhouden`, or legacy `mollie`)
 - e-Boekhouden: bookkeeping integration plus one supported invoice provider
 - PostgreSQL: local operational state, sync state, tenant-scoped business data,
   alerts, audit logs, invoice queues, and consent evidence
@@ -72,6 +74,11 @@ There is no acceptable implicit app-wide tenant for tenant business flows.
 5. Invoice automation uses tenant-scoped local billing rows plus the tenant's
    active invoice provider setting to create invoices, while app-owned delivery
    continues to send and track customer email delivery.
+6. The isolated receipt branch adds an opt-in daily stage for verified gross
+   receipts against e-Boekhouden-issued invoices. Tenant mapping, a future cutoff
+   and the global flag are required; migration 0031 and activation are pending.
+   Kify-issued invoice synchronization, fee/payout accounting and general ledger
+   management are not provided by this stage.
 
 ## Main App Surfaces
 
@@ -101,7 +108,9 @@ encoded in the path for the pilot.
   and invoice-automation diagnostics
 - `/api/webhooks/mollie`: webhook intake and replayable event storage
 - `/api/cron/recurring-invoices`: protected repair, invoice, and delivery
-  automation entrypoint
+  automation entrypoint, plus the disabled-by-default receipt stage on its branch
+- `/api/cron/onboarding`: bounded onboarding recovery; does not post receipts
+- `/api/mollie/connect` and `/mollie/connect/callback`: tenant OAuth connection
 - `/api/eboekhouden/relations`: relation lookup, detail, and linking support
 
 All tenant business endpoints and background entrypoints must resolve tenant
@@ -117,7 +126,10 @@ credentials.
 - `lib/mollie/*`: tenant-aware Mollie client resolution and webhook helpers
 - `lib/eboekhouden/*`: tenant-aware e-Boekhouden client/session resolution,
   relation linking, invoice creation, reconcile, and retry logic
-- `lib/invoicing/*`: provider adapters and active-provider resolution
+- `lib/invoicing/*`: provider resolution, canonical Kify invoice issuance,
+  PDFKit rendering, private Blob artifacts and tenant-fenced document services
+- `lib/eboekhouden/payment-receipt-*`: receipt verification, tenant configuration,
+  durable claims, one-attempt transport, reconciliation and bounded scheduling
 - `lib/invoices.ts`: provider-neutral stored invoice reads and writes
 - `lib/onboarding/*`: onboarding actions and data reads
 - `lib/operations/*`: operator actions around subscriptions and workflows
@@ -137,6 +149,10 @@ Required tenant/platform entities:
 - tenant-owned provider credential storage
 - `tenant_subscription_policy_defaults`
 - `tenant_billing_settings`
+- `tenant_invoice_profiles` and tenant-owned customer billing profiles
+- `tenant_mollie_connections`
+- `tenant_eboekhouden_receipt_settings` and `eboekhouden_payment_receipts`
+  (receipt branch migration 0031; not yet applied in production)
 
 Required tenant business entities:
 
@@ -147,6 +163,7 @@ Required tenant business entities:
 - `payment_links`
 - `subscription_onboarding_consents`
 - `recurring_billing_schedules`
+- provider-neutral `invoices` and Kify invoice snapshot/line/artifact records
 - `alerts`
 - `audit_logs`
 - `webhook_events`

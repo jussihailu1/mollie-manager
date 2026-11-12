@@ -44,15 +44,8 @@ legal business. A second organization is not required solely to distinguish
 platform and merchant roles. A future change of legal ownership requires its
 own provider/accounting review.
 
-Verified on 7 November 2026:
-
-| Role | Current identity |
-| --- | --- |
-| Platform organization and Ayal Web merchant organization | J Hailu Solutions, `org_19456510` |
-| Ayal Web payment profile | `pfl_Befk5XwRXj` |
-| Kify OAuth application owned by that organization | `app_uo6KhjABeFmEKT5YtzJSBoDw` |
-| Production callback | `https://kify.app/mollie/connect/callback` |
-
+Production identity was reviewed against the connected merchant. Exact organization,
+profile and application identifiers are retained in private operator evidence.
 The same organization currently serves two roles. The application identity and
 the tenant's authorization remain distinct. Existing OAuth credentials
 successfully read the organization, selected profile and an existing live paid
@@ -138,12 +131,18 @@ The latter reads Mollie's own fee invoices; it is not `sales-invoices.read`.
 
 These read permissions are candidates for the bookkeeping integration, not
 already-granted production access. The optional consent upgrade is now
-implemented locally; migration 0030, deployment, merchant reauthorization and
+implemented separately in the preserved shared workspace; its original migration
+0030, deployment, merchant reauthorization and
 live endpoint proof remain. See the [connection contract](mollie-connect-contract.md).
 Do not simply
 add them to the globally required scope list and break existing payment-only
 connections. Missing bookkeeping consent should have an explicit readiness
 state. Payout/transfer write permissions are not needed for reconciliation.
+
+The receipt branch excludes that optional bookkeeping-consent work. If resumed
+after receipt migration 0031, regenerate it under a later number (0032 or above)
+and a fresh journal timestamp; do not apply the old 0030 out of order. See the
+[receipt migration contract](../operations/eboekhouden-receipt-automation.md).
 
 ## References
 

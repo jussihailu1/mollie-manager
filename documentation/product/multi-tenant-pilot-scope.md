@@ -58,7 +58,9 @@ The pilot baseline uses:
   or invalid.
 - No tenant business flow may use another tenant or a platform-global provider account.
 - Shared platform SMTP is acceptable for this baseline; tenant-specific sender
-  credentials and branding remain later work.
+  credentials remain later work. The planned readiness gate requires a suitable
+  Kify platform sender or verified tenant identity; Ayal Web branding must not be
+  implicitly used for independent tenants.
 
 Mollie Connect OAuth foundations and existing-flow migration are implemented;
 manual API keys remain temporary compatibility while M6 live proof is
@@ -105,7 +107,7 @@ The existing operator path remains valid during OAuth migration:
 
 1. create tenant and initial membership
 2. seed tenant subscription-policy and billing defaults
-3. store tenant provider credentials
+3. connect the tenant's Mollie account in Settings; optionally connect e-Boekhouden
 4. select and configure the active invoice provider
 5. run tenant readiness
 6. verify legal/contact defaults
@@ -132,7 +134,7 @@ These gates remain mandatory acceptance checks during Mollie Connect work.
 - tenant invites and broad membership administration
 - full admin, finance, support, developer, and auditor role matrix
 - platform subscription billing
-- tenant-specific SMTP credentials or sender branding
+- tenant-specific SMTP credentials and custom branding beyond suitable sender identity
 - platform-wide impersonation
 - Marketplace, Split Payments, balance transfers, or multi-seller checkout
 - route namespacing by tenant slug

@@ -35,6 +35,11 @@ Example:
 
 ## Invoice Automation Ops
 
+Commands that invoke cron, retry, repair or `--apply` can write records or send
+mail. Choose explicit tenant/mode/environment scope and distinguish evidence
+reads from execution; a successful HTTP response alone is not proof of a healthy
+batch. See the [invoice runbook](../operations/invoice-automation-runbook.md).
+
 - `npm run ops:invoice-check -- <mode> <limit>`: run automation evidence checks
 - `npm run ops:invoice-readiness`: validate platform environment and scheduler readiness
 - `npm run tenant:readiness -- --tenant-id <tenant-id>`: validate tenant-owned live readiness for the active invoice provider, including Mollie Sales Invoices activation when `Mollie` is active
@@ -43,6 +48,16 @@ Example:
 - `npm run ops:invoice-autonomy-report -- <mode> <backlogLimit> <gateLimit>`: combined readiness, backlog, and gate report
 - `npm run ops:invoice-requeue-safe-failed -- <mode> [--apply]`: queue safe retry rows
 - `npm run ops:invoice-self-heal -- <mode> [--apply-requeue] [--run-cron-check]`: controlled cleanup flow
+
+## Receipt Automation Configuration
+
+The receipt branch adds
+`node --conditions=react-server --import tsx scripts/configure-eboekhouden-receipts.ts`.
+It requires an explicit tenant and either `--enable` with profile, clearing ledger
+and future cutoff, or `--disable`. The default is a verified preview; `--apply`
+saves configuration, not a financial entry. Migration 0031, the global flag and
+tenant activation are separate gates. Use the full arguments and ordering in
+the [receipt automation runbook](../operations/eboekhouden-receipt-automation.md).
 
 ## Retention And Compliance Ops
 

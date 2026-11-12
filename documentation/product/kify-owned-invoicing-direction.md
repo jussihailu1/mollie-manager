@@ -5,6 +5,10 @@ Audience: product and engineering
 
 ## Decision
 
+Invoicing supports Kify's automatic-incasso workflow. The
+[roadmap](implementation-roadmap.md#product-end-goal) defines the product goal;
+this document only defines invoice ownership and integration boundaries.
+
 Kify must not make a tenant's ability to create and deliver invoices depend on
 Mollie Invoicing activation, a first live transaction, or a Mollie commercial
 approval decision.
@@ -37,19 +41,17 @@ external onboarding blocker for a core Kify workflow.
 
 ## Current State And Boundary
 
-Current code still has Mollie and e-Boekhouden invoice-provider adapters. When
-Mollie is active, it probes the Sales Invoices API and warns until that Mollie
-product is activated. That behavior remains truthful until the target model is
-implemented; it is not a workaround for the external gate.
+K1–K6 are implemented: Kify invoice snapshots, PDFKit rendering, private Blob
+artifacts, first-payment/recurring issuance, delivery and tenant-fenced document
+access exist. Kify is the default for new tenants; K7 controlled live proof and
+K8 plan retirement remain open. Code completion does not close those gates.
 
-Do not remove the current probe or claim that Kify-owned invoices exist before
-the replacement has safely preserved invoice ownership, customer delivery,
-idempotency, retry, reconciliation, and tenant isolation.
-
-The implementation roadmap now records Mollie Connect M6 live proof as an
-external blocker and explicitly promotes Kify-owned invoicing. This is a
-sequencing decision only: Kify-owned issuance remains missing until implemented
-and proven.
+Existing Mollie and e-Boekhouden invoices retain their provider adapters. Only
+tenants actively using legacy Mollie issuance require its Sales Invoices probe;
+Kify invoice readiness is separate from Mollie payment readiness. Optional
+e-Boekhouden synchronization for Kify-issued invoices is still missing. The
+new receipt branch handles e-Boekhouden-issued invoices only and is not yet
+activated. See the feature inventory and receipt automation runbook for evidence.
 
 ## Active Implementation Decision
 

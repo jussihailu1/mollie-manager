@@ -1,8 +1,10 @@
-# Mollie Manager
+# Kify
 
-Mollie Manager is an internal backoffice for managing Mollie subscription onboarding, recurring billing operations, invoice creation, and reliability workflows.
+Kify makes automatic direct debit (incasso) easy for businesses: customer consent and mandate setup, recurring collections, clear payment status, customer communication, and integrations that reduce administration. The repository retains its historical `mollie-manager` name.
 
-The shared-app, manually provisioned multi-tenant foundation is in place, and Mollie Connect is the active product goal. Mollie remains the payment source of truth. Each stored invoice remains owned by the provider that created it (`mollie` or `eboekhouden`). The local PostgreSQL database is the operational layer that ties onboarding, reconciliation, alerts, audit logging, and invoice automation together.
+The shared, manually provisioned multi-tenant foundation is in place. Mollie executes payments and remains payment truth; bookkeeping software maintains the accounts. Kify is the default invoice issuer for new tenants, and each stored invoice retains its original provider (`kify`, `eboekhouden`, or legacy `mollie`). PostgreSQL holds tenant-scoped operational state, consent, automation and recovery evidence.
+
+Kify-owned invoicing is the current supporting implementation milestone: K1–K6 exist, while K7 controlled proof and K8 completion remain open. Mollie Connect's independent-merchant proof is also pending. The receipt branch implements future e-Boekhouden receipt posting, but migration and production activation remain pending. Use the [roadmap](documentation/product/implementation-roadmap.md) for current order and the [receipt release record](documentation/operations/automatic-receipt-release-2026-11-12.md) for verified release status.
 
 ## Core Workflow
 
@@ -36,8 +38,8 @@ The shared-app, manually provisioned multi-tenant foundation is in place, and Mo
 
 ## Local Start
 
-1. Copy `.env.example` to `.env` and fill in the required values.
-2. Apply database migrations:
+1. Create a local `.env` using [development setup](documentation/development/setup.md), with an isolated development database. `.env.example` is not tracked in this checkout.
+2. Review the target database and branch migration notes before applying migrations:
    `npm run db:apply`
 3. Start the dev server:
    `npm run dev`
@@ -58,6 +60,7 @@ Start with [documentation/README.md](documentation/README.md).
 The most important active docs are:
 
 - [documentation/product/implementation-roadmap.md](documentation/product/implementation-roadmap.md)
+- [documentation/operations/automatic-receipt-release-2026-11-12.md](documentation/operations/automatic-receipt-release-2026-11-12.md)
 - [documentation/product/subscription-policy.md](documentation/product/subscription-policy.md)
 - [documentation/product/recurring-billing-policy.md](documentation/product/recurring-billing-policy.md)
 - [documentation/architecture/overview.md](documentation/architecture/overview.md)

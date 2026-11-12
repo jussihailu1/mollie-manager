@@ -5,39 +5,21 @@ Audience: developers
 
 ## Role
 
-**8 November 2026 local correction, not deployed:** every new invoice request now
-includes `mutation` with a unique payment reference and the administration's sole
-`DEB` ledger. The invoice's original revenue/VAT lines remain authoritative.
-Issuance/recovery verifies exactly one matching sales entry before success.
-It never repairs an existing document by creating another invoice or by silently
-posting a separate mutation. The historical command is preview-only, with no
-apply option. See [the preview and remaining gates](../operations/eboekhouden-sales-posting-preview-2026-11-08.md).
+Kify automates collections; e-Boekhouden remains accounting truth. New e-Boekhouden
+invoices include and verify one sales mutation with the original issuance date,
+stable payment reference and the administration's debtor ledger. Recovery preserves
+the original document and never recreates it to repair accounting.
 
-This corrects the e-Boekhouden issuance path only; Kify-native accounting sync,
-customer receipts, fee invoices and payout posting remain separate work.
+Opt-in receipt automation supports full gross EUR payments against these invoices.
+Tenant mapping, a future cutoff, credential binding, durable claims, one-attempt
+transport and verified reconciliation guard the daily stage. Uncertain outcomes,
+refunds, chargebacks and ambiguous matches remain held. Review/failure/backlog
+counters remain visible. See the [receipt runbook](../operations/eboekhouden-receipt-automation.md)
+and [release record](../operations/automatic-receipt-release-2026-11-12.md).
 
-**7 November 2026 verification:** the current integration creates invoice
-documents but does not automatically post the corresponding sales mutations,
-record customer payments, or reconcile Mollie fees/payouts. Ten existing
-Kify-linked invoices were absent from the 2026 bookkeeping entries and the
-selected revenue ledger was zero. Do not treat invoice creation as completed
-bookkeeping. See [the findings and correction gates](../operations/connect-and-bookkeeping-review-2026-11-07.md).
-
-e-Boekhouden is one supported invoice provider plus the bookkeeping integration
-for tenants that use it.
-
-The app uses e-Boekhouden for:
-
-- customer relation lookup and linking
-- invoice template discovery
-- revenue-ledger discovery
-- first-payment invoice creation
-- recurring invoice creation
-- invoice reconciliation
-
-For the shared multi-tenant pilot, each tenant owns its own e-Boekhouden
-credentials/session context. Tenant business flows must not rely on one shared
-app-wide e-Boekhouden token.
+Kify-issued invoices are not synchronized by this receipt writer. Fee/payout posting,
+refund corrections, partial payments and historical backfills are separate work.
+Completed historical repairs must not be repeated; private evidence stays outside Git.
 
 ## Authentication Model
 

@@ -16,7 +16,9 @@ must be tenant-owned rather than one global env-backed pair.
 
 ## Environment
 
-Copy `.env.example` to `.env` and fill in the values you need.
+Create a local `.env` using the groups below and an isolated development database.
+`.env.example` is not tracked in the current checkout; an existing local sample
+may be used only after checking that its values are appropriate for development.
 
 Main env groups:
 
@@ -42,7 +44,17 @@ Main env groups:
   - `ALERT_EMAIL_TO`
   - `INVOICE_EMAIL_OVERRIDE_TO`
 - Invoice automation:
-  - `INVOICE_CRON_SHARED_SECRET`
+  - `CRON_SECRET` (or the supported legacy `INVOICE_CRON_SHARED_SECRET`)
+- Mollie Connect platform application:
+  - `MOLLIE_CONNECT_CLIENT_ID`
+  - `MOLLIE_CONNECT_CLIENT_SECRET`
+  - `MOLLIE_CONNECT_REDIRECT_URI`
+- Kify private invoice artifacts:
+  - `BLOB_READ_WRITE_TOKEN` for the intended private Blob store
+- Future receipt automation (receipt branch; defaults off):
+  - `EBOEKHOUDEN_RECEIPT_AUTOMATION_ENABLED`
+  - enable only with reviewed migration 0031 and tenant configuration from the
+    [receipt runbook](../operations/eboekhouden-receipt-automation.md)
 
 Platform/bootstrap env still present in code today:
 
@@ -71,8 +83,8 @@ rotate it with a credential re-encryption/backfill plan rather than ad hoc.
 
 1. Install dependencies:
    `npm install`
-2. Create `.env` from `.env.example`.
-3. Apply migrations:
+2. Create the local `.env` described above.
+3. Review the target database and branch migration state, then apply migrations:
    `npm run db:apply`
 4. Optionally verify the database:
    `npm run db:smoke`
@@ -111,8 +123,9 @@ rotate it with a credential re-encryption/backfill plan rather than ad hoc.
 
 ## Tenant-Owned Business Configuration
 
-For the shared multi-tenant pilot, the following must become tenant-owned stored
-configuration rather than app-wide env defaults:
+For the shared multi-tenant pilot, the following are tenant-owned stored
+configuration. Policy values are still seeded from env during provisioning and
+must be reviewed for each tenant:
 
 - Mollie credentials/configuration
 - e-Boekhouden credentials/configuration
@@ -134,12 +147,14 @@ Expected flow:
 
 1. create tenant
 2. create one or more operator memberships
-3. store tenant Mollie credentials/configuration
-4. store tenant e-Boekhouden credentials/configuration
-5. configure tenant billing/accounting settings
+3. connect the tenant's Mollie organization/profile through Settings
+4. optionally connect e-Boekhouden through its Settings credential form
+5. configure Kify invoice profiles/tax choice, or explicit e-Boekhouden issuer settings
 6. configure tenant subscription policy defaults
 7. verify webhook/public URL assumptions
-8. run `npm run tenant:readiness -- --tenant-id <tenant-id>` before live customer usage
+8. run `npm run tenant:readiness -- --tenant-id <tenant-id>` and complete the
+   additional checks in the [tenant setup guide](../operations/tenant-setup-guide.md)
+   before any controlled live pilot; the command alone is not the complete gate
 
 No self-serve tenant signup or invite flow is required for the pilot.
 
@@ -161,6 +176,11 @@ Current implementation note:
 - The schema lives in `db/schema.ts`.
 - Generated migrations live in `db/drizzle`.
 - `scripts/db-apply.mjs` loads env and applies Drizzle migrations.
+- The receipt branch validates the upgrade from deployed snapshot 0029 to 0031.
+  It deliberately excludes the preserved, deferred OAuth migration 0030. That
+  work needs a later number and fresh journal timestamp when resumed. Full
+  historical migration replay on an empty database has a known duplicate-index
+  issue and was not proved by the receipt upgrade tests; see the receipt runbook.
 
 ## Next.js Note
 

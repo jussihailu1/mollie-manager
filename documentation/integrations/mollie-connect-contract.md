@@ -1,6 +1,6 @@
 # Mollie Connect Connection Contract
 
-Status: accepted for M2 implementation
+Status: active connection contract; M1–M5 implemented, M6 live proof pending
 Audience: product and engineering
 
 ## Scope
@@ -115,14 +115,14 @@ When `Mollie` is the active invoice provider, Kify also performs a read-only
 Sales Invoices API probe. A tenant-scoped warning directs the operator to the
 Mollie Dashboard until Mollie Invoicing is activated, and disappears on the
 next successful live probe. Tenants actively using e-Boekhouden do not receive
-this Mollie Invoicing warning.
+this Mollie Invoicing warning. Kify is the default invoice provider for new tenants
+and also does not require Mollie Invoicing activation.
 
-This is current implementation behavior, not Kify's intended long-term invoice
-ownership model. The accepted direction in
+Legacy Mollie issuance retains that provider-specific behavior. The direction in
 [`../product/kify-owned-invoicing-direction.md`](../product/kify-owned-invoicing-direction.md)
-is for Kify to issue and deliver invoices independently of Mollie Invoicing;
-Mollie remains payment truth. Do not change this contract's current provider
-behavior until that replacement is implemented and verified.
+now has K1–K6 implemented for Kify-owned issuance; K7/K8 controlled proof remains
+open. Mollie remains payment truth regardless of invoice issuer. Existing invoice
+ownership does not change when a tenant selects a different provider.
 
 OAuth-backed test operations send Mollie's `testmode=true` request parameter;
 live operations omit it. Sales Invoice creation also sends the selected tenant

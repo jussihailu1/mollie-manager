@@ -8,7 +8,10 @@ Audience: platform operator
 Use this guide when manually provisioning a tenant for the shared multi-tenant
 pilot.
 
-This is the current practical path in code today. It is intentionally manual.
+Workspace and membership provisioning is manual. Provider connections and invoice
+settings have UI forms. The complete tenant-readiness gate is planned in the
+[roadmap](../product/implementation-roadmap.md#planned-k7-release-gate-tenant-readiness);
+this guide describes existing setup, not a completed independent-tenant rollout.
 
 ## Required Before You Start
 
@@ -23,7 +26,10 @@ This is the current practical path in code today. It is intentionally manual.
 - you know at least one operator email that should be able to use the tenant
 - if the tenant should run billing immediately, you have:
   - active invoice provider selected for this tenant
-  - tenant Mollie API key for live mode if the active provider is `Mollie`
+  - the tenant's own Mollie connection, selected profile and payment capabilities,
+    regardless of invoice provider; OAuth is the normal connection path
+  - complete business/customer invoice profiles and private Blob storage if using
+    `Kify`, the default invoice provider
   - Mollie Invoicing activated in the Mollie Dashboard if the active provider is
     `Mollie`
   - tenant e-Boekhouden API token if the active provider is `e-Boekhouden`
@@ -47,8 +53,10 @@ solve that before onboarding live customers.
 
 ## Required Steps
 
-1. Apply migrations and confirm the app boots:
-   - `npm run db:apply`
+1. Confirm the intended environment and reviewed schema are ready, and the app boots:
+   - migration changes are deployment work, not a step to repeat for every tenant
+   - the receipt branch's 0031 migration/activation is still pending; follow its
+     [separate runbook](eboekhouden-receipt-automation.md)
    - `npm run dev`
 2. Provision the tenant:
 
@@ -56,26 +64,34 @@ solve that before onboarding live customers.
 npm run tenant:provision -- \
   --slug acme-demo \
   --name "Acme Demo" \
-  --operator-email operator@example.com \
-  --platform-operator-email admin@example.com \
-  --mollie-api-key live_xxx \
-  --mollie-mode live \
-  --eboekhouden-api-token xxx \
-  --eboekhouden-api-source Kify
+  --operator-email operator@example.com
 ```
 
 3. Save the returned `tenantId`.
 4. Sign in with the operator or platform-operator account.
 5. Switch to the new tenant in the dashboard shell.
-6. Open `/settings` and complete the tenant billing/accounting settings:
-   - active invoice provider
+6. Open `/settings` and complete the tenant connections and invoice settings:
+   - connect Mollie, verify the organization/profile and payment capabilities
+   - choose Kify (default) or explicitly configure e-Boekhouden as the issuer
+   - for Kify, complete the issuer profile, numbering prefix and payment term
+   - explicitly select KOR or standard VAT treatment
+   - connect e-Boekhouden using its API source/token only if needed for customer
+     import or e-Boekhouden issuance; the form stores credentials, while provider
+     discovery/readiness confirms whether the connection works
    - invoice template and revenue ledger if the active provider is
      `e-Boekhouden`
-   - VAT code and related accounting settings
 7. Confirm the tenant subscription-policy defaults are acceptable for that
    tenant before any live customer onboarding.
 8. Verify public app URL and Mollie webhook URL assumptions for the deployment
-   you will use.
+   you will use. Check effective invoice recipient routing and sender identity;
+   the shared Ayal Web sender is not suitable as an implicit independent-tenant
+   identity. The 11 November production project read found no invoice-recipient
+   override; older override instructions are historical.
+
+The provision command still accepts optional tenant API-key credentials for
+compatibility. Never use a key to bypass an incomplete/revoked OAuth connection.
+Platform-operator access is a separate administrative choice, not a default grant
+for every tenant owner.
 
 ## What The Provision Command Actually Does
 
@@ -95,18 +111,23 @@ npm run tenant:provision -- \
   - if `Mollie` is active, it also checks read-only access to the Sales
     Invoices API and will fail until Mollie Invoicing is activated in the
     Mollie Dashboard
+  - the command does not yet cover the complete planned readiness gate; in
+    particular, confirm Mollie payment readiness for e-Boekhouden issuers too,
+    and separately check recipient/sender, policy values and optional receipts
 - open advanced health for the tenant:
   - `/api/health?tenantId=<tenant-id>`
 - do one full tenant-context smoke test:
   - create customer
-  - link e-Boekhouden relation
-  - run hosted consent / first payment
+  - complete the customer billing profile; link an e-Boekhouden relation only
+    for the applicable accounting/issuer path
+  - run hosted consent / first payment, then verify mandate and subscription activation
   - confirm invoice creation
   - confirm invoice delivery
   - confirm webhook processing
   - confirm no cross-tenant leakage in customers, payments, notifications, and
     settings
-- trigger cron once in the intended mode and review the tenant-local results
+- review the intended-mode cron results; invoking the billing cron can create
+  invoices, send emails and, once enabled, post receipts, so it is not a read-only probe
 - verify that the operator account lands inside the correct tenant after sign-in
 
 ## Extra
@@ -117,10 +138,15 @@ npm run tenant:provision -- \
 
 ## Current Limitations
 
-- tenant provider credentials are currently managed through
-  `npm run tenant:provision`, not through a normal UI
+- tenant creation/membership remains operator-led; Mollie connect/reconnect/profile
+  selection and e-Boekhouden credential updates are available in Settings
 - billing/accounting settings have a tenant UI on `/settings`; subscription
   policy defaults currently do not
+- receipt mapping/cutover is operator CLI configuration on the pending receipt
+  branch, not yet a Settings form; it requires the migration, global and tenant
+  gates, account/profile verification and the separate accounting-period review
+- receipt automation only covers e-Boekhouden-issued invoices; Kify-issued invoice
+  synchronization is separate planned integration work, as are fees and payouts
 - `npm run ops:invoice-readiness` is platform-only; use
   `npm run tenant:readiness -- --tenant-id <tenant-id>` for tenant go-live
   checks
