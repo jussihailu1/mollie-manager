@@ -4,7 +4,7 @@ Kify makes automatic direct debit (incasso) easy for businesses: customer consen
 
 The shared, manually provisioned multi-tenant foundation is in place. Mollie executes payments and remains payment truth; bookkeeping software maintains the accounts. Kify is the default invoice issuer for new tenants, and each stored invoice retains its original provider (`kify`, `eboekhouden`, or legacy `mollie`). PostgreSQL holds tenant-scoped operational state, consent, automation and recovery evidence.
 
-Kify-owned invoicing is the current supporting implementation milestone: K1–K6 exist, while K7 controlled proof and K8 completion remain open. Mollie Connect's independent-merchant proof is also pending. The receipt branch implements future e-Boekhouden receipt posting, but migration and production activation remain pending. Use the [roadmap](documentation/product/implementation-roadmap.md) for current order and the [receipt release record](documentation/operations/automatic-receipt-release-2026-11-12.md) for verified release status.
+Kify-owned invoicing is the current supporting implementation milestone: K1–K6 exist, while K7 controlled proof and K8 completion remain open. Mollie Connect's independent-merchant proof is also pending. Future-only e-Boekhouden receipt posting is released for the existing tenant; the first genuine automatic receipt remains unproved. Use the [roadmap](documentation/product/implementation-roadmap.md) for current order and the [receipt release record](documentation/operations/automatic-receipt-release-2026-11-12.md) for verified release status.
 
 ## Core Workflow
 

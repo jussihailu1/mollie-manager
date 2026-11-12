@@ -121,9 +121,10 @@ development/test defaults remain test to prevent accidental live billing.
    - Kify invoices use their frozen private PDF artifact and server-side attachment path.
    - PDF attachment when a trusted `https://*.e-boekhouden.nl` document URL can be downloaded within the attachment limits.
    - legacy provider documents retain their supported safe-link fallback when attachment fetch fails; do not treat this as a public URL path for Kify private artifacts.
-8. On the receipt branch, processes at most five gross receipt candidates per
+8. Processes at most five gross receipt candidates per
    live tenant after invoice/delivery/activation work. Migration 0031, global
-   flag and tenant settings are required; activation remains pending. See the
+   flag and tenant settings are required. The existing-tenant rollout is activated
+   with a future cutoff; genuine receipt proof remains open. See the
    [receipt runbook](eboekhouden-receipt-automation.md). Review holds, failures and
    remaining backlog appear in cron results/audits and issue summaries. Neither
    onboarding recovery nor `sync_only` runs this financial stage.

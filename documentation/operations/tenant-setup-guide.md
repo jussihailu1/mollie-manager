@@ -55,7 +55,8 @@ solve that before onboarding live customers.
 
 1. Confirm the intended environment and reviewed schema are ready, and the app boots:
    - migration changes are deployment work, not a step to repeat for every tenant
-   - the receipt branch's 0031 migration/activation is still pending; follow its
+   - receipt migration 0031 is applied in production; tenant mapping/activation
+     still requires its
      [separate runbook](eboekhouden-receipt-automation.md)
    - `npm run dev`
 2. Provision the tenant:
@@ -142,8 +143,8 @@ for every tenant owner.
   selection and e-Boekhouden credential updates are available in Settings
 - billing/accounting settings have a tenant UI on `/settings`; subscription
   policy defaults currently do not
-- receipt mapping/cutover is operator CLI configuration on the pending receipt
-  branch, not yet a Settings form; it requires the migration, global and tenant
+- receipt mapping/cutover is available through the operator CLI, not yet a
+  Settings form; it requires the migration, global and tenant
   gates, account/profile verification and the separate accounting-period review
 - receipt automation only covers e-Boekhouden-issued invoices; Kify-issued invoice
   synchronization is separate planned integration work, as are fees and payouts

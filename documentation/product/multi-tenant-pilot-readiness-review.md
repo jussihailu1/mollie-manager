@@ -17,7 +17,7 @@ tenant setup today. This summary does not approve a new tenant for live use.
 - webhook and cron follow-up require resolved tenant context on the verified
   pilot seams
 - focused tenant-isolation release-gate tests exist; the receipt implementation's
-  recorded validation is 796 Node tests, TypeScript, ESLint and build passing
+  release validation is 797 Node tests, TypeScript, ESLint and build passing
   (synthetic providers, no production financial calls)
 
 ## Solve Before Live Use If This Applies To Your Tenants
@@ -62,7 +62,8 @@ tenant setup today. This summary does not approve a new tenant for live use.
 - tenant policy edits still need a normal UI and explicit value review
 - the shared SMTP sender identifies Ayal Web in the 11 November production
   project snapshot; independent tenants need suitable sender identity
-- receipt mapping remains CLI-only and activation is pending; the five-candidate
+- receipt mapping remains CLI-only; existing-tenant activation is complete, while
+  genuine receipt proof is pending. The five-candidate
   daily limit needs a tenant-volume check, with clear backlog/review visibility
 - Kify-issued invoice synchronization is missing; connecting e-Boekhouden must
   not imply the receipt writer supports that path

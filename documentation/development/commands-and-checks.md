@@ -51,7 +51,7 @@ batch. See the [invoice runbook](../operations/invoice-automation-runbook.md).
 
 ## Receipt Automation Configuration
 
-The receipt branch adds
+Use
 `node --conditions=react-server --import tsx scripts/configure-eboekhouden-receipts.ts`.
 It requires an explicit tenant and either `--enable` with profile, clearing ledger
 and future cutoff, or `--disable`. The default is a verified preview; `--apply`

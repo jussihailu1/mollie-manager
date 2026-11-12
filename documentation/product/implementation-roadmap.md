@@ -16,7 +16,7 @@ Detailed customer and financial evidence stays outside public Git history.
 
 | Order | Work | Completion gate |
 | --- | --- | --- |
-| 1 | Existing-tenant receipt rollout | Verify a clean release from production, apply migration 0031, verify the tenant's own account/profile and open periods, configure a future cutoff, deploy and activate. Observe the first genuine automatic receipt separately. |
+| 1 | Existing-tenant receipt rollout | Clean release, migration 0031, tenant mapping/open-period checks, deployment and activation are complete. The payment cutoff is 13 November 2026 at 00:00 Europe/Amsterdam. First genuine automatic receipt proof remains open. |
 | 2 | Tenant readiness | Complete the assisted setup, tenant policies, mail identity, explicit accounting support and receipt-capacity acceptance below. Preparation can proceed while a genuine transaction is pending. |
 | 3 | Independent-tenant incasso proof | Prove consent, mandate, subscription activation, collection status and failure handling alongside K7 invoice/delivery/recovery/isolation criteria and applicable M6 proof. Complete K8 only after K7 passes. |
 | 4 | Bookkeeping integration supporting collections | Synchronize Kify-issued invoices and their receipts to e-Boekhouden. Assess fees/payouts separately against actual collection-administration needs. |

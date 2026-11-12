@@ -533,7 +533,7 @@ git diff --check
 
 Status: active
 
-The 11 November roadmap adds a planned
+The 12 November roadmap adds a planned
 [tenant-readiness release gate](./implementation-roadmap.md#planned-k7-release-gate-tenant-readiness)
 after the existing-tenant receipt release and before an independent live-tenant
 pilot. Its setup, policy, delivery identity, accounting-support and capacity criteria

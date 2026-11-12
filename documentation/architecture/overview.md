@@ -74,9 +74,10 @@ There is no acceptable implicit app-wide tenant for tenant business flows.
 5. Invoice automation uses tenant-scoped local billing rows plus the tenant's
    active invoice provider setting to create invoices, while app-owned delivery
    continues to send and track customer email delivery.
-6. The isolated receipt branch adds an opt-in daily stage for verified gross
+6. The protected billing cron includes an opt-in daily stage for verified gross
    receipts against e-Boekhouden-issued invoices. Tenant mapping, a future cutoff
-   and the global flag are required; migration 0031 and activation are pending.
+   and the global flag are required; migration 0031 and existing-tenant activation
+   are verified in the receipt release record. Genuine receipt proof remains open.
    Kify-issued invoice synchronization, fee/payout accounting and general ledger
    management are not provided by this stage.
 
@@ -108,7 +109,7 @@ encoded in the path for the pilot.
   and invoice-automation diagnostics
 - `/api/webhooks/mollie`: webhook intake and replayable event storage
 - `/api/cron/recurring-invoices`: protected repair, invoice, and delivery
-  automation entrypoint, plus the disabled-by-default receipt stage on its branch
+  automation entrypoint, plus the opt-in receipt stage
 - `/api/cron/onboarding`: bounded onboarding recovery; does not post receipts
 - `/api/mollie/connect` and `/mollie/connect/callback`: tenant OAuth connection
 - `/api/eboekhouden/relations`: relation lookup, detail, and linking support
@@ -152,7 +153,7 @@ Required tenant/platform entities:
 - `tenant_invoice_profiles` and tenant-owned customer billing profiles
 - `tenant_mollie_connections`
 - `tenant_eboekhouden_receipt_settings` and `eboekhouden_payment_receipts`
-  (receipt branch migration 0031; not yet applied in production)
+  (migration 0031, applied in production; see the receipt release record)
 
 Required tenant business entities:
 
