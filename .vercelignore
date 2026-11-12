@@ -7,3 +7,5 @@
 .npm-cache/
 tmp/
 *.log
+next-env.d.ts
+*.tsbuildinfo
